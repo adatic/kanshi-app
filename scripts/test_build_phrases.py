@@ -6,7 +6,7 @@
 import json
 import unittest
 
-from build_phrases import EXCLUDE, MAX_EXAMPLES, count_phrases, last_rhymes, load_corpus, load_exclusions, patterns, phrase_lines, reading_lookup
+from build_phrases import EXCLUDE, MAX_EXAMPLES, count_phrases, search_files, last_rhymes, load_corpus, load_exclusions, patterns, phrase_lines, reading_lookup
 from fetch_corpus import corpus_files
 
 LINE = "甲乙丙丁戊己庚"  # 7字
@@ -121,6 +121,37 @@ class PatternTest(unittest.TestCase):
     def test_last_rhymes_are_all_readings_in_rhyme_order(self):
         self.assertEqual(last_rhymes("平兩", self.readings, ORDER), ["下平一先", "上声一董"])
         self.assertEqual(last_rhymes("平無", self.readings, ORDER), [])
+
+
+class SearchFilesTest(unittest.TestCase):
+    """平仄パターンで探すための索引（字数×パターンごとのファイル）。"""
+
+    def entry(self, w, n, p, r, at):
+        return {"w": w, "n": n, "at": at, "p": p, "r": r, "e": [["作者", "題", "句"]]}
+
+    def test_files_by_length_and_pattern(self):
+        by_first = {
+            "甲": {"2": [self.entry("甲乙", 5, ["平仄"], ["韻B"], {"1-2": 5})], "3": [self.entry("甲乙丙", 2, ["平？平"], ["韻A"], {"5-7": 2})]},
+            "丁": {"2": [self.entry("丁戊", 3, ["仄仄"], [], {"3-4": 1, "6-7": 2})], "3": []},
+        }
+        files = search_files(by_first, {"韻A": 0, "韻B": 1})
+        self.assertEqual(sorted(files), ["2-hz", "2-zz", "3-hqh"])  # 平→h 仄→z データにない字→q
+        # 語、出現回数、末字の韻目（rhymes.json の並びの番号）、位置ごとの出現回数（1-2・3-4・5-6・6-7・5-7 の順）。用例は持たない
+        self.assertEqual(files["2-hz"], [["甲乙", 5, [1], [5, 0, 0, 0, 0]]])
+        self.assertEqual(files["2-zz"], [["丁戊", 3, [], [0, 1, 0, 2, 0]]])
+        self.assertEqual(files["3-hqh"], [["甲乙丙", 2, [0], [0, 0, 0, 0, 2]]])
+
+    def test_a_phrase_with_several_patterns_is_in_each_file(self):
+        by_first = {"甲": {"2": [self.entry("甲乙", 2, ["平仄", "仄仄"], [], {"1-2": 2})], "3": []}}
+        files = search_files(by_first, {})
+        self.assertEqual(sorted(files), ["2-hz", "2-zz"])
+
+    def test_entries_are_sorted_by_count_then_word(self):
+        by_first = {
+            "甲": {"2": [self.entry("甲乙", 2, ["平平"], [], {}), self.entry("甲丙", 9, ["平平"], [], {})], "3": []},
+            "丁": {"2": [self.entry("丁戊", 2, ["平平"], [], {})], "3": []},
+        }
+        self.assertEqual([e[0] for e in search_files(by_first, {})["2-hh"]], ["甲丙", "丁戊", "甲乙"])
 
 
 if __name__ == "__main__":

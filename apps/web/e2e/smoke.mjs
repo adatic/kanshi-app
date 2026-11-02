@@ -18,6 +18,20 @@ const input = JSON.parse(readFileSync(`${root}golden/input.json`, "utf-8"));
 const poem = (id) => input.poems.find((p) => p.id === id);
 const snap = (id) => snapshot.poems.find((p) => p.id === id);
 
+// 頻度表（data/phrases）から語の出現回数を引く。なければ null
+const phraseIndex = JSON.parse(readFileSync(`${root}data/phrases/index.json`, "utf-8"));
+const phraseGroups = (c) => {
+  const f = phraseIndex.chars[c]?.file;
+  return f ? JSON.parse(readFileSync(`${root}data/phrases/${f}`, "utf-8")) : { 2: [], 3: [] };
+};
+const phraseCount = (w) => phraseGroups([...w][0])[String([...w].length)].find((e) => e.w === w)?.n ?? null;
+/** first から始まり、頻度表にない2字語（2字目は候補から選ぶ） */
+const absentPair = (first, seconds) => {
+  const x = seconds.find((c) => phraseCount(first + c) === null);
+  if (x === undefined) throw new Error("頻度表にない語を作れない");
+  return first + x;
+};
+
 const failures = [];
 const check = (ok, message) => {
   console.log(`${ok ? "ok  " : "NG  "} ${message}`);
@@ -131,6 +145,61 @@ try {
     }, q03.join("\n"));
     check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 詩全体の貼り付けが句ごとに入る`);
     if (shots) await page.screenshot({ path: `${shots}/${label}-grid.png`, fullPage: true });
+
+    // ---- 選んだマスの条件と詩語候補 ----
+    // 入っている語は、頻度表（data/phrases）にあれば出現回数を、なければ「唐詩の用例なし」を示す
+    const word0 = q03[0].slice(0, 2);
+    const inTable = phraseCount(word0);
+    await cell(0).click();
+    await page.waitForSelector("#assist .usage");
+    const usage = await page.locator("#assist .usage").textContent();
+    check(
+      inTable === null ? usage.includes("唐詩の用例なし") : usage.includes(`唐詩での出現 ${inTable}回`),
+      `${label}: 入っている語「${word0}」の唐詩での用例を、頻度表どおりに示す（${inTable ?? "なし"}）`,
+    );
+    const absent = absentPair(q03[3][0], [...q03.join("")]);
+    await cell(22).click();
+    await page.keyboard.insertText(absent[1]);
+    await cell(21).click();
+    await page.waitForFunction(() => document.querySelector("#assist .usage")?.textContent?.includes("唐詩の用例なし"));
+    check(true, `${label}: 頻度表にない語「${absent}」は「唐詩の用例なし」と示すだけ（入力はそのまま）`);
+    check((await cell(22).inputValue()) === absent[1], `${label}: 用例のない語も入力として残る`);
+    await cell(22).click();
+    await page.keyboard.insertText(q03[3][1]);
+
+    // 空きマスを選ぶと、条件と候補が出る。候補を入れると、その語がマスに入り、違反は増えない
+    await cell(18).click();
+    await page.keyboard.press("Backspace");
+    await cell(19).click();
+    await page.keyboard.press("Backspace");
+    await cell(18).click();
+    await page.locator('#assist .slot-tabs button[data-slot="5-6"]').click();
+    await page.waitForSelector("#assist .constraint li");
+    const constraintItems = await page.locator("#assist .constraint > li").count();
+    check(constraintItems === 2, `${label}: 空きマスの条件（平・仄）を示す`);
+    await page.waitForSelector("#assist .cand");
+    const cands = await page.locator("#assist .cand").count();
+    check(cands > 0 && cands <= 20, `${label}: 転句5-6字目の詩語候補を示す（${cands}語）`);
+    const metas = await page.$$eval("#assist .cand .cand-meta", (m) => m.map((x) => x.textContent));
+    check(metas.every((m) => m.includes("末字") && /\d+回/.test(m)), `${label}: 句末でない位置の候補にも、末字の韻目と出現回数を示す`);
+    const first = await page.locator("#assist .cand .cand-word").first().textContent();
+    const firstDepends = (await page.locator("#assist .cand").first().locator(".depends").count()) > 0;
+    // 用例は開いたときに読み込む
+    await page.locator("#assist .cand").first().locator("details.ex summary").click();
+    await page.waitForSelector("#assist .cand details.ex .examples li");
+    check(true, `${label}: 候補の用例を開くと読み込んで示す`);
+    if (shots) await page.locator(".cell-panel").screenshot({ path: `${shots}/${label}-cands.png` });
+    await page.locator("#assist .cand .place").first().click();
+    const placed = (await cell(18).inputValue()) + (await cell(19).inputValue());
+    check(placed === first, `${label}: 候補「${first}」を入れるとマスに入る（${placed}）`);
+    const violationsAfter = await page.$$eval("#grid-result .findings.sev-violation li", (li) => li.length);
+    check(firstDepends || violationsAfter === 0, `${label}: 置ける候補を入れても明確な違反は出ない（${violationsAfter}件）`);
+    await page.waitForSelector("#assist .usage");
+    check((await page.locator("#assist .usage").textContent()).includes(first), `${label}: 入れたあとは、その語の用例を示す`);
+    if (shots) await page.screenshot({ path: `${shots}/${label}-assist.png`, fullPage: true });
+    // 元の詩に戻す
+    await cell(18).click();
+    await page.keyboard.insertText(q03[2].slice(4, 6));
 
     // ---- 貼り付けモード。マス目の詩を引き継ぐ ----
     await page.locator("#tab-paste").click();

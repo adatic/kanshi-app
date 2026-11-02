@@ -1,0 +1,1323 @@
+diff --git a/TASKS.md b/TASKS.md
+index 700c8d1..a4f0105 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,6 +4,19 @@
+ 
+ ## 進行中
+ 
++### m5-web-assist — 選んだマスの条件と詩語候補（M5）
++
++ブランチ: `task/m5-web-assist`
++
++完了条件:
++- [ ] 平仄パターンで詩語を探すための索引（字数×平仄パターンごとのファイル。用例は持たず、語・出現回数・末字の韻目・位置ごとの出現回数だけ）を、詩語頻度表と同じスクリプトで作る。`--check` で再現を確かめる
++- [ ] 選んだマスに、その位置の条件（`constraintsAt`：平・仄それぞれを置くと新しく出る違反、置ける平仄、押韻の位置なら韻目）を出す（CLAUDE.md §4.1・§4.4）
++- [ ] 選んだマスを含む語の位置（2字語 1-2・3-4・5-6・6-7、3字語 5-7）ごとに、詩語候補を出現回数順に出す。定型の平仄、すでに入っている字、押韻の位置ならほかの押韻字の韻目（または設定で選んだ韻目）で絞り込む。候補は `placementsFor` で確かめ、置くと違反が出る語は除いて件数を示し、読みによって違反が出る語はそうと示す（§4.4）
++- [ ] 候補には平仄・韻目・出現回数と、用例（作者・題・句）を付ける。用例は先頭字ごとのファイルから、必要なときだけ読み込む。候補を選ぶとマス目に入る
++- [ ] 選んだマスを含む語がすべて埋まっていれば、その語の唐詩での出現回数と用例を示し、見つからなければ「唐詩の用例なし」と表示するだけにする（拒否しない）（§4.4）
++- [ ] 設定に韻目（自動／平声の韻目から選ぶ）を加える
++- [ ] 候補の組み立て（パターン、絞り込み、置けるかどうか）は純関数にして架空のデータで単体テストする。Playwright で、空きマスを選ぶと条件と候補が出て、候補を選ぶとマスに入ること、外部への通信がないことを確かめる
++
+ ## 完了
+ 
+ ### m5-web-grid — マス目エディタ（M5）
+diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
+index d63a15f..2bb928b 100644
+--- a/apps/web/e2e/smoke.mjs
++++ b/apps/web/e2e/smoke.mjs
+@@ -18,6 +18,20 @@ const input = JSON.parse(readFileSync(`${root}golden/input.json`, "utf-8"));
+ const poem = (id) => input.poems.find((p) => p.id === id);
+ const snap = (id) => snapshot.poems.find((p) => p.id === id);
+ 
++// 頻度表（data/phrases）から語の出現回数を引く。なければ null
++const phraseIndex = JSON.parse(readFileSync(`${root}data/phrases/index.json`, "utf-8"));
++const phraseGroups = (c) => {
++  const f = phraseIndex.chars[c]?.file;
++  return f ? JSON.parse(readFileSync(`${root}data/phrases/${f}`, "utf-8")) : { 2: [], 3: [] };
++};
++const phraseCount = (w) => phraseGroups([...w][0])[String([...w].length)].find((e) => e.w === w)?.n ?? null;
++/** first から始まり、頻度表にない2字語（2字目は候補から選ぶ） */
++const absentPair = (first, seconds) => {
++  const x = seconds.find((c) => phraseCount(first + c) === null);
++  if (x === undefined) throw new Error("頻度表にない語を作れない");
++  return first + x;
++};
++
+ const failures = [];
+ const check = (ok, message) => {
+   console.log(`${ok ? "ok  " : "NG  "} ${message}`);
+@@ -132,6 +146,61 @@ try {
+     check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 詩全体の貼り付けが句ごとに入る`);
+     if (shots) await page.screenshot({ path: `${shots}/${label}-grid.png`, fullPage: true });
+ 
++    // ---- 選んだマスの条件と詩語候補 ----
++    // 入っている語は、頻度表（data/phrases）にあれば出現回数を、なければ「唐詩の用例なし」を示す
++    const word0 = q03[0].slice(0, 2);
++    const inTable = phraseCount(word0);
++    await cell(0).click();
++    await page.waitForSelector("#assist .usage");
++    const usage = await page.locator("#assist .usage").textContent();
++    check(
++      inTable === null ? usage.includes("唐詩の用例なし") : usage.includes(`唐詩での出現 ${inTable}回`),
++      `${label}: 入っている語「${word0}」の唐詩での用例を、頻度表どおりに示す（${inTable ?? "なし"}）`,
++    );
++    const absent = absentPair(q03[3][0], [...q03.join("")]);
++    await cell(22).click();
++    await page.keyboard.insertText(absent[1]);
++    await cell(21).click();
++    await page.waitForFunction(() => document.querySelector("#assist .usage")?.textContent?.includes("唐詩の用例なし"));
++    check(true, `${label}: 頻度表にない語「${absent}」は「唐詩の用例なし」と示すだけ（入力はそのまま）`);
++    check((await cell(22).inputValue()) === absent[1], `${label}: 用例のない語も入力として残る`);
++    await cell(22).click();
++    await page.keyboard.insertText(q03[3][1]);
++
++    // 空きマスを選ぶと、条件と候補が出る。候補を入れると、その語がマスに入り、違反は増えない
++    await cell(18).click();
++    await page.keyboard.press("Backspace");
++    await cell(19).click();
++    await page.keyboard.press("Backspace");
++    await cell(18).click();
++    await page.locator('#assist .slot-tabs button[data-slot="5-6"]').click();
++    await page.waitForSelector("#assist .constraint li");
++    const constraintItems = await page.locator("#assist .constraint > li").count();
++    check(constraintItems === 2, `${label}: 空きマスの条件（平・仄）を示す`);
++    await page.waitForSelector("#assist .cand");
++    const cands = await page.locator("#assist .cand").count();
++    check(cands > 0 && cands <= 20, `${label}: 転句5-6字目の詩語候補を示す（${cands}語）`);
++    const metas = await page.$$eval("#assist .cand .cand-meta", (m) => m.map((x) => x.textContent));
++    check(metas.every((m) => m.includes("末字") && /\d+回/.test(m)), `${label}: 句末でない位置の候補にも、末字の韻目と出現回数を示す`);
++    const first = await page.locator("#assist .cand .cand-word").first().textContent();
++    const firstDepends = (await page.locator("#assist .cand").first().locator(".depends").count()) > 0;
++    // 用例は開いたときに読み込む
++    await page.locator("#assist .cand").first().locator("details.ex summary").click();
++    await page.waitForSelector("#assist .cand details.ex .examples li");
++    check(true, `${label}: 候補の用例を開くと読み込んで示す`);
++    if (shots) await page.locator(".cell-panel").screenshot({ path: `${shots}/${label}-cands.png` });
++    await page.locator("#assist .cand .place").first().click();
++    const placed = (await cell(18).inputValue()) + (await cell(19).inputValue());
++    check(placed === first, `${label}: 候補「${first}」を入れるとマスに入る（${placed}）`);
++    const violationsAfter = await page.$$eval("#grid-result .findings.sev-violation li", (li) => li.length);
++    check(firstDepends || violationsAfter === 0, `${label}: 置ける候補を入れても明確な違反は出ない（${violationsAfter}件）`);
++    await page.waitForSelector("#assist .usage");
++    check((await page.locator("#assist .usage").textContent()).includes(first), `${label}: 入れたあとは、その語の用例を示す`);
++    if (shots) await page.screenshot({ path: `${shots}/${label}-assist.png`, fullPage: true });
++    // 元の詩に戻す
++    await cell(18).click();
++    await page.keyboard.insertText(q03[2].slice(4, 6));
++
+     // ---- 貼り付けモード。マス目の詩を引き継ぐ ----
+     await page.locator("#tab-paste").click();
+     check((await page.inputValue("#poem-input")) === q03.join("\n"), `${label}: 貼り付けモードへマス目の詩を引き継ぐ`);
+diff --git a/apps/web/scripts/prepare-data.mjs b/apps/web/scripts/prepare-data.mjs
+index 4f599f2..76fdb76 100644
+--- a/apps/web/scripts/prepare-data.mjs
++++ b/apps/web/scripts/prepare-data.mjs
+@@ -10,4 +10,6 @@ const FILES = ["chars.json", "variants.json", "kokuji.json", "forms.json", "rule
+ rmSync(out, { recursive: true, force: true });
+ mkdirSync(out, { recursive: true });
+ for (const f of FILES) cpSync(`${root}data/${f}`, `${out}${f}`);
+-console.log(`データを用意した（${FILES.length}ファイル）`);
++// 詩語頻度表（先頭の字ごとのファイルと、平仄パターンの探索用の索引）。画面は必要なファイルだけを読む
++cpSync(`${root}data/phrases`, `${out}phrases`, { recursive: true });
++console.log(`データを用意した（${FILES.length}ファイルと詩語頻度表）`);
+diff --git a/apps/web/src/assist.ts b/apps/web/src/assist.ts
+new file mode 100644
+index 0000000..d3c70b9
+--- /dev/null
++++ b/apps/web/src/assist.ts
+@@ -0,0 +1,196 @@
++// 選んだマスの条件と詩語候補（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。純関数で、DOM にも通信にも触れない。
++// 判定の基準はエンジンだけが持つ。ここは定型と入っている字で候補を絞り、置けるかどうかは placementsFor に聞く。
++import { placementsFor, searchPhrases } from "@kanshi/engine";
++import type { Analysis, CellConstraint, EngineData, Options, PhraseEntry, Placement, PZ } from "@kanshi/engine";
++import { BLANK, WIDTH } from "./grid";
++
++export type Slot = { name: Placement["slot"]; start: number; length: number };
++
++/** 2字語は 1-2・3-4・5-6・6-7字目、3字語は 5-7字目（§4.1） */
++export const SLOTS: readonly Slot[] = [
++  { name: "1-2", start: 0, length: 2 },
++  { name: "3-4", start: 2, length: 2 },
++  { name: "5-6", start: 4, length: 2 },
++  { name: "6-7", start: 5, length: 2 },
++  { name: "5-7", start: 4, length: 3 },
++];
++
++/** 句の中の位置（0始まり）を含む語の位置 */
++export const slotsAt = (pos: number): Slot[] => SLOTS.filter((s) => pos >= s.start && pos < s.start + s.length);
++
++const TO_PZ: Record<string, string> = { "○": "平", "●": "仄", "◎": "平", "◐": "◐" };
++
++/**
++ * 語の位置に定型が求める平仄の並び（平・仄・◐）。押韻字（◎）は平。
++ * 詩格の候補（未入力のため複数ありうる）で違う位置は◐。詩格が決まらなければすべて◐。
++ */
++export function slotPattern(a: Analysis, data: EngineData, line: number, slot: Slot): string {
++  const forms = [...new Set(a.interpretations.map((i) => i.form.id))]
++    .filter((id) => id !== null)
++    .flatMap((id) => data.forms.forms.filter((f) => f.id === id));
++  return Array.from({ length: slot.length }, (_, k) => {
++    const symbols = new Set(forms.map((f) => TO_PZ[f.lines[line]?.pattern[slot.start + k] ?? "◐"] ?? "◐"));
++    return symbols.size === 1 ? [...symbols][0]! : "◐";
++  }).join("");
++}
++
++const CODE: Record<string, string[]> = { 平: ["h"], 仄: ["z"], "◐": ["h", "z", "q"] };
++
++/** 探索用の索引（data/phrases/search/）のうち、パターンに合いうるファイルの名前（平→h 仄→z データにない字→q） */
++export function searchFileNames(pattern: string): string[] {
++  const codes = [...pattern].reduce<string[]>((acc, c) => acc.flatMap((a) => (CODE[c] ?? []).map((x) => a + x)), [""]);
++  return codes.map((c) => `${pattern.length}-${c}`);
++}
++
++/** 索引の1行：[語, 出現回数, [末字の韻目の番号], [位置ごとの出現回数]] */
++export type SearchRow = [string, number, number[], number[]];
++
++const FROM_CODE: Record<string, string> = { h: "平", z: "仄", q: "？" };
++
++/** 索引の行を語にする（用例は空）。同じ語が複数のファイル（パターン）にあれば、パターンをまとめる */
++export function rowsToEntries(
++  files: readonly { name: string; rows: readonly SearchRow[] }[],
++  rhymes: readonly string[],
++  slotNames: readonly string[],
++): PhraseEntry[] {
++  const byWord = new Map<string, PhraseEntry>();
++  for (const { name, rows } of files) {
++    const pattern = [...name.split("-")[1]!].map((c) => FROM_CODE[c] ?? c).join("");
++    for (const [w, n, r, at] of rows) {
++      const found = byWord.get(w);
++      if (found) {
++        if (!found.p.includes(pattern)) found.p.push(pattern);
++        continue;
++      }
++      byWord.set(w, {
++        w,
++        n,
++        at: Object.fromEntries(slotNames.flatMap((s, k) => (at[k] ? [[s, at[k]!]] : []))),
++        p: [pattern],
++        r: r.map((i) => rhymes[i]!),
++        e: [],
++      });
++    }
++  }
++  return [...byWord.values()];
++}
++
++export type SlotQuery = {
++  /** 平・仄・◐ の並び */
++  pattern: string;
++  /** すでに入っている字（未入力は null） */
++  fixed: (string | null)[];
++  /** 末字の韻目 */
++  rhyme?: string;
++};
++
++/** 定型の平仄、すでに入っている字、末字の韻目で絞った候補（出現回数の多い順）。語の位置がすべて埋まっていれば空 */
++export function slotCandidates(entries: readonly PhraseEntry[], q: SlotQuery): PhraseEntry[] {
++  if (q.fixed.every((c) => c !== null)) return [];
++  return searchPhrases(entries, { pattern: q.pattern, ...(q.rhyme !== undefined ? { rhyme: q.rhyme } : {}) }).filter((e) => {
++    const chars = [...e.w];
++    return q.fixed.every((c, k) => c === null || chars[k] === c);
++  });
++}
++
++/**
++ * 押韻の位置で候補を絞る韻目。押韻の位置でなければ絞らない。
++ * 設定で韻目を選んでいればそれ。なければ、ほかの押韻字の韻目が一つに決まるときだけそれで絞る。
++ */
++export function rhymeFor(constraint: CellConstraint | null, setting: string | null): string | undefined {
++  if (constraint === null || !constraint.rhyme.position) return undefined;
++  if (setting !== null) return setting;
++  return constraint.rhyme.groups.length === 1 ? constraint.rhyme.groups[0] : undefined;
++}
++
++export type CandidateView = {
++  word: string;
++  /** 唐詩での出現回数（全体） */
++  count: number;
++  /** この位置（1-2字目など）での出現回数 */
++  slotCount: number;
++  patterns: string[];
++  rhymes: string[];
++  /** ok 置ける／depends 字の読みによって違反が出る */
++  status: "ok" | "depends";
++  /** 読みによって出る違反の説明 */
++  dependent: string[];
++};
++
++export type CheckedCandidates = {
++  shown: CandidateView[];
++  /** 置くと違反が出るため除いた語の数（調べた範囲で） */
++  excluded: number;
++  /** 調べなかった候補の数 */
++  remaining: number;
++};
++
++/** 候補を、その句・位置に置いて判定する（placementsFor）。置くと違反が出る語は除く。limit 件そろったら止める */
++export function checkCandidates(
++  candidates: readonly PhraseEntry[],
++  grid: readonly string[],
++  data: EngineData,
++  options: Options,
++  line: number,
++  slot: Slot,
++  limit = 20,
++): CheckedCandidates {
++  const shown: CandidateView[] = [];
++  let excluded = 0;
++  let checked = 0;
++  for (const e of candidates) {
++    if (shown.length >= limit) break;
++    checked++;
++    const p = placementsFor(e.w, grid, data, options, { line, slot: slot.name })[0];
++    if (p === undefined || (p.status !== "ok" && p.status !== "depends")) {
++      excluded++;
++      continue;
++    }
++    shown.push({
++      word: e.w,
++      count: e.n,
++      slotCount: e.at[slot.name] ?? 0,
++      patterns: e.p,
++      rhymes: e.r,
++      status: p.status,
++      dependent: p.dependent.map((f) => `${data.rules.rules[f.rule]?.name ?? f.rule}：${f.message}`),
++    });
++  }
++  return { shown, excluded, remaining: candidates.length - checked };
++}
++
++/** 語の位置がすべて埋まっていれば、その語（「々」は直前の字にする）。未入力があれば null */
++export function filledWord(grid: readonly string[], line: number, slot: Slot): string | null {
++  const chars: string[] = [];
++  for (let k = 0; k < slot.length; k++) {
++    const i = line * WIDTH + slot.start + k;
++    const c = grid[i]!;
++    if (c === BLANK) return null;
++    chars.push(c === "々" ? (chars[k - 1] ?? grid[i - 1] ?? c) : c);
++  }
++  return chars.join("");
++}
++
++/** 先頭の字ごとのファイル（{"2": [...], "3": [...]}）から語を引く */
++export function findPhrase(groups: Record<"2" | "3", PhraseEntry[]> | undefined, word: string): PhraseEntry | null {
++  const size = String([...word].length);
++  if (groups === undefined || (size !== "2" && size !== "3")) return null;
++  return groups[size].find((e) => e.w === word) ?? null;
++}
++
++export type ConstraintView = {
++  /** 置ける平仄が一つだけならそれ */
++  required: PZ | null;
++  options: { pz: PZ; ok: boolean; problems: string[]; checks: string[] }[];
++  rhyme: { position: boolean; groups: string[] };
++};
++
++/** constraintsAt の結果を、規則名つきの文にする */
++export function constraintView(c: CellConstraint, data: EngineData): ConstraintView {
++  const text = (f: { rule: string; message: string }) => `${data.rules.rules[f.rule]?.name ?? f.rule}：${f.message}`;
++  return {
++    required: c.required,
++    options: c.options.map((o) => ({ pz: o.pz, ok: o.ok, problems: o.violations.map(text), checks: o.checks.map(text) })),
++    rhyme: c.rhyme,
++  };
++}
+diff --git a/apps/web/src/assistView.ts b/apps/web/src/assistView.ts
+new file mode 100644
+index 0000000..ea37cc6
+--- /dev/null
++++ b/apps/web/src/assistView.ts
+@@ -0,0 +1,198 @@
++// 右の列の後半：選んだマスの条件と、詩語候補・入っている語の用例（DOM）。組み立ての規則は assist.ts の純関数にある。
++import { constraintsAt } from "@kanshi/engine";
++import type { Analysis, EngineData, Options, PhraseEntry } from "@kanshi/engine";
++import {
++  checkCandidates,
++  constraintView,
++  filledWord,
++  findPhrase,
++  rhymeFor,
++  rowsToEntries,
++  searchFileNames,
++  slotCandidates,
++  slotPattern,
++  slotsAt,
++  type Slot,
++} from "./assist";
++import type { PhraseStore } from "./data";
++import { WIDTH } from "./grid";
++import { h } from "./render";
++import { lineName } from "./view";
++
++export type AssistContext = {
++  a: Analysis;
++  grid: readonly string[];
++  data: EngineData;
++  options: Options;
++  index: number;
++  store: PhraseStore;
++  /** data/rhymes.json の並びの韻目 */
++  rhymes: readonly string[];
++  /** 設定で選んだ押韻の韻目（自動なら null） */
++  rhymeSetting: string | null;
++  /** 選んでいる語の位置（なければ最初の位置） */
++  slotName: string | null;
++  /** 候補を何件まで出すか */
++  limit: number;
++  onSlot(name: string): void;
++  onMore(): void;
++  /** 語をマス目に入れる（index は語の先頭のマス） */
++  onPlace(index: number, word: string): void;
++};
++
++const slotLabel = (line: number, s: Slot) => `${lineName(line)}の${s.name}字目`;
++
++/** 用例の一覧（作者「題」 句） */
++function examples(e: PhraseEntry): HTMLElement {
++  return h("ul", { class: "examples" }, ...e.e.map(([author, title, text]) => h("li", { lang: "zh-Hant" }, h("span", { class: "ex-line" }, text), h("span", { class: "ex-src" }, `${author}「${title}」`))));
++}
++
++/** 開いたときに用例を読み込む details */
++function lazyExamples(word: string, store: PhraseStore): HTMLElement {
++  const body = h("div", {}, h("p", { class: "none" }, "読み込んでいます…"));
++  const d = h("details", { class: "ex" }, h("summary", {}, "用例"), body) as HTMLDetailsElement;
++  let loaded = false;
++  d.addEventListener("toggle", () => {
++    if (!d.open || loaded) return;
++    loaded = true;
++    store
++      .groups([...word][0]!)
++      .then((g) => {
++        const e = findPhrase(g, word);
++        body.replaceChildren(e && e.e.length > 0 ? examples(e) : h("p", { class: "none" }, "用例がありません。"));
++      })
++      .catch(() => body.replaceChildren(h("p", { class: "error" }, "用例を読み込めませんでした。")));
++  });
++  return d;
++}
++
++function constraintSection(ctx: AssistContext, line: number, pos: number): HTMLElement[] {
++  const v = constraintView(constraintsAt(ctx.grid, ctx.data, line, pos, ctx.options), ctx.data);
++  const items = v.options.map((o) =>
++    h(
++      "li",
++      { class: o.ok ? "ok" : "ng" },
++      h("span", { class: `pz pz-${o.pz === "平" ? "hei" : "soku"}` }, o.pz),
++      o.ok ? "置けます" : "置くと違反が出ます",
++      o.problems.length > 0 ? h("ul", { class: "problems" }, ...o.problems.map((p) => h("li", {}, p))) : null,
++      o.checks.length > 0 ? h("ul", { class: "problems checks" }, ...o.checks.map((p) => h("li", {}, `要確認　${p}`))) : null,
++    ),
++  );
++  const rhyme = v.rhyme.position
++    ? h(
++        "p",
++        { class: "rhyme" },
++        "押韻の位置です。",
++        v.rhyme.groups.length > 0 ? `ほかの押韻字の韻目：${v.rhyme.groups.join("・")}` : "ほかの押韻字はまだありません。",
++      )
++    : null;
++  return [
++    h("h3", {}, "このマスの条件"),
++    h("p", { class: "explain" }, "いま入っている字にかかわらず、平・仄それぞれを置いたときの判定です。"),
++    h("ul", { class: "plain constraint" }, ...items),
++    ...(rhyme ? [rhyme] : []),
++  ];
++}
++
++async function slotSection(ctx: AssistContext, line: number, slot: Slot): Promise<HTMLElement[]> {
++  const word = filledWord(ctx.grid, line, slot);
++  if (word !== null) {
++    // 入っている語：唐詩での用例を示すだけ。見つからなくても拒否しない（§4.4）
++    const e = findPhrase(await ctx.store.groups([...word][0]!), word);
++    return [
++      h(
++        "div",
++        { class: "usage" },
++        h("p", {}, h("span", { class: "cand-word", lang: "zh-Hant" }, word), e ? `唐詩での出現 ${e.n}回` : "唐詩の用例なし"),
++        e
++          ? examples(e)
++          : h("p", { class: "explain" }, "全唐詩の七言句に2回以上出てくる語の表にありません。使えないという意味ではありません。"),
++      ),
++    ];
++  }
++
++  const pattern = slotPattern(ctx.a, ctx.data, line, slot);
++  const endsLine = slot.start + slot.length === WIDTH;
++  const rhyme = endsLine ? rhymeFor(constraintsAt(ctx.grid, ctx.data, line, WIDTH - 1, ctx.options), ctx.rhymeSetting) : undefined;
++  const names = searchFileNames(pattern);
++  const [index, ...files] = await Promise.all([ctx.store.searchIndex(), ...names.map((n) => ctx.store.search(n))]);
++  const entries = rowsToEntries(
++    names.map((name, k) => ({ name, rows: files[k]! })),
++    ctx.rhymes,
++    index.slots,
++  );
++  const fixed = Array.from({ length: slot.length }, (_, k) => {
++    const c = ctx.grid[line * WIDTH + slot.start + k]!;
++    return c === "＿" ? null : c;
++  });
++  const candidates = slotCandidates(entries, { pattern, fixed, ...(rhyme !== undefined ? { rhyme } : {}) });
++  const checked = checkCandidates(candidates, ctx.grid, ctx.data, ctx.options, line, slot, ctx.limit);
++
++  const head = h(
++    "p",
++    { class: "explain" },
++    `定型の平仄 ${pattern}`,
++    rhyme !== undefined ? `、韻目 ${rhyme}` : "",
++    fixed.some((c) => c !== null) ? "、入っている字" : "",
++    `で絞った語（${candidates.length}語）を、唐詩での出現回数の多い順に示します。`,
++  );
++  const list = h(
++    "ul",
++    { class: "cands" },
++    ...checked.shown.map((c) => {
++      const place = h("button", { type: "button", class: "small place", "aria-label": `「${c.word}」を${slotLabel(line, slot)}に入れる` }, "入れる");
++      place.addEventListener("click", () => ctx.onPlace(line * WIDTH + slot.start, c.word));
++      return h(
++        "li",
++        { class: "cand" },
++        place,
++        h("span", { class: "cand-word", lang: "zh-Hant" }, c.word),
++        h("span", { class: "cand-meta" }, c.patterns.join("／"), c.rhymes.length > 0 ? `　末字 ${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
++        c.status === "depends"
++          ? h("details", { class: "depends" }, h("summary", {}, "字の読みによっては違反"), h("ul", {}, ...c.dependent.map((d) => h("li", {}, d))))
++          : null,
++        lazyExamples(c.word, ctx.store),
++      );
++    }),
++  );
++  const more = h("button", { type: "button", class: "small more" }, "さらに表示");
++  more.addEventListener("click", () => ctx.onMore());
++  return [
++    head,
++    checked.shown.length > 0 ? list : h("p", { class: "none" }, "条件に合う語が頻度表にありません。"),
++    checked.excluded > 0 ? h("p", { class: "explain" }, `置くと違反が出るため除いた語：${checked.excluded}語`) : null,
++    checked.remaining > 0 ? more : null,
++  ].filter((x): x is HTMLElement => x !== null);
++}
++
++/** 選んだマスの条件と、語の位置ごとの詩語候補（または入っている語の用例） */
++export async function assistPanel(ctx: AssistContext): Promise<HTMLElement> {
++  const line = Math.floor(ctx.index / WIDTH);
++  const pos = ctx.index % WIDTH;
++  const slots = slotsAt(pos);
++  const slot = slots.find((s) => s.name === ctx.slotName) ?? slots[0]!;
++  const tabs = h(
++    "div",
++    { class: "slot-tabs", role: "group", "aria-label": "語の位置" },
++    ...slots.map((s) => {
++      const b = h("button", { type: "button", class: "small", "aria-pressed": String(s === slot), "data-slot": s.name }, `${s.name}字目`);
++      b.addEventListener("click", () => ctx.onSlot(s.name));
++      return b;
++    }),
++  );
++  let body: HTMLElement[];
++  try {
++    body = await slotSection(ctx, line, slot);
++  } catch {
++    body = [h("p", { class: "error" }, "詩語頻度表を読み込めませんでした。")];
++  }
++  return h(
++    "div",
++    { class: "assist" },
++    ...constraintSection(ctx, line, pos),
++    h("h3", {}, "詩語"),
++    h("p", { class: "explain" }, `${slotLabel(line, slot)}に入る語。`),
++    tabs,
++    ...body,
++  );
++}
+diff --git a/apps/web/src/data.ts b/apps/web/src/data.ts
+index 0ffa553..af9f86d 100644
+--- a/apps/web/src/data.ts
++++ b/apps/web/src/data.ts
+@@ -1,7 +1,8 @@
+ // 判定に要るデータ（ビルド時に data/ から同梱した静的ファイル）を読み込む。ほかには通信しない（CLAUDE.md §6.3）。
+-import type { EngineData } from "@kanshi/engine";
++import type { EngineData, PhraseEntry } from "@kanshi/engine";
++import type { SearchRow } from "./assist";
+ 
+-const load = async <T>(name: string): Promise<T> => {
++export const load = async <T>(name: string): Promise<T> => {
+   // ページの場所を基準にした相対パス（GitHub Pages のサブパスでも動く）
+   const res = await fetch(new URL(`data/${name}`, document.baseURI));
+   if (!res.ok) throw new Error(`${name} を読み込めませんでした（${res.status}）`);
+@@ -18,3 +19,39 @@ export async function loadEngineData(): Promise<EngineData> {
+   ]);
+   return { chars, variants, kokuji, forms, rules };
+ }
++
++export type Rhyme = { id: string; tone: string };
++
++/** 平水韻の韻目の一覧（data/rhymes.json の並び。探索用の索引は韻目をこの並びの番号で持つ） */
++export const loadRhymes = () => load<Rhyme[]>("rhymes.json");
++
++/**
++ * 詩語頻度表の読み込み。ファイルは必要になったときに一度だけ読む。
++ * - 平仄パターンの探索用の索引（phrases/search/）：パターンに合うファイルだけ
++ * - 先頭の字ごとのファイル（用例つき）：用例を見るときと、入っている語を引くときだけ
++ */
++export function phraseStore() {
++  const cache = new Map<string, Promise<unknown>>();
++  const once = <T>(name: string): Promise<T> => {
++    if (!cache.has(name)) cache.set(name, load<T>(name));
++    return cache.get(name) as Promise<T>;
++  };
++  type SearchIndex = { slots: string[]; files: Record<string, number> };
++  type CharIndex = { chars: Record<string, { file: string }> };
++  return {
++    searchIndex: () => once<SearchIndex>("phrases/search/index.json"),
++    /** 索引にないファイル（そのパターンの語がない）は空 */
++    async search(name: string): Promise<SearchRow[]> {
++      const index = await once<SearchIndex>("phrases/search/index.json");
++      return index.files[name] === undefined ? [] : once<SearchRow[]>(`phrases/search/${name}.json`);
++    },
++    /** 先頭の字のファイル。頻度表にない字なら undefined */
++    async groups(first: string): Promise<Record<"2" | "3", PhraseEntry[]> | undefined> {
++      const index = await once<CharIndex>("phrases/index.json");
++      const file = index.chars[first]?.file;
++      return file === undefined ? undefined : once<Record<"2" | "3", PhraseEntry[]>>(`phrases/${file}`);
++    },
++  };
++}
++
++export type PhraseStore = ReturnType<typeof phraseStore>;
+diff --git a/apps/web/src/gridEditor.ts b/apps/web/src/gridEditor.ts
+index 5018ce2..0bf871b 100644
+--- a/apps/web/src/gridEditor.ts
++++ b/apps/web/src/gridEditor.ts
+@@ -11,6 +11,8 @@ export type GridEditor = {
+   /** 判定結果を表示に反映する */
+   refresh(view: PoemView, showPattern: boolean): void;
+   focus(index: number): void;
++  /** 語をマス目に入れ（onChange を呼ぶ）、focusAt のマスを選ぶ */
++  place(index: number, text: string, focusAt: number): void;
+ };
+ 
+ const LINE_NAMES = ["起句", "承句", "転句", "結句"];
+@@ -43,7 +45,7 @@ export function gridEditor(opts: {
+     write(i, value);
+   };
+ 
+-  const write = (i: number, value: string) => {
++  const write = (i: number, value: string, focusAt?: number) => {
+     const r = writeAt(grid, i, value);
+     const messages: string[] = [];
+     if (r.rejected.length > 0) messages.push(`「${r.rejected.join("」「")}」は漢字ではないので、マスに入れていません。`);
+@@ -52,7 +54,7 @@ export function gridEditor(opts: {
+     grid = r.grid;
+     for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
+     opts.onChange([...grid]);
+-    focus(r.next);
++    focus(focusAt ?? r.next);
+   };
+ 
+   const lines = Array.from({ length: CELLS / WIDTH }, (_, l) => {
+@@ -166,5 +168,6 @@ export function gridEditor(opts: {
+       });
+     },
+     focus,
++    place: (index, text, focusAt) => write(index, text, focusAt),
+   };
+ }
+diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
+index baafdd6..eb19b43 100644
+--- a/apps/web/src/main.ts
++++ b/apps/web/src/main.ts
+@@ -1,7 +1,8 @@
+ // 画面の起動。マス目で作るモードと、misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
+ import { analyze } from "@kanshi/engine";
+ import type { EngineData, FormId, Options } from "@kanshi/engine";
+-import { loadEngineData } from "./data";
++import { assistPanel } from "./assistView";
++import { loadEngineData, loadRhymes, phraseStore, type Rhyme } from "./data";
+ import { BLANK, emptyGrid, gridToText, textToGrid } from "./grid";
+ import { gridEditor } from "./gridEditor";
+ import { cellPanel, h, resultParts, resultView } from "./render";
+@@ -13,7 +14,7 @@ const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞
+ type Mode = "grid" | "paste";
+ 
+ /** 設定（マス目と貼り付けモードで共通） */
+-function settingsPanel(data: EngineData, onChange: () => void) {
++function settingsPanel(data: EngineData, rhymes: readonly Rhyme[], onChange: () => void) {
+   const formSelect = h(
+     "select",
+     { id: "form-select" },
+@@ -27,9 +28,15 @@ function settingsPanel(data: EngineData, onChange: () => void) {
+     h("option", { value: "平" }, "平として扱う"),
+     h("option", { value: "仄" }, "仄として扱う"),
+   ) as HTMLSelectElement;
++  const rhymeSelect = h(
++    "select",
++    { id: "rhyme-select" },
++    h("option", { value: "" }, "自動（ほかの押韻字にそろえる）"),
++    ...rhymes.filter((r) => r.tone === "平").map((r) => h("option", { value: r.id }, r.id)),
++  ) as HTMLSelectElement;
+   const kokuji = h("input", { id: "allow-kokuji", type: "checkbox" }) as HTMLInputElement;
+   const pattern = h("input", { id: "show-pattern", type: "checkbox", checked: "" }) as HTMLInputElement;
+-  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", onChange);
++  for (const el of [formSelect, unknownSelect, rhymeSelect, kokuji, pattern]) el.addEventListener("change", onChange);
+ 
+   const el = h(
+     "details",
+@@ -42,6 +49,8 @@ function settingsPanel(data: EngineData, onChange: () => void) {
+       formSelect,
+       h("label", { for: "unknown-select" }, "平仄データにない字"),
+       unknownSelect,
++      h("label", { for: "rhyme-select" }, "押韻の韻目（詩語候補の絞り込み）"),
++      rhymeSelect,
+       h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
+       h("label", { class: "check" }, pattern, "平仄図式（定型）を表示する"),
+     ),
+@@ -59,17 +68,25 @@ function settingsPanel(data: EngineData, onChange: () => void) {
+       return o;
+     },
+     showPattern: () => pattern.checked,
++    rhyme: () => rhymeSelect.value || null,
+   };
+ }
+ 
+-function app(data: EngineData): HTMLElement {
++function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   let mode: Mode = "grid";
+   let grid = emptyGrid();
+   let selected: number | null = null;
++  /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
++  let slotName: string | null = null;
++  let limit = 20;
++  /** 古い候補の計算が、新しい表示を上書きしないための番号 */
++  let assistTurn = 0;
++  const store = phraseStore();
++  const rhymeIds = rhymes.map((r) => r.id);
+   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
+   let gridEdited = false;
+ 
+-  const settings = settingsPanel(data, () => update());
++  const settings = settingsPanel(data, rhymes, () => update());
+ 
+   // ---- マス目で作る ----
+   const editor = gridEditor({
+@@ -81,12 +98,17 @@ function app(data: EngineData): HTMLElement {
+       update();
+     },
+     onSelect(i) {
++      if (i !== selected) {
++        slotName = null;
++        limit = 20;
++      }
+       selected = i;
+       update();
+     },
+   });
+   const syncNote = h("p", { class: "sync-note", role: "status" });
+   const panel = h("div", { id: "cell-panel" });
++  const assistBox = h("div", { id: "assist" });
+   const gridResult = h("div", { id: "grid-result", class: "result" });
+   const hasPoem = () => grid.some((c) => c !== BLANK);
+   const replaceGrid = (next: string[], question: string) => {
+@@ -207,7 +229,39 @@ function app(data: EngineData): HTMLElement {
+       const v = buildView(a, data);
+       editor.refresh(v, showPattern);
+       gridResult.replaceChildren(...resultParts(v, showPattern));
+-      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)));
++      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
++      const turn = ++assistTurn;
++      if (selected === null) {
++        assistBox.replaceChildren();
++        return;
++      }
++      const at = selected;
++      void assistPanel({
++        a,
++        grid,
++        data,
++        options,
++        index: at,
++        store,
++        rhymes: rhymeIds,
++        rhymeSetting: settings.rhyme(),
++        slotName,
++        limit,
++        onSlot(name) {
++          slotName = name;
++          limit = 20;
++          update();
++        },
++        onMore() {
++          limit += 20;
++          update();
++        },
++        onPlace(index, word) {
++          editor.place(index, word, at);
++        },
++      }).then((el) => {
++        if (turn === assistTurn) assistBox.replaceChildren(el);
++      });
+     } else {
+       output.replaceChildren(resultView(buildView(analyze(input.value, data, options), data), showPattern));
+     }
+@@ -225,8 +279,8 @@ function app(data: EngineData): HTMLElement {
+ async function start() {
+   const root = document.getElementById("app")!;
+   try {
+-    const data = await loadEngineData();
+-    root.replaceChildren(app(data));
++    const [data, rhymes] = await Promise.all([loadEngineData(), loadRhymes()]);
++    root.replaceChildren(app(data, rhymes));
+   } catch (e) {
+     root.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
+   }
+diff --git a/apps/web/src/style.css b/apps/web/src/style.css
+index 9ffa90e..e9026f3 100644
+--- a/apps/web/src/style.css
++++ b/apps/web/src/style.css
+@@ -674,3 +674,121 @@ h4 {
+     transition: background-color 0.15s;
+   }
+ }
++
++/* 選んだマスの条件と詩語候補 */
++.assist {
++  display: grid;
++  gap: 4px;
++  margin-top: 6px;
++  padding-top: 8px;
++  border-top: 1px solid var(--line);
++}
++.assist h3 {
++  margin: 10px 0 2px;
++  font-size: 0.9rem;
++}
++.constraint > li.ng {
++  color: var(--shu);
++}
++.constraint .problems {
++  list-style: none;
++  margin: 2px 0 4px 2.2em;
++  padding: 0;
++  font-size: 0.8rem;
++  color: var(--muted);
++}
++.constraint .problems.checks {
++  color: var(--odo);
++}
++.assist .rhyme {
++  margin: 4px 0 0;
++  font-size: 0.85rem;
++}
++.slot-tabs {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++  margin: 4px 0;
++}
++.slot-tabs button[aria-pressed="true"] {
++  border-color: var(--ai);
++  background: var(--ai-soft);
++  color: var(--ai);
++  font-weight: 600;
++}
++.cands {
++  list-style: none;
++  margin: 4px 0 0;
++  padding: 0;
++  display: grid;
++  gap: 6px;
++}
++.cand {
++  display: grid;
++  grid-template-columns: auto 1fr;
++  column-gap: 8px;
++  align-items: baseline;
++  padding-bottom: 6px;
++  border-bottom: 1px dashed var(--line);
++}
++.cand .place {
++  grid-row: span 2;
++  align-self: center;
++}
++.cand-word {
++  font-family: var(--f-han);
++  font-size: 1.25rem;
++  margin-right: 6px;
++}
++.cand-meta {
++  grid-column: 2;
++  font-size: 0.78rem;
++  color: var(--muted);
++  min-width: 0;
++}
++.cand details,
++.usage details {
++  grid-column: 2;
++  font-size: 0.8rem;
++}
++.cand summary {
++  cursor: pointer;
++  color: var(--muted);
++}
++.cand .depends summary {
++  color: var(--odo);
++}
++.cand details ul {
++  margin: 2px 0 0;
++  padding-left: 1em;
++}
++.examples {
++  list-style: none;
++  margin: 2px 0 0;
++  padding: 0;
++  display: grid;
++  gap: 2px;
++  font-size: 0.85rem;
++}
++.examples .ex-line {
++  font-family: var(--f-han);
++  margin-right: 6px;
++}
++.examples .ex-src {
++  color: var(--muted);
++  font-size: 0.78rem;
++}
++.usage p {
++  margin: 4px 0;
++}
++button.more {
++  justify-self: start;
++  margin-top: 4px;
++}
++.settings select {
++  width: 100%;
++  min-width: 0;
++}
++.settings .options > * {
++  min-width: 0;
++}
+diff --git a/apps/web/test/assist.test.ts b/apps/web/test/assist.test.ts
+new file mode 100644
+index 0000000..1bada69
+--- /dev/null
++++ b/apps/web/test/assist.test.ts
+@@ -0,0 +1,193 @@
++// 選んだマスの条件と詩語候補（apps/web/src/assist.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
++import { describe, expect, it } from "vitest";
++import { analyze, constraintsAt } from "@kanshi/engine";
++import type { PhraseEntry } from "@kanshi/engine";
++import {
++  SLOTS,
++  checkCandidates,
++  constraintView,
++  filledWord,
++  findPhrase,
++  rhymeFor,
++  rowsToEntries,
++  searchFileNames,
++  slotCandidates,
++  slotPattern,
++  slotsAt,
++} from "../src/assist";
++import { P, R, R2, RHYME_A, RHYME_B, RYO, Z, baseLines, build, fixtureData, replaceAt } from "../../../packages/engine/test/fixture";
++
++const HN = baseLines("heiki-nyuin");
++// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
++const gridOf = (lines: string[]) => [...build(...lines).replaceAll("\n", "")];
++const slot = (name: string) => SLOTS.find((s) => s.name === name)!;
++const entry = (w: string, n: number, p: string[], r: string[] = [], at: Record<string, number> = {}): PhraseEntry => ({ w, n, at, p, r, e: [] });
++
++describe("slotsAt", () => {
++  it("マスを含む語の位置（2字語 1-2・3-4・5-6・6-7、3字語 5-7）", () => {
++    expect(slotsAt(0).map((s) => s.name)).toEqual(["1-2"]);
++    expect(slotsAt(3).map((s) => s.name)).toEqual(["3-4"]);
++    expect(slotsAt(4).map((s) => s.name)).toEqual(["5-6", "5-7"]);
++    expect(slotsAt(5).map((s) => s.name)).toEqual(["5-6", "6-7", "5-7"]);
++    expect(slotsAt(6).map((s) => s.name)).toEqual(["6-7", "5-7"]);
++  });
++});
++
++describe("slotPattern", () => {
++  it("定型の○●は平仄、◐はそのまま、◎は平にする", () => {
++    const a = analyze(gridOf(HN), fixtureData);
++    // 転句の定型は ◐●◐○○●●
++    expect(slotPattern(a, fixtureData, 2, slot("1-2"))).toBe("◐仄");
++    expect(slotPattern(a, fixtureData, 2, slot("5-6"))).toBe("平仄");
++    // 起句の定型は ◐○◐●●○◎
++    expect(slotPattern(a, fixtureData, 0, slot("5-7"))).toBe("仄平平");
++  });
++
++  it("詩格の候補で定型が違う位置は◐（起句末が未入力：5字目は入韻型●、不入韻型◐）", () => {
++    const a = analyze(gridOf(replaceAt(HN, 0, 6, "＿")), fixtureData);
++    expect(slotPattern(a, fixtureData, 0, slot("5-6"))).toBe("◐平");
++  });
++
++  it("詩格が決まらなければ、すべて◐", () => {
++    let lines = HN;
++    for (let i = 0; i < 4; i++) lines = replaceAt(lines, i, 1, "＿");
++    expect(slotPattern(analyze(gridOf(lines), fixtureData), fixtureData, 2, slot("5-7"))).toBe("◐◐◐");
++  });
++});
++
++describe("searchFileNames", () => {
++  it("平は h、仄は z、◐は h・z と、データにない字の q", () => {
++    expect(searchFileNames("平仄")).toEqual(["2-hz"]);
++    expect(searchFileNames("◐仄")).toEqual(["2-hz", "2-zz", "2-qz"]);
++    expect(searchFileNames("仄◐平")).toEqual(["3-zhh", "3-zzh", "3-zqh"]);
++  });
++});
++
++describe("rowsToEntries", () => {
++  it("索引の行を語にし、同じ語が複数のファイルにあればパターンをまとめる", () => {
++    const rhymes = [RHYME_A, RHYME_B];
++    const slots = ["1-2", "3-4", "5-6", "6-7", "5-7"];
++    const entries = rowsToEntries(
++      [
++        { name: "2-hz", rows: [["甲乙", 4, [1], [3, 0, 1, 0, 0]]] },
++        { name: "2-zz", rows: [["甲乙", 4, [1], [3, 0, 1, 0, 0]], ["丙丁", 2, [], [0, 0, 0, 2, 0]]] },
++      ],
++      rhymes,
++      slots,
++    );
++    expect(entries).toEqual([
++      { w: "甲乙", n: 4, at: { "1-2": 3, "5-6": 1 }, p: ["平仄", "仄仄"], r: [RHYME_B], e: [] },
++      { w: "丙丁", n: 2, at: { "6-7": 2 }, p: ["仄仄"], r: [], e: [] },
++    ]);
++  });
++});
++
++describe("slotCandidates", () => {
++  const entries = [
++    entry(P[20]! + Z[20]!, 9, ["平仄"]),
++    entry(Z[21]! + Z[22]!, 7, ["仄仄"]),
++    entry(P[20]! + P[21]!, 5, ["平平"]),
++    entry(Z[23]! + Z[20]!, 3, ["仄仄"]),
++  ];
++
++  it("パターンに合う語を、出現回数の多い順に返す", () => {
++    expect(slotCandidates(entries, { pattern: "◐仄", fixed: [null, null] }).map((e) => e.n)).toEqual([9, 7, 3]);
++  });
++
++  it("すでに入っている字と同じ位置に同じ字がある語だけを返す", () => {
++    expect(slotCandidates(entries, { pattern: "◐仄", fixed: [null, Z[20]!] }).map((e) => e.n)).toEqual([9, 3]);
++    expect(slotCandidates(entries, { pattern: "◐◐", fixed: [P[20]!, null] }).map((e) => e.n)).toEqual([9, 5]);
++  });
++
++  it("末字の韻目で絞り込む", () => {
++    const rhymed = [entry(P[20]! + R[0]!, 4, ["平平"], [RHYME_A]), entry(P[21]! + R2[0]!, 6, ["平平"], [RHYME_B])];
++    expect(slotCandidates(rhymed, { pattern: "平平", fixed: [null, null], rhyme: RHYME_A }).map((e) => e.n)).toEqual([4]);
++  });
++
++  it("語の位置がすべて埋まっていれば候補は出さない", () => {
++    expect(slotCandidates(entries, { pattern: "◐仄", fixed: [P[20]!, Z[20]!] })).toEqual([]);
++  });
++});
++
++describe("rhymeFor", () => {
++  it("押韻の位置でなければ絞り込まない", () => {
++    const c = constraintsAt(gridOf(HN), fixtureData, 2, 6);
++    expect(rhymeFor(c, null)).toBeUndefined();
++    expect(rhymeFor(c, RHYME_B)).toBeUndefined();
++  });
++
++  it("押韻の位置では、設定で選んだ韻目、なければほかの押韻字の韻目（一つに決まるとき）", () => {
++    const c = constraintsAt(gridOf(HN), fixtureData, 3, 6);
++    expect(rhymeFor(c, null)).toBe(RHYME_A);
++    expect(rhymeFor(c, RHYME_B)).toBe(RHYME_B);
++  });
++
++  it("ほかの押韻字がなければ絞り込まない", () => {
++    let lines = HN;
++    for (const l of [0, 1, 3]) lines = replaceAt(lines, l, 6, "＿");
++    expect(rhymeFor(constraintsAt(gridOf(lines), fixtureData, 3, 6), null)).toBeUndefined();
++  });
++});
++
++describe("checkCandidates", () => {
++  // 転句の5-6字目（定型は○●）を空ける
++  const grid = gridOf(replaceAt(replaceAt(HN, 2, 4, "＿"), 2, 5, "＿"));
++  const ok = entry(P[24]! + Z[24]!, 9, ["平仄"]);
++  const ng = entry(Z[25]! + Z[26]!, 8, ["仄仄"]); // 5字目が仄：定型と違い、下三連（三仄）にもなる
++  const dep = entry(RYO[1]! + Z[27]!, 7, ["平仄", "仄仄"]); // 両韻字：仄で読むと違反
++
++  it("置くと違反が出る語は除いて数え、読みによって違反が出る語はそうと示す", () => {
++    const r = checkCandidates([ok, ng, dep], grid, fixtureData, {}, 2, slot("5-6"));
++    expect(r.shown.map((c) => [c.word, c.status])).toEqual([
++      [ok.w, "ok"],
++      [dep.w, "depends"],
++    ]);
++    expect(r.shown[1]!.dependent.length).toBeGreaterThan(0);
++    expect([r.excluded, r.remaining]).toEqual([1, 0]);
++  });
++
++  it("limit 件そろったら調べるのをやめ、残りの件数を返す", () => {
++    const r = checkCandidates([ok, ng, dep], grid, fixtureData, {}, 2, slot("5-6"), 1);
++    expect(r.shown.map((c) => c.word)).toEqual([ok.w]);
++    expect([r.excluded, r.remaining]).toEqual([0, 2]);
++  });
++
++  it("位置ごとの出現回数を付ける", () => {
++    const withAt = { ...ok, at: { "1-2": 2, "5-6": 7 } };
++    expect(checkCandidates([withAt], grid, fixtureData, {}, 2, slot("5-6")).shown[0]!.slotCount).toBe(7);
++  });
++});
++
++describe("filledWord と findPhrase", () => {
++  it("語の位置がすべて埋まっていれば、その語。未入力があれば null", () => {
++    const grid = gridOf(HN);
++    expect(filledWord(grid, 2, slot("5-7"))).toBe(grid.slice(18, 21).join(""));
++    expect(filledWord(gridOf(replaceAt(HN, 2, 5, "＿")), 2, slot("5-7"))).toBeNull();
++  });
++
++  it("「々」は直前の字にして引く", () => {
++    const grid = gridOf(HN);
++    grid[15] = "々";
++    expect(filledWord(grid, 2, slot("1-2"))).toBe(grid[14]! + grid[14]!);
++  });
++
++  it("頻度表のファイルから語を引く。なければ null", () => {
++    const groups = { "2": [entry("甲乙", 3, ["平仄"])], "3": [entry("甲乙丙", 2, ["平仄平"])] };
++    expect(findPhrase(groups, "甲乙")?.n).toBe(3);
++    expect(findPhrase(groups, "甲乙丙")?.n).toBe(2);
++    expect(findPhrase(groups, "甲丙")).toBeNull();
++    expect(findPhrase(undefined, "甲乙")).toBeNull();
++  });
++});
++
++describe("constraintView", () => {
++  it("平・仄それぞれを置いたときに出る違反を、規則名つきで示す", () => {
++    const c = constraintsAt(gridOf(replaceAt(HN, 2, 3, "＿")), fixtureData, 2, 3); // 転句4字目（定型は○）
++    const v = constraintView(c, fixtureData);
++    expect(v.required).toBe("平");
++    const zi = v.options.find((o) => o.pz === "仄")!;
++    expect(zi.ok).toBe(false);
++    expect(zi.problems.some((p) => p.startsWith("定型との不一致："))).toBe(true);
++    expect(v.options.find((o) => o.pz === "平")).toMatchObject({ ok: true, problems: [] });
++  });
++});
+diff --git a/packages/engine/src/queries.ts b/packages/engine/src/queries.ts
+index 67d8a3a..1c3ff1b 100644
+--- a/packages/engine/src/queries.ts
++++ b/packages/engine/src/queries.ts
+@@ -184,22 +184,25 @@ const SLOTS: Record<number, { start: number; slot: Placement["slot"] }[]> = {
+  * - すでにある別の字と重なる位置は conflict（置いて判定はしない。同じ字が入っている位置は重ならない扱い）
+  * - 置いたマスに入力エラー（漢字以外など）が出る語や、「＿」を含む語は invalid（位置と理由を errors に返す）
+  * - 置いて判定し、新しい違反が全解釈に共通して出れば ng、一部の解釈（読み）でだけ出れば depends、出なければ ok
++ * at を渡すと、その句・位置だけを調べる（詩語候補を一つの位置で確かめるときに、ほかの位置の判定を省く）。
+  */
+ export function placementsFor(
+   phrase: string,
+   input: string | readonly string[],
+   data: EngineData,
+   options: Options = {},
++  at?: { line: number; slot: Placement["slot"] },
+ ): Placement[] {
+   const chars = [...phrase];
+-  const slots = SLOTS[chars.length];
+-  if (slots === undefined) return [];
++  const slots = SLOTS[chars.length]?.filter((s) => at === undefined || s.slot === at.slot);
++  const lines = at === undefined ? [0, 1, 2, 3] : [0, 1, 2, 3].filter((l) => l === at.line);
++  if (slots === undefined || slots.length === 0 || lines.length === 0) return [];
+   const grid = toGrid(input);
+   const base = analyze(toCells(grid), data, options);
+   const baseAny = anyViolations(base);
+   const baseViolations = violations(base);
+ 
+-  return [0, 1, 2, 3].flatMap((line) =>
++  return lines.flatMap((line) =>
+     slots.map(({ start, slot }): Placement => {
+       const conflicts = chars.flatMap((c, i) => {
+         const existing = grid[line]![start + i]!;
+diff --git a/packages/engine/test/queries.test.ts b/packages/engine/test/queries.test.ts
+index b3c3912..f13e9a1 100644
+--- a/packages/engine/test/queries.test.ts
++++ b/packages/engine/test/queries.test.ts
+@@ -111,6 +111,16 @@ describe("placementsFor（語を置ける位置）", () => {
+     expect(placementsFor(three, poem, fixtureData).map((p) => `${p.line}:${p.slot}`)).toEqual(["0:5-7", "1:5-7", "2:5-7", "3:5-7"]);
+   });
+ 
++  it("at で句と位置を一つに絞ると、その位置の結果だけを、全部を調べたときと同じ内容で返す", () => {
++    const all = placementsFor(twoP, poem, fixtureData);
++    for (const p of all) {
++      expect(placementsFor(twoP, poem, fixtureData, {}, { line: p.line, slot: p.slot })).toEqual([p]);
++    }
++    // 語の字数に合わない位置（2字語の 5-7）や、範囲外の句は空
++    expect(placementsFor(twoP, poem, fixtureData, {}, { line: 2, slot: "5-7" })).toEqual([]);
++    expect(placementsFor(twoP, poem, fixtureData, {}, { line: 4, slot: "1-2" })).toEqual([]);
++  });
++
+   it("未入力の句で、定型に合う位置は置ける、合わない位置は理由つきで置けない", () => {
+     const at = Object.fromEntries(placementsFor(twoP, poem, fixtureData).filter((p) => p.line === 2).map((p) => [p.slot, p]));
+     expect(at["3-4"]!.status).toBe("ok"); // ◐○ に 平平
+diff --git a/scripts/build_phrases.py b/scripts/build_phrases.py
+index f91bb25..ba5b3d2 100644
+--- a/scripts/build_phrases.py
++++ b/scripts/build_phrases.py
+@@ -11,6 +11,9 @@
+   出現回数、位置ごとの出現回数、用例（全集の並び順で最初の3句。同じ句は重ねない）を付ける
+ - 平仄・韻目は平仄データから引く。エンジンと同じく、データにない字は異体字の対応（variants.json）の候補の読みを使う
+ - 先頭の字ごとのファイル（data/phrases/<先頭の字の符号位置>.json）に分け、索引 data/phrases/index.json を作る
++- 平仄パターンで探すための索引 data/phrases/search/<字数>-<パターン>.json も作る（平→h 仄→z データにない字→q）。
++  用例は持たず、語・出現回数・末字の韻目（data/rhymes.json の並びの番号）・位置ごとの出現回数だけ。
++  画面はパターンに合うファイルだけを読み、用例は先頭の字ごとのファイルから必要なときに読む
+ 
+ 使い方:
+   python3 scripts/build_phrases.py           # 生成して書き出す
+@@ -151,6 +154,26 @@ def _group_phrases(counted: dict, readings, rhyme_order: dict[str, int]) -> dict
+     return by_first
+ 
+ 
++SEARCH = OUT / "search"
++PATTERN_CODE = {"平": "h", "仄": "z", UNKNOWN: "q"}
++
++
++def search_files(by_first: dict[str, dict[str, list]], rhyme_order: dict[str, int]) -> dict[str, list]:
++    """字数×平仄パターンごとの探索用の一覧。名前（"2-hz" など）→ [[語, 出現回数, [韻目の番号], [位置ごとの出現回数]], ...]。
++    読みが複数あってパターンが複数ある語は、それぞれのファイルに入る。出現回数の多い順、同じなら語の順。"""
++    files: dict[str, list] = defaultdict(list)
++    slot_names = [name for _, _, name in SLOTS]
++    for groups in by_first.values():
++        for length, entries in groups.items():
++            for e in entries:
++                row = [e["w"], e["n"], [rhyme_order[r] for r in e["r"]], [e["at"].get(name, 0) for name in slot_names]]
++                for pattern in e["p"]:
++                    files[f"{length}-{''.join(PATTERN_CODE[c] for c in pattern)}"].append(row)
++    for rows in files.values():
++        rows.sort(key=lambda r: (-r[1], r[0]))
++    return dict(files)
++
++
+ def build() -> dict[Path, str]:
+     chars = json.loads((ROOT / "data" / "chars.json").read_text(encoding="utf-8"))
+     variants = json.loads((ROOT / "data" / "variants.json").read_text(encoding="utf-8"))
+@@ -177,6 +200,16 @@ def build() -> dict[Path, str]:
+         "chars": index,
+     }
+     outputs[OUT / "index.json"] = json.dumps(index_doc, ensure_ascii=False, indent=1) + "\n"
++
++    search = search_files(by_first, rhyme_order)
++    for name, rows in sorted(search.items()):
++        outputs[SEARCH / f"{name}.json"] = json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n"
++    search_doc = {
++        "description": "平仄パターンで詩語を探すための索引（scripts/build_phrases.py が生成。手で編集しない）。ファイル名は <字数>-<パターン>（平→h 仄→z データにない字→q）。各ファイルは [語, 出現回数, [末字の韻目の data/rhymes.json での番号], [位置ごとの出現回数]] の一覧で、出現回数の多い順。用例は先頭の字ごとのファイル（../index.json）にある。",
++        "slots": [name for _, _, name in SLOTS],
++        "files": {name: len(rows) for name, rows in sorted(search.items())},
++    }
++    outputs[SEARCH / "index.json"] = json.dumps(search_doc, ensure_ascii=False, indent=1) + "\n"
+     return outputs
+ 
+ 
+@@ -185,7 +218,7 @@ def main() -> int:
+     parser.add_argument("--check", action="store_true", help="書き出さずに、コミット済みのファイルと一致するか確かめる")
+     args = parser.parse_args()
+     outputs = build()
+-    existing = {p for p in OUT.glob("*.json")} if OUT.exists() else set()
++    existing = {p for p in OUT.rglob("*.json")} if OUT.exists() else set()
+     if args.check:
+         stale = [p for p, c in outputs.items() if not p.exists() or p.read_text(encoding="utf-8") != c]
+         extra = sorted(existing - set(outputs))
+@@ -198,7 +231,7 @@ def main() -> int:
+         return 0
+     if OUT.exists():
+         shutil.rmtree(OUT)
+-    OUT.mkdir(parents=True)
++    SEARCH.mkdir(parents=True)
+     for p, c in outputs.items():
+         p.write_text(c, encoding="utf-8")
+     print(f"書き出し {OUT.relative_to(ROOT)}/（{len(outputs)}ファイル）")
+diff --git a/scripts/check-phrases.test.ts b/scripts/check-phrases.test.ts
+index 1cbf7fc..2da12c8 100644
+--- a/scripts/check-phrases.test.ts
++++ b/scripts/check-phrases.test.ts
+@@ -12,7 +12,7 @@ const SLOT_START: Record<string, number> = { "1-2": 0, "3-4": 2, "5-6": 4, "6-7"
+ 
+ describe("data/phrases（詩語頻度表）", () => {
+   it("索引とファイルが過不足なく対応する", () => {
+-    const files = readdirSync(dir).filter((f) => f !== "index.json").sort();
++    const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "index.json").sort();
+     expect(Object.values(index.chars).map((c) => c.file).sort()).toEqual(files);
+     expect(index.counts.files).toBe(files.length);
+   });
+@@ -54,4 +54,35 @@ describe("data/phrases（詩語頻度表）", () => {
+     expect(errors).toEqual([]);
+     expect([n2, n3]).toEqual([index.counts["2"], index.counts["3"]]);
+   }, 60_000);
++
++  it("平仄パターンの探索用の索引（search/）は、詩語頻度表と過不足なく一致する", () => {
++    const search: { slots: string[]; files: Record<string, number> } = read("search/index.json");
++    expect(search.slots).toEqual(index.slots);
++    const code: Record<string, string> = { 平: "h", 仄: "z", "？": "q" };
++    const rhymeList = (JSON.parse(readFileSync(new URL("../data/rhymes.json", import.meta.url), "utf-8")) as { id: string }[]).map((r) => r.id);
++    // 頻度表から期待する行を作る
++    const expected = new Map<string, string[]>();
++    for (const info of Object.values(index.chars)) {
++      const groups: Record<"2" | "3", Entry[]> = read(info.file);
++      for (const size of ["2", "3"] as const)
++        for (const e of groups[size]) {
++          const row = JSON.stringify([e.w, e.n, e.r.map((r) => rhymeList.indexOf(r)), index.slots.map((s) => e.at[s] ?? 0)]);
++          for (const p of e.p) {
++            const name = `${size}-${[...p].map((c) => code[c]).join("")}`;
++            if (!expected.has(name)) expected.set(name, []);
++            expected.get(name)!.push(row);
++          }
++        }
++    }
++    expect(Object.keys(search.files).sort()).toEqual([...expected.keys()].sort());
++    expect(readdirSync(new URL("search/", dir)).filter((f) => f !== "index.json").sort()).toEqual([...expected.keys()].map((k) => `${k}.json`).sort());
++    for (const [name, rows] of expected) {
++      const actual: unknown[] = read(`search/${name}.json`);
++      expect(actual.length, name).toBe(search.files[name]);
++      expect(actual.map((r) => JSON.stringify(r)).sort(), name).toEqual([...rows].sort());
++      // 出現回数の多い順
++      const counts = actual.map((r) => (r as [string, number])[1]);
++      expect(counts.every((n, k) => k === 0 || counts[k - 1]! >= n), name).toBe(true);
++    }
++  }, 60_000);
+ });
+diff --git a/scripts/test_build_phrases.py b/scripts/test_build_phrases.py
+index 4ff6c72..91c1b80 100644
+--- a/scripts/test_build_phrases.py
++++ b/scripts/test_build_phrases.py
+@@ -6,7 +6,7 @@
+ import json
+ import unittest
+ 
+-from build_phrases import EXCLUDE, MAX_EXAMPLES, count_phrases, last_rhymes, load_corpus, load_exclusions, patterns, phrase_lines, reading_lookup
++from build_phrases import EXCLUDE, MAX_EXAMPLES, count_phrases, search_files, last_rhymes, load_corpus, load_exclusions, patterns, phrase_lines, reading_lookup
+ from fetch_corpus import corpus_files
+ 
+ LINE = "甲乙丙丁戊己庚"  # 7字
+@@ -123,5 +123,36 @@ class PatternTest(unittest.TestCase):
+         self.assertEqual(last_rhymes("平無", self.readings, ORDER), [])
+ 
+ 
++class SearchFilesTest(unittest.TestCase):
++    """平仄パターンで探すための索引（字数×パターンごとのファイル）。"""
++
++    def entry(self, w, n, p, r, at):
++        return {"w": w, "n": n, "at": at, "p": p, "r": r, "e": [["作者", "題", "句"]]}
++
++    def test_files_by_length_and_pattern(self):
++        by_first = {
++            "甲": {"2": [self.entry("甲乙", 5, ["平仄"], ["韻B"], {"1-2": 5})], "3": [self.entry("甲乙丙", 2, ["平？平"], ["韻A"], {"5-7": 2})]},
++            "丁": {"2": [self.entry("丁戊", 3, ["仄仄"], [], {"3-4": 1, "6-7": 2})], "3": []},
++        }
++        files = search_files(by_first, {"韻A": 0, "韻B": 1})
++        self.assertEqual(sorted(files), ["2-hz", "2-zz", "3-hqh"])  # 平→h 仄→z データにない字→q
++        # 語、出現回数、末字の韻目（rhymes.json の並びの番号）、位置ごとの出現回数（1-2・3-4・5-6・6-7・5-7 の順）。用例は持たない
++        self.assertEqual(files["2-hz"], [["甲乙", 5, [1], [5, 0, 0, 0, 0]]])
++        self.assertEqual(files["2-zz"], [["丁戊", 3, [], [0, 1, 0, 2, 0]]])
++        self.assertEqual(files["3-hqh"], [["甲乙丙", 2, [0], [0, 0, 0, 0, 2]]])
++
++    def test_a_phrase_with_several_patterns_is_in_each_file(self):
++        by_first = {"甲": {"2": [self.entry("甲乙", 2, ["平仄", "仄仄"], [], {"1-2": 2})], "3": []}}
++        files = search_files(by_first, {})
++        self.assertEqual(sorted(files), ["2-hz", "2-zz"])
++
++    def test_entries_are_sorted_by_count_then_word(self):
++        by_first = {
++            "甲": {"2": [self.entry("甲乙", 2, ["平平"], [], {}), self.entry("甲丙", 9, ["平平"], [], {})], "3": []},
++            "丁": {"2": [self.entry("丁戊", 2, ["平平"], [], {})], "3": []},
++        }
++        self.assertEqual([e[0] for e in search_files(by_first, {})["2-hh"]], ["甲丙", "丁戊", "甲乙"])
++
++
+ if __name__ == "__main__":
+     unittest.main()

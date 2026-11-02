@@ -1,7 +1,8 @@
 // 画面の起動。マス目で作るモードと、misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
 import { analyze } from "@kanshi/engine";
 import type { EngineData, FormId, Options } from "@kanshi/engine";
-import { loadEngineData } from "./data";
+import { assistPanel } from "./assistView";
+import { loadEngineData, loadRhymes, phraseStore, type Rhyme } from "./data";
 import { BLANK, emptyGrid, gridToText, textToGrid } from "./grid";
 import { gridEditor } from "./gridEditor";
 import { cellPanel, h, resultParts, resultView } from "./render";
@@ -13,7 +14,7 @@ const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞�
 type Mode = "grid" | "paste";
 
 /** 設定（マス目と貼り付けモードで共通） */
-function settingsPanel(data: EngineData, onChange: () => void) {
+function settingsPanel(data: EngineData, rhymes: readonly Rhyme[], onChange: () => void) {
   const formSelect = h(
     "select",
     { id: "form-select" },
@@ -27,9 +28,15 @@ function settingsPanel(data: EngineData, onChange: () => void) {
     h("option", { value: "平" }, "平として扱う"),
     h("option", { value: "仄" }, "仄として扱う"),
   ) as HTMLSelectElement;
+  const rhymeSelect = h(
+    "select",
+    { id: "rhyme-select" },
+    h("option", { value: "" }, "自動（ほかの押韻字にそろえる）"),
+    ...rhymes.filter((r) => r.tone === "平").map((r) => h("option", { value: r.id }, r.id)),
+  ) as HTMLSelectElement;
   const kokuji = h("input", { id: "allow-kokuji", type: "checkbox" }) as HTMLInputElement;
   const pattern = h("input", { id: "show-pattern", type: "checkbox", checked: "" }) as HTMLInputElement;
-  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", onChange);
+  for (const el of [formSelect, unknownSelect, rhymeSelect, kokuji, pattern]) el.addEventListener("change", onChange);
 
   const el = h(
     "details",
@@ -42,6 +49,8 @@ function settingsPanel(data: EngineData, onChange: () => void) {
       formSelect,
       h("label", { for: "unknown-select" }, "平仄データにない字"),
       unknownSelect,
+      h("label", { for: "rhyme-select" }, "押韻の韻目（詩語候補の絞り込み）"),
+      rhymeSelect,
       h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
       h("label", { class: "check" }, pattern, "平仄図式（定型）を表示する"),
     ),
@@ -59,17 +68,25 @@ function settingsPanel(data: EngineData, onChange: () => void) {
       return o;
     },
     showPattern: () => pattern.checked,
+    rhyme: () => rhymeSelect.value || null,
   };
 }
 
-function app(data: EngineData): HTMLElement {
+function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   let mode: Mode = "grid";
   let grid = emptyGrid();
   let selected: number | null = null;
+  /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
+  let slotName: string | null = null;
+  let limit = 20;
+  /** 古い候補の計算が、新しい表示を上書きしないための番号 */
+  let assistTurn = 0;
+  const store = phraseStore();
+  const rhymeIds = rhymes.map((r) => r.id);
   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
   let gridEdited = false;
 
-  const settings = settingsPanel(data, () => update());
+  const settings = settingsPanel(data, rhymes, () => update());
 
   // ---- マス目で作る ----
   const editor = gridEditor({
@@ -81,12 +98,17 @@ function app(data: EngineData): HTMLElement {
       update();
     },
     onSelect(i) {
+      if (i !== selected) {
+        slotName = null;
+        limit = 20;
+      }
       selected = i;
       update();
     },
   });
   const syncNote = h("p", { class: "sync-note", role: "status" });
   const panel = h("div", { id: "cell-panel" });
+  const assistBox = h("div", { id: "assist" });
   const gridResult = h("div", { id: "grid-result", class: "result" });
   const hasPoem = () => grid.some((c) => c !== BLANK);
   const replaceGrid = (next: string[], question: string) => {
@@ -207,7 +229,39 @@ function app(data: EngineData): HTMLElement {
       const v = buildView(a, data);
       editor.refresh(v, showPattern);
       gridResult.replaceChildren(...resultParts(v, showPattern));
-      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)));
+      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
+      const turn = ++assistTurn;
+      if (selected === null) {
+        assistBox.replaceChildren();
+        return;
+      }
+      const at = selected;
+      void assistPanel({
+        a,
+        grid,
+        data,
+        options,
+        index: at,
+        store,
+        rhymes: rhymeIds,
+        rhymeSetting: settings.rhyme(),
+        slotName,
+        limit,
+        onSlot(name) {
+          slotName = name;
+          limit = 20;
+          update();
+        },
+        onMore() {
+          limit += 20;
+          update();
+        },
+        onPlace(index, word) {
+          editor.place(index, word, at);
+        },
+      }).then((el) => {
+        if (turn === assistTurn) assistBox.replaceChildren(el);
+      });
     } else {
       output.replaceChildren(resultView(buildView(analyze(input.value, data, options), data), showPattern));
     }
@@ -225,8 +279,8 @@ function app(data: EngineData): HTMLElement {
 async function start() {
   const root = document.getElementById("app")!;
   try {
-    const data = await loadEngineData();
-    root.replaceChildren(app(data));
+    const [data, rhymes] = await Promise.all([loadEngineData(), loadRhymes()]);
+    root.replaceChildren(app(data, rhymes));
   } catch (e) {
     root.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
   }
