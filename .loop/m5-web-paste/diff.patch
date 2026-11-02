@@ -350,10 +350,10 @@ index 0000000..39a9dce
 +void start();
 diff --git a/apps/web/src/render.ts b/apps/web/src/render.ts
 new file mode 100644
-index 0000000..7356fcd
+index 0000000..6666082
 --- /dev/null
 +++ b/apps/web/src/render.ts
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,179 @@
 +// 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
 +import type { Severity } from "@kanshi/engine";
 +import type { FindingView, PoemView, ReadingFindingView } from "./view";
@@ -491,12 +491,34 @@ index 0000000..7356fcd
 +      ),
 +    );
 +  }
-+  if (v.judgements.length === 0 && v.readingChoices.length === 0) judge.push(h("p", { class: "none" }, "ありません。"));
++  if (v.formChoices.length > 0) {
++    judge.push(
++      h("h4", {}, "詩格の候補ごとの指摘"),
++      h("p", { class: "explain" }, "未入力のマスなどのため詩格が一つに決まりません。候補ごとに、その詩格でだけ出る指摘を示します。"),
++      ...v.formChoices.map((c) =>
++        h(
++          "div",
++          { class: "choice" },
++          h("p", { class: "cell" }, c.formName),
++          c.findings.length === 0
++            ? h("p", { class: "result" }, "この詩格で加わる指摘はありません")
++            : h(
++                "ul",
++                { class: "always" },
++                ...c.findings.map((f) =>
++                  h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`),
++                ),
++              ),
++        ),
++      ),
++    );
++  }
++  if (v.judgements.length === 0 && v.readingChoices.length === 0 && v.formChoices.length === 0) judge.push(h("p", { class: "none" }, "ありません。"));
 +  sections.push(
 +    h(
 +      "section",
 +      {},
-+      h("h3", {}, `${SEVERITY_MARK.check} 作者が判断すること`, h("span", { class: "count" }, `${v.judgements.length + v.readingChoices.length}件`)),
++      h("h3", {}, `${SEVERITY_MARK.check} 作者が判断すること`, h("span", { class: "count" }, `${v.judgements.length + v.readingChoices.length + v.formChoices.length}件`)),
 +      ...judge.filter((x): x is HTMLElement => x !== null),
 +    ),
 +  );
@@ -947,10 +969,10 @@ index 0000000..a36c4da
 +}
 diff --git a/apps/web/src/view.ts b/apps/web/src/view.ts
 new file mode 100644
-index 0000000..889cf77
+index 0000000..995b324
 --- /dev/null
 +++ b/apps/web/src/view.ts
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,177 @@
 +// エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
 +import type { Analysis, CharStatus, EngineData, Finding, Reading, Severity } from "@kanshi/engine";
 +
@@ -1004,6 +1026,13 @@ index 0000000..889cf77
 +  options: ReadingOptionView[];
 +};
 +
++/** 詩格が一つに決まらない（起句の末字が未入力など）ときの、詩格の候補ごとに出る指摘 */
++export type FormChoiceView = {
++  formName: string;
++  /** その詩格の解釈に出て、全体の一覧（どの解釈にも出る指摘）にはない指摘 */
++  findings: ReadingFindingView[];
++};
++
 +export type PoemView = {
 +  form: { name: string | null; auto: boolean; note?: string };
 +  lines: LineView[];
@@ -1013,6 +1042,8 @@ index 0000000..889cf77
 +  judgements: FindingView[];
 +  /** 読みが複数ある字の、読みごとの結果（読みが一つに決まる詩では空） */
 +  readingChoices: ReadingChoiceView[];
++  /** 詩格の候補ごとの結果（詩格が一つに決まる詩では空） */
++  formChoices: FormChoiceView[];
 +  /** 組み合わせが多すぎて、位置ごとに独立して評価した */
 +  independent: boolean;
 +  /** 入力エラー（漢字以外の文字など） */
@@ -1074,6 +1105,22 @@ index 0000000..889cf77
 +  });
 +}
 +
++/** 詩格の候補ごとに、その詩格の解釈に出て、どの解釈にも出るわけではない指摘を集める */
++function formChoices(a: Analysis, data: EngineData): FormChoiceView[] {
++  const ids = [...new Set(a.interpretations.map((i) => i.form.id))];
++  if (ids.length < 2) return [];
++  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
++  const common = new Set(a.findings.map(key));
++  return ids.map((id) => {
++    const found = new Map<string, ReadingFindingView>();
++    for (const i of a.interpretations.filter((x) => x.form.id === id))
++      for (const f of i.findings)
++        if ((f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
++          found.set(key(f), { severity: f.severity, ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message });
++    return { formName: data.forms.forms.find((f) => f.id === id)?.name ?? "未定", findings: [...found.values()] };
++  });
++}
++
 +export function buildView(a: Analysis, data: EngineData): PoemView {
 +  const form = a.form.id === null ? null : (data.forms.forms.find((f) => f.id === a.form.id) ?? null);
 +  const severityAt = (l: number, p: number): Severity | null => {
@@ -1098,21 +1145,22 @@ index 0000000..889cf77
 +    variants: by("variant"),
 +    judgements: by("check"),
 +    readingChoices: readingChoices(a, data),
++    formChoices: formChoices(a, data),
 +    independent: a.independent,
 +    errors: a.errors.map((e) => e.message),
 +  };
 +}
 diff --git a/apps/web/test/view.test.ts b/apps/web/test/view.test.ts
 new file mode 100644
-index 0000000..5b910f9
+index 0000000..aef5972
 --- /dev/null
 +++ b/apps/web/test/view.test.ts
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,116 @@
 +// 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
 +import { analyze } from "@kanshi/engine";
 +import { buildView } from "../src/view";
-+import { KOKUJI, RHY2, RYO, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
++import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
 +
 +const HN = baseLines("heiki-nyuin");
 +// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -1154,6 +1202,25 @@ index 0000000..5b910f9
 +  it("国字の字はそのまま表示し、記号は■", () => {
 +    const v = view(replaceAt(HN, 2, 0, KOKUJI));
 +    expect(v.lines[2]!.cells[0]).toEqual({ char: KOKUJI, symbol: "■", status: "kokuji", severity: "violation" });
++  });
++
++  it("データにない字は記号□で、作者が判断することに入る", () => {
++    const v = view(replaceAt(HN, 2, 0, UNKNOWN));
++    expect(v.lines[2]!.cells[0]).toEqual({ char: UNKNOWN, symbol: "□", status: "unknown", severity: "check" });
++    expect(v.judgements.map((f) => [f.ruleName, f.where])).toEqual([["平仄データにない字", "転句の1字目"]]);
++  });
++
++  it("起句の末字が未入力で詩格が分かれるときは、詩格ごとに出る指摘を示す", () => {
++    // 起句5字目を平に、末字を未入力に。入韻型では5字目が●（定型と不一致）、不入韻型では◐
++    const v = view(replaceAt(replaceAt(HN, 0, 4, "○"), 0, 6, "＿"));
++    expect(v.readingChoices).toEqual([]);
++    const byForm = Object.fromEntries(v.formChoices.map((c) => [c.formName, c.findings.map((f) => f.ruleName)]));
++    expect(byForm["平起式・首句入韻"]).toContain("定型との不一致");
++    expect(byForm["平起式・首句不入韻"]).not.toContain("定型との不一致");
++  });
++
++  it("詩格が一つに決まる詩では、詩格ごとの欄は空", () => {
++    expect(view(HN).formChoices).toEqual([]);
 +  });
 +
 +  it("「々」は入力どおりに表示する", () => {
