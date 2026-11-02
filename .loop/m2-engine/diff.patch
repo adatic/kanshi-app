@@ -25,10 +25,10 @@ index c3ed22d..42ca32c 100644
  
 diff --git a/packages/engine/src/analyze.ts b/packages/engine/src/analyze.ts
 new file mode 100644
-index 0000000..42b5645
+index 0000000..1f0a853
 --- /dev/null
 +++ b/packages/engine/src/analyze.ts
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,132 @@
 +// 詩全体の判定（CLAUDE.md §4.1）。読みが複数ある字は、読みの組み合わせ（解釈）ごとに判定する。
 +import { charInfo, pzOf, symbolOf } from "./chars";
 +import { detectForm } from "./form";
@@ -45,18 +45,20 @@ index 0000000..42b5645
 +
 +/**
 + * マスの読みを、判定に効く違いごとにまとめる（一つのまとまりが、解釈の一つの選択肢になる）。
-+ * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる
++ * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる。ただし押韻しうる位置に来うる韻目
++ *   （rhymeCandidates）の読みは、冒韻の有無が変わるので、その韻目ごとに分ける
 + * - 異体字の対応で別の字として引いた読みは、候補の字ごとに分ける（どの候補で判定したかを残す）
 + * - まとまりの代表には、本体の読み（【詞】【辭】欄でない読み）を優先する
 + */
-+function choicesOf(info: CharInfo, line: number, pos: number, options: Options): CellState[] {
++function choicesOf(info: CharInfo, line: number, pos: number, options: Options, rhymeCandidates: ReadonlySet<string>): CellState[] {
 +  if (info.status === "unknown" && options.unknownAs !== undefined) {
 +    return [{ pz: options.unknownAs, reading: null, supplementOnly: false }];
 +  }
 +  if (info.readings.length === 0) return [{ pz: null, reading: null, supplementOnly: false }];
 +  const groups = new Map<string, Reading[]>();
 +  for (const r of info.readings) {
-+    const key = `${r.via ?? ""}|${isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone)}`;
++    const what = isRhymeSlot(line, pos) ? r.rhyme : `${pzOf(r.tone)}|${rhymeCandidates.has(r.rhyme) ? r.rhyme : ""}`;
++    const key = `${r.via ?? ""}|${what}`;
 +    groups.set(key, [...(groups.get(key) ?? []), r]);
 +  }
 +  return [...groups.values()].map((rs) => {
@@ -80,9 +82,13 @@ index 0000000..42b5645
 +
 +  // マスごとの選択肢と、選択肢が2つ以上あるマス。読みを組み合わせるのは、判定の対象になる4句×7字の中だけ
 +  // （それより外のマスは字数・句数の違反として扱い、最初の選択肢で埋める）
-+  const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options)));
++  const inRange = (l: number, p: number) => l < 4 && p < 7;
++  const rhymeCandidates = new Set(
++    chars.flatMap((row, l) => row.flatMap((info, p) => (inRange(l, p) && isRhymeSlot(l, p) ? info.readings.map((r) => r.rhyme) : []))),
++  );
++  const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options, rhymeCandidates)));
 +  const open: [number, number][] = [];
-+  choices.forEach((row, l) => row.forEach((cs, p) => l < 4 && p < 7 && cs.length > 1 && open.push([l, p])));
++  choices.forEach((row, l) => row.forEach((cs, p) => inRange(l, p) && cs.length > 1 && open.push([l, p])));
 +  const total = open.reduce((n, [l, p]) => n * choices[l]![p]!.length, 1);
 +  const independent = total > MAX_COMBINATIONS;
 +
@@ -92,19 +98,21 @@ index 0000000..42b5645
 +    : cartesian(open.map(([l, p]) => choices[l]![p]!.length));
 +
 +  const interpretations: Interpretation[] = picks.map((pick) => {
-+    const chosen = new Map(open.map(([l, p], i) => [l * 7 + p, pick[i]!]));
++    // 句と位置の組で引く（8字目以降のマスと次の句のマスを取り違えないため）
++    const chosen = new Map(open.map(([l, p], i) => [`${l}:${p}`, pick[i]!]));
 +    const grid: CellState[][] = choices.map((row, l) =>
 +      row.map((cs, p) => {
-+        const c = chosen.get(l * 7 + p);
++        const c = chosen.get(`${l}:${p}`);
 +        if (c === undefined) return cs[0]!;
 +        return c === -1 ? { pz: null, reading: null, supplementOnly: false } : cs[c]!;
 +      }),
 +    );
++    // 解釈の読みは、選択肢のあるマス（4句×7字の中）だけ。キーは 句×7＋位置
 +    const readings: Record<number, Reading> = {};
-+    for (const [index, c] of chosen) {
-+      const r = grid[Math.floor(index / 7)]![index % 7]!.reading;
-+      if (c !== -1 && r !== null) readings[index] = r;
-+    }
++    open.forEach(([l, p], i) => {
++      const r = grid[l]![p]!.reading;
++      if (pick[i] !== -1 && r !== null) readings[l * 7 + p] = r;
++    });
 +    const form = detectForm((l, p) => grid[l]?.[p]?.pz ?? null, options.form);
 +    const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
 +    const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));
@@ -374,7 +382,7 @@ index 0000000..4dd9c88
 +
 diff --git a/packages/engine/src/rules.ts b/packages/engine/src/rules.ts
 new file mode 100644
-index 0000000..faacdf5
+index 0000000..3cfb615
 --- /dev/null
 +++ b/packages/engine/src/rules.ts
 @@ -0,0 +1,233 @@
@@ -544,14 +552,14 @@ index 0000000..faacdf5
 +    }
 +  }
 +
-+  // 冒韻：押韻位置以外の字が、押韻と同じ韻目の読みを持つ（読みのどれか一つでも）
++  // 冒韻：押韻位置以外の字を、この解釈で選んだ読みが押韻と同じ韻目になっている
 +  const group = ref ?? r0;
 +  if (group !== null) {
 +    for (let l = 0; l < lineCount; l++) {
-+      (chars[l] ?? []).forEach((info, p) => {
-+        if (p === 6 && rhymeLines.includes(l)) return;
-+        if (info.readings.some((r) => r.rhyme === group)) {
-+          out.push(finding(ctx, "bou-in", l, [p], `${lineName(l)}の${positionName(p)}「${info.char}」は、押韻と同じ韻目（${group}）の読みを持ちます（冒韻）。意図したものか確認してください。`));
++      (grid[l] ?? []).forEach((cell, p) => {
++        if (p >= 7 || (p === 6 && rhymeLines.includes(l))) return;
++        if (cell.reading?.rhyme === group) {
++          out.push(finding(ctx, "bou-in", l, [p], `${lineName(l)}の${positionName(p)}「${charAt(l, p)}」を押韻と同じ韻目（${group}）で読んでいます（冒韻）。意図したものか確認してください。`));
 +        }
 +      });
 +    }
@@ -560,7 +568,7 @@ index 0000000..faacdf5
 +  // 【詞】【辭】欄にだけある読み
 +  for (let l = 0; l < lineCount; l++) {
 +    (grid[l] ?? []).forEach((cell, p) => {
-+      if (cell.supplementOnly && cell.reading !== null) {
++      if (p < 7 && cell.supplementOnly && cell.reading !== null) {
 +        const r = cell.reading;
 +        out.push(finding(ctx, "supplement-reading", l, [p], `${lineName(l)}の${positionName(p)}「${charAt(l, p)}」は、平仄データで【詞】【辭】欄にだけある読み（${r.tone}・${r.rhyme}）で判定しています。この読みでよいか確認してください。`));
 +      }
@@ -719,10 +727,10 @@ index 0000000..6c2e5c9
 +};
 diff --git a/packages/engine/test/fixture.ts b/packages/engine/test/fixture.ts
 new file mode 100644
-index 0000000..ba73fd4
+index 0000000..2c7c82d
 --- /dev/null
 +++ b/packages/engine/test/fixture.ts
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,107 @@
 +// テスト用の架空データと、詩を組み立てる道具。
 +//
 +// CLAUDE.md §0 により、テストの期待値に実在の字の平仄を記憶で使わない。
@@ -766,6 +774,8 @@ index 0000000..ba73fd4
 +export const VAR_TWO = String.fromCodePoint(0x6501);
 +/** 異体字の対応で、平の字 P[29] と P[30] の両方につながる字（同じ平仄の候補が2つ。自身はデータにない） */
 +export const VAR_SAME = String.fromCodePoint(0x6502);
++/** 異体字の対応で、押韻用の字 R[6]（韻目 A）と平の字 P[28] の両方につながる字（どちらも平。自身はデータにない） */
++export const VAR_BOU = String.fromCodePoint(0x6503);
 +/** データにない字 */
 +export const UNKNOWN = String.fromCodePoint(0x6600);
 +/** 国字（テストデータで国字として登録する字） */
@@ -786,7 +796,7 @@ index 0000000..ba73fd4
 +
 +export const fixtureData: EngineData = {
 +  chars,
-+  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!], [VAR_SAME]: [P[29]!, P[30]!] },
++  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!], [VAR_SAME]: [P[29]!, P[30]!], [VAR_BOU]: [R[6]!, P[28]!] },
 +  kokuji: { chars: [{ char: KOKUJI }] },
 +  forms: realForms,
 +  rules: realRules,
@@ -830,10 +840,10 @@ index 0000000..ba73fd4
 +});
 diff --git a/packages/engine/test/interpretations.test.ts b/packages/engine/test/interpretations.test.ts
 new file mode 100644
-index 0000000..2ca4aa0
+index 0000000..8229138
 --- /dev/null
 +++ b/packages/engine/test/interpretations.test.ts
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,190 @@
 +// 両韻字・異体字の候補ごとの判定（CLAUDE.md §4.1「多音字・両韻字」）と、字の情報・記号列。
 +import { describe, expect, it } from "vitest";
 +import { analyze } from "../src/index";
@@ -846,7 +856,9 @@ index 0000000..2ca4aa0
 +  RHYME_A,
 +  RHYME_B,
 +  RYO,
++  SUPP_MIX,
 +  UNKNOWN,
++  VAR_BOU,
 +  VAR_ONE,
 +  VAR_SAME,
 +  VAR_TWO,
@@ -910,11 +922,16 @@ index 0000000..2ca4aa0
 +    expect(byRhyme).toEqual({ [RHYME_A]: [], [RHYME_B]: ["violation:rhyme-group:3:6"] });
 +  });
 +
-+  it("押韻の位置以外では、同じ平仄の読みは一つの解釈にまとめる", () => {
-+    const a = run(replaceAt(HN, 2, 2, RHY2)); // 転句3字目（平）
++  it("押韻の位置以外でも、押韻に来うる韻目の読みは分け、選んだ読みで冒韻を判定する", () => {
++    const a = run(replaceAt(HN, 2, 2, RHY2)); // 転句3字目（平。韻目 A と B の読み）
++    const byRhyme = Object.fromEntries(a.interpretations.map((i) => [i.readings[16]!.rhyme, nonOk(i.findings)]));
++    expect(byRhyme).toEqual({ [RHYME_A]: ["check:bou-in:2:2"], [RHYME_B]: [] });
++    expect(nonOk(a.findings)).toEqual([]);
++  });
++
++  it("押韻に来ない韻目どうしなら、同じ平仄の読みは一つの解釈にまとめる", () => {
++    const a = run(replaceAt(HN, 2, 2, SUPP_MIX)); // 平の読みが2つ（どちらも押韻の韻目 A ではない）
 +    expect(a.interpretations).toHaveLength(1);
-+    // ただし冒韻は、どれかの読みが押韻と同じ韻目なら出す
-+    expect(nonOk(a.findings)).toEqual(["check:bou-in:2:2"]);
 +  });
 +});
 +
@@ -946,6 +963,15 @@ index 0000000..2ca4aa0
 +  });
 +});
 +
++describe("異体字の候補の一方だけが押韻と同じ韻目のとき", () => {
++  it("冒韻はその候補を選んだ解釈にだけ出る", () => {
++    const a = run(replaceAt(HN, 2, 2, VAR_BOU)); // 転句3字目（平）
++    const byVia = Object.fromEntries(a.interpretations.map((i) => [i.readings[16]!.via, nonOk(i.findings)]));
++    expect(byVia).toEqual({ [R[6]!]: ["check:bou-in:2:2"], [P[28]!]: [] });
++    expect(nonOk(a.findings)).toEqual([]);
++  });
++});
++
 +describe("8字目以降のマス", () => {
 +  it("字数が多い句に両韻字があっても止まらず、字数の違反を返す（読みは4句×7字の中だけで組み合わせる）", () => {
 +    const lines = [...HN];
@@ -953,6 +979,12 @@ index 0000000..2ca4aa0
 +    const a = run(lines);
 +    expect(nonOk(a.findings)).toContain("violation:length:0:");
 +    expect(a.interpretations).toHaveLength(1);
++  });
++
++  it("起句の8字目と承句の1字目を取り違えない（承句1字目の両韻字だけで解釈が分かれる）", () => {
++    const a = analyze(["＿＿＿＿＿＿＿＿", RYO[0]! + "＿＿＿＿＿＿", "＿＿＿＿＿＿＿", "＿＿＿＿＿＿＿"].join("\n"), fixtureData);
++    expect(nonOk(a.findings)).toContain("violation:length:0:");
++    expect(a.interpretations.map((i) => Object.keys(i.readings))).toEqual([["7"], ["7"]]);
 +  });
 +
 +  it("未入力の句の8字目に両韻字があっても止まらない", () => {
