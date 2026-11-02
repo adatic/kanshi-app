@@ -2,7 +2,7 @@
 // 漢字の入力は OS の変換に任せる。変換中（未確定）は何もせず、確定した文字だけをマスに入れる（CLAUDE.md §4.5）。
 import { BLANK, CELLS, WIDTH, moveFrom, writeAt, type MoveKey } from "./grid";
 import { SEVERITY_MARK, SEVERITY_NAME, h } from "./render";
-import type { PoemView } from "./view";
+import { lineName, type PoemView } from "./view";
 
 export type GridEditor = {
   el: HTMLElement;
@@ -15,7 +15,6 @@ export type GridEditor = {
   place(index: number, text: string, focusAt: number): void;
 };
 
-const LINE_NAMES = ["起句", "承句", "転句", "結句"];
 const MOVE_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
 
 export function gridEditor(opts: {
@@ -32,6 +31,10 @@ export function gridEditor(opts: {
   const actualRows: HTMLElement[] = [];
 
   const valueOf = (i: number) => (grid[i] === BLANK ? "" : grid[i]!);
+
+  const syncInputs = () => {
+    for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
+  };
 
   const focus = (i: number) => {
     const el = inputs[i]!;
@@ -52,7 +55,7 @@ export function gridEditor(opts: {
     if (r.overflow.length > 0) messages.push(`句の末を越えた「${r.overflow.join("")}」は入れていません。`);
     note.textContent = messages.join("");
     grid = r.grid;
-    for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
+    syncInputs();
     opts.onChange([...grid]);
     focus(focusAt ?? r.next);
   };
@@ -68,7 +71,7 @@ export function gridEditor(opts: {
         autocapitalize: "off",
         spellcheck: "false",
         enterkeyhint: "next",
-        "aria-label": `${LINE_NAMES[l]}の${p + 1}字目`,
+        "aria-label": `${lineName(l)}の${p + 1}字目`,
         "data-index": String(i),
       }) as HTMLInputElement;
       input.value = valueOf(i);
@@ -135,7 +138,7 @@ export function gridEditor(opts: {
     return h(
       "div",
       { class: "gline" },
-      h("span", { class: "line-name" }, LINE_NAMES[l]!),
+      h("span", { class: "line-name" }, lineName(l)),
       h("div", { class: "gcells" }, ...rowCells),
       pattern,
       actual,
@@ -148,7 +151,7 @@ export function gridEditor(opts: {
     el,
     setGrid(next) {
       grid = [...next];
-      for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
+      syncInputs();
       note.textContent = "";
     },
     refresh(view, showPattern) {
@@ -159,7 +162,7 @@ export function gridEditor(opts: {
           const sev = c.severity !== null && c.severity !== "ok" ? c.severity : null;
           cells[i]!.className = `gcell ${sev ? `sev-${sev}` : ""}`;
           marks[i]!.textContent = sev ? SEVERITY_MARK[sev] : "";
-          inputs[i]!.setAttribute("aria-label", `${LINE_NAMES[l]}の${p + 1}字目${sev ? `（${SEVERITY_NAME[sev]}）` : ""}`);
+          inputs[i]!.setAttribute("aria-label", `${lineName(l)}の${p + 1}字目${sev ? `（${SEVERITY_NAME[sev]}）` : ""}`);
           syms[p]!.textContent = c.symbol === BLANK ? "" : c.symbol;
         });
         const pat = patternRows[l]!;

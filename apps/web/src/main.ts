@@ -73,6 +73,39 @@ function settingsPanel(data: EngineData, rhymes: readonly Rhyme[], onChange: () 
   };
 }
 
+/** 必須要素1語の表示。編集と登録解除は呼び出し側に委ねる。 */
+function requiredItem(
+  r: RequiredView,
+  onPlace: (at: number, word: string) => void,
+  onRemove: (word: string) => void,
+): HTMLElement {
+  const placeButton = (pl: { line: number; start: number; label: string }, extra = "") => {
+    const b = h("button", { type: "button", class: "small place-req", "aria-label": `「${r.word}」を${pl.label}に入れる` }, `${pl.label}${extra}`);
+    const at = pl.line * WIDTH + pl.start;
+    b.addEventListener("click", () => onPlace(at, r.word));
+    return b;
+  };
+  const remove = h("button", { type: "button", class: "small remove", "aria-label": `「${r.word}」の登録を外す` }, "外す");
+  remove.addEventListener("click", () => onRemove(r.word));
+  return h(
+    "div",
+    { class: "required-item" },
+    h("p", { class: "required-head" }, h("span", { class: "cand-word", lang: "zh-Hant" }, r.word), remove),
+    r.present.length > 0 ? h("p", { class: "present" }, `詩に入っています：${r.present.map((p) => p.label).join("、")}`) : null,
+    r.ok.length > 0 ? h("div", { class: "places" }, h("p", { class: "explain" }, "置ける位置"), ...r.ok.map((pl) => placeButton(pl))) : null,
+    r.depends.length > 0
+      ? h(
+          "div",
+          { class: "places depends" },
+          h("p", { class: "explain" }, "字の読みによっては違反が出る位置"),
+          ...r.depends.map((pl) => h("div", {}, placeButton(pl), h("details", {}, h("summary", {}, "理由"), h("ul", {}, ...pl.notes.map((n) => h("li", {}, n)))))),
+        )
+      : null,
+    r.present.length === 0 && r.ok.length === 0 && r.depends.length === 0 ? h("p", { class: "none" }, "いまの詩には、違反を出さずに置ける位置がありません。") : null,
+    h("p", { class: "explain counts" }, `置くと違反が出る位置 ${r.ng}　別の字と重なる位置 ${r.conflict}`),
+  );
+}
+
 function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   let mode: Mode = "grid";
   let grid = emptyGrid();
@@ -166,36 +199,6 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     requiredNote,
     requiredList,
   );
-  const requiredItem = (r: RequiredView): HTMLElement => {
-    const placeButton = (pl: { line: number; start: number; label: string }, extra = "") => {
-      const b = h("button", { type: "button", class: "small place-req", "aria-label": `「${r.word}」を${pl.label}に入れる` }, `${pl.label}${extra}`);
-      const at = pl.line * WIDTH + pl.start;
-      b.addEventListener("click", () => editor.place(at, r.word, at));
-      return b;
-    };
-    const remove = h("button", { type: "button", class: "small remove", "aria-label": `「${r.word}」の登録を外す` }, "外す");
-    remove.addEventListener("click", () => {
-      required = required.filter((w) => w !== r.word);
-      update();
-    });
-    return h(
-      "div",
-      { class: "required-item" },
-      h("p", { class: "required-head" }, h("span", { class: "cand-word", lang: "zh-Hant" }, r.word), remove),
-      r.present.length > 0 ? h("p", { class: "present" }, `詩に入っています：${r.present.map((p) => p.label).join("、")}`) : null,
-      r.ok.length > 0 ? h("div", { class: "places" }, h("p", { class: "explain" }, "置ける位置"), ...r.ok.map((pl) => placeButton(pl))) : null,
-      r.depends.length > 0
-        ? h(
-            "div",
-            { class: "places depends" },
-            h("p", { class: "explain" }, "字の読みによっては違反が出る位置"),
-            ...r.depends.map((pl) => h("div", {}, placeButton(pl), h("details", {}, h("summary", {}, "理由"), h("ul", {}, ...pl.notes.map((n) => h("li", {}, n)))))),
-          )
-        : null,
-      r.present.length === 0 && r.ok.length === 0 && r.depends.length === 0 ? h("p", { class: "none" }, "いまの詩には、違反を出さずに置ける位置がありません。") : null,
-      h("p", { class: "explain counts" }, `置くと違反が出る位置 ${r.ng}　別の字と重なる位置 ${r.conflict}`),
-    );
-  };
 
   const gridMode = h(
     "section",
@@ -254,6 +257,12 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     grid: h("button", { type: "button", role: "tab", id: "tab-grid", "aria-controls": "grid-mode" }, "マス目で作る"),
     paste: h("button", { type: "button", role: "tab", id: "tab-paste", "aria-controls": "paste-mode" }, "貼り付けて判定する"),
   };
+  const refreshTabs = () => {
+    for (const m of ["grid", "paste"] as const) {
+      tabs[m].setAttribute("aria-selected", String(m === mode));
+      tabs[m].tabIndex = m === mode ? 0 : -1;
+    }
+  };
   const setMode = (next: Mode) => {
     if (next === mode) return;
     if (next === "grid") {
@@ -270,18 +279,14 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
       input.value = gridToText(grid);
     }
     mode = next;
-    for (const m of ["grid", "paste"] as const) {
-      tabs[m].setAttribute("aria-selected", String(m === mode));
-      tabs[m].tabIndex = m === mode ? 0 : -1;
-    }
+    refreshTabs();
     gridMode.hidden = mode !== "grid";
     pasteMode.hidden = mode !== "paste";
     requiredCard.hidden = mode !== "grid";
     update();
   };
+  refreshTabs();
   for (const m of ["grid", "paste"] as const) {
-    tabs[m].setAttribute("aria-selected", String(m === mode));
-    tabs[m].tabIndex = m === mode ? 0 : -1;
     tabs[m].addEventListener("click", () => setMode(m));
     tabs[m].addEventListener("keydown", (e) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -298,7 +303,16 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
       const a = analyze(grid, data, options);
       const v = buildView(a, data);
       editor.refresh(v, showPattern);
-      requiredList.replaceChildren(...required.map((w) => requiredItem(requiredView(w, grid, data, options))));
+      requiredList.replaceChildren(
+        ...required.map((w) => requiredItem(
+          requiredView(w, grid, data, options),
+          (at, word) => editor.place(at, word, at),
+          (word) => {
+            required = required.filter((w) => w !== word);
+            update();
+          },
+        )),
+      );
       gridResult.replaceChildren(...resultParts(v, showPattern));
       panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
       const turn = ++assistTurn;

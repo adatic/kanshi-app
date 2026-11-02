@@ -13,6 +13,7 @@ import {
   slotPattern,
   slotsAt,
   type Slot,
+  type CandidateView,
 } from "./assist";
 import type { PhraseStore } from "./data";
 import { WIDTH } from "./grid";
@@ -94,6 +95,23 @@ function constraintSection(ctx: AssistContext, line: number, pos: number): HTMLE
   ];
 }
 
+/** 候補1語の表示と採用操作。候補の検索・判定は行わない。 */
+function candidateItem(c: CandidateView, ctx: AssistContext, line: number, slot: Slot): HTMLElement {
+  const place = h("button", { type: "button", class: "small place", "aria-label": `「${c.word}」を${slotLabel(line, slot)}に入れる` }, "入れる");
+  place.addEventListener("click", () => ctx.onPlace(line * WIDTH + slot.start, c.word));
+  return h(
+    "li",
+    { class: "cand" },
+    place,
+    h("span", { class: "cand-word", lang: "zh-Hant" }, c.word),
+    h("span", { class: "cand-meta" }, c.patterns.join("／"), c.rhymes.length > 0 ? `　末字 ${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
+    c.status === "depends"
+      ? h("details", { class: "depends" }, h("summary", {}, "字の読みによっては違反"), h("ul", {}, ...c.dependent.map((d) => h("li", {}, d))))
+      : null,
+    lazyExamples(c.word, ctx.store),
+  );
+}
+
 async function slotSection(ctx: AssistContext, line: number, slot: Slot): Promise<HTMLElement[]> {
   const word = filledWord(ctx.grid, line, slot);
   if (word !== null) {
@@ -139,21 +157,7 @@ async function slotSection(ctx: AssistContext, line: number, slot: Slot): Promis
   const list = h(
     "ul",
     { class: "cands" },
-    ...checked.shown.map((c) => {
-      const place = h("button", { type: "button", class: "small place", "aria-label": `「${c.word}」を${slotLabel(line, slot)}に入れる` }, "入れる");
-      place.addEventListener("click", () => ctx.onPlace(line * WIDTH + slot.start, c.word));
-      return h(
-        "li",
-        { class: "cand" },
-        place,
-        h("span", { class: "cand-word", lang: "zh-Hant" }, c.word),
-        h("span", { class: "cand-meta" }, c.patterns.join("／"), c.rhymes.length > 0 ? `　末字 ${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
-        c.status === "depends"
-          ? h("details", { class: "depends" }, h("summary", {}, "字の読みによっては違反"), h("ul", {}, ...c.dependent.map((d) => h("li", {}, d))))
-          : null,
-        lazyExamples(c.word, ctx.store),
-      );
-    }),
+    ...checked.shown.map((c) => candidateItem(c, ctx, line, slot)),
   );
   const more = h("button", { type: "button", class: "small more" }, "さらに表示");
   more.addEventListener("click", () => ctx.onMore());
