@@ -10,7 +10,9 @@ import {
   RHYME_A,
   RHYME_B,
   RYO,
+  SUPP_MIX,
   UNKNOWN,
+  VAR_BOU,
   VAR_ONE,
   VAR_SAME,
   VAR_TWO,
@@ -74,11 +76,16 @@ describe("押韻で韻目が複数ある字", () => {
     expect(byRhyme).toEqual({ [RHYME_A]: [], [RHYME_B]: ["violation:rhyme-group:3:6"] });
   });
 
-  it("押韻の位置以外では、同じ平仄の読みは一つの解釈にまとめる", () => {
-    const a = run(replaceAt(HN, 2, 2, RHY2)); // 転句3字目（平）
+  it("押韻の位置以外でも、押韻に来うる韻目の読みは分け、選んだ読みで冒韻を判定する", () => {
+    const a = run(replaceAt(HN, 2, 2, RHY2)); // 転句3字目（平。韻目 A と B の読み）
+    const byRhyme = Object.fromEntries(a.interpretations.map((i) => [i.readings[16]!.rhyme, nonOk(i.findings)]));
+    expect(byRhyme).toEqual({ [RHYME_A]: ["check:bou-in:2:2"], [RHYME_B]: [] });
+    expect(nonOk(a.findings)).toEqual([]);
+  });
+
+  it("押韻に来ない韻目どうしなら、同じ平仄の読みは一つの解釈にまとめる", () => {
+    const a = run(replaceAt(HN, 2, 2, SUPP_MIX)); // 平の読みが2つ（どちらも押韻の韻目 A ではない）
     expect(a.interpretations).toHaveLength(1);
-    // ただし冒韻は、どれかの読みが押韻と同じ韻目なら出す
-    expect(nonOk(a.findings)).toEqual(["check:bou-in:2:2"]);
   });
 });
 
@@ -110,6 +117,15 @@ describe("異体字の候補が同じ平仄のとき", () => {
   });
 });
 
+describe("異体字の候補の一方だけが押韻と同じ韻目のとき", () => {
+  it("冒韻はその候補を選んだ解釈にだけ出る", () => {
+    const a = run(replaceAt(HN, 2, 2, VAR_BOU)); // 転句3字目（平）
+    const byVia = Object.fromEntries(a.interpretations.map((i) => [i.readings[16]!.via, nonOk(i.findings)]));
+    expect(byVia).toEqual({ [R[6]!]: ["check:bou-in:2:2"], [P[28]!]: [] });
+    expect(nonOk(a.findings)).toEqual([]);
+  });
+});
+
 describe("8字目以降のマス", () => {
   it("字数が多い句に両韻字があっても止まらず、字数の違反を返す（読みは4句×7字の中だけで組み合わせる）", () => {
     const lines = [...HN];
@@ -117,6 +133,12 @@ describe("8字目以降のマス", () => {
     const a = run(lines);
     expect(nonOk(a.findings)).toContain("violation:length:0:");
     expect(a.interpretations).toHaveLength(1);
+  });
+
+  it("起句の8字目と承句の1字目を取り違えない（承句1字目の両韻字だけで解釈が分かれる）", () => {
+    const a = analyze(["＿＿＿＿＿＿＿＿", RYO[0]! + "＿＿＿＿＿＿", "＿＿＿＿＿＿＿", "＿＿＿＿＿＿＿"].join("\n"), fixtureData);
+    expect(nonOk(a.findings)).toContain("violation:length:0:");
+    expect(a.interpretations.map((i) => Object.keys(i.readings))).toEqual([["7"], ["7"]]);
   });
 
   it("未入力の句の8字目に両韻字があっても止まらない", () => {

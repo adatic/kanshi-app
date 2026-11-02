@@ -14,18 +14,20 @@ const isRhymeSlot = (line: number, pos: number) => pos === 6 && (line === 0 || l
 
 /**
  * マスの読みを、判定に効く違いごとにまとめる（一つのまとまりが、解釈の一つの選択肢になる）。
- * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる
+ * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる。ただし押韻しうる位置に来うる韻目
+ *   （rhymeCandidates）の読みは、冒韻の有無が変わるので、その韻目ごとに分ける
  * - 異体字の対応で別の字として引いた読みは、候補の字ごとに分ける（どの候補で判定したかを残す）
  * - まとまりの代表には、本体の読み（【詞】【辭】欄でない読み）を優先する
  */
-function choicesOf(info: CharInfo, line: number, pos: number, options: Options): CellState[] {
+function choicesOf(info: CharInfo, line: number, pos: number, options: Options, rhymeCandidates: ReadonlySet<string>): CellState[] {
   if (info.status === "unknown" && options.unknownAs !== undefined) {
     return [{ pz: options.unknownAs, reading: null, supplementOnly: false }];
   }
   if (info.readings.length === 0) return [{ pz: null, reading: null, supplementOnly: false }];
   const groups = new Map<string, Reading[]>();
   for (const r of info.readings) {
-    const key = `${r.via ?? ""}|${isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone)}`;
+    const what = isRhymeSlot(line, pos) ? r.rhyme : `${pzOf(r.tone)}|${rhymeCandidates.has(r.rhyme) ? r.rhyme : ""}`;
+    const key = `${r.via ?? ""}|${what}`;
     groups.set(key, [...(groups.get(key) ?? []), r]);
   }
   return [...groups.values()].map((rs) => {
@@ -49,9 +51,13 @@ export function analyze(input: string | readonly string[], data: EngineData, opt
 
   // マスごとの選択肢と、選択肢が2つ以上あるマス。読みを組み合わせるのは、判定の対象になる4句×7字の中だけ
   // （それより外のマスは字数・句数の違反として扱い、最初の選択肢で埋める）
-  const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options)));
+  const inRange = (l: number, p: number) => l < 4 && p < 7;
+  const rhymeCandidates = new Set(
+    chars.flatMap((row, l) => row.flatMap((info, p) => (inRange(l, p) && isRhymeSlot(l, p) ? info.readings.map((r) => r.rhyme) : []))),
+  );
+  const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options, rhymeCandidates)));
   const open: [number, number][] = [];
-  choices.forEach((row, l) => row.forEach((cs, p) => l < 4 && p < 7 && cs.length > 1 && open.push([l, p])));
+  choices.forEach((row, l) => row.forEach((cs, p) => inRange(l, p) && cs.length > 1 && open.push([l, p])));
   const total = open.reduce((n, [l, p]) => n * choices[l]![p]!.length, 1);
   const independent = total > MAX_COMBINATIONS;
 
@@ -61,19 +67,21 @@ export function analyze(input: string | readonly string[], data: EngineData, opt
     : cartesian(open.map(([l, p]) => choices[l]![p]!.length));
 
   const interpretations: Interpretation[] = picks.map((pick) => {
-    const chosen = new Map(open.map(([l, p], i) => [l * 7 + p, pick[i]!]));
+    // 句と位置の組で引く（8字目以降のマスと次の句のマスを取り違えないため）
+    const chosen = new Map(open.map(([l, p], i) => [`${l}:${p}`, pick[i]!]));
     const grid: CellState[][] = choices.map((row, l) =>
       row.map((cs, p) => {
-        const c = chosen.get(l * 7 + p);
+        const c = chosen.get(`${l}:${p}`);
         if (c === undefined) return cs[0]!;
         return c === -1 ? { pz: null, reading: null, supplementOnly: false } : cs[c]!;
       }),
     );
+    // 解釈の読みは、選択肢のあるマス（4句×7字の中）だけ。キーは 句×7＋位置
     const readings: Record<number, Reading> = {};
-    for (const [index, c] of chosen) {
-      const r = grid[Math.floor(index / 7)]![index % 7]!.reading;
-      if (c !== -1 && r !== null) readings[index] = r;
-    }
+    open.forEach(([l, p], i) => {
+      const r = grid[l]![p]!.reading;
+      if (pick[i] !== -1 && r !== null) readings[l * 7 + p] = r;
+    });
     const form = detectForm((l, p) => grid[l]?.[p]?.pz ?? null, options.form);
     const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
     const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));

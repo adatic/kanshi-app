@@ -164,14 +164,14 @@ export function evaluate(
     }
   }
 
-  // 冒韻：押韻位置以外の字が、押韻と同じ韻目の読みを持つ（読みのどれか一つでも）
+  // 冒韻：押韻位置以外の字を、この解釈で選んだ読みが押韻と同じ韻目になっている
   const group = ref ?? r0;
   if (group !== null) {
     for (let l = 0; l < lineCount; l++) {
-      (chars[l] ?? []).forEach((info, p) => {
-        if (p === 6 && rhymeLines.includes(l)) return;
-        if (info.readings.some((r) => r.rhyme === group)) {
-          out.push(finding(ctx, "bou-in", l, [p], `${lineName(l)}の${positionName(p)}「${info.char}」は、押韻と同じ韻目（${group}）の読みを持ちます（冒韻）。意図したものか確認してください。`));
+      (grid[l] ?? []).forEach((cell, p) => {
+        if (p >= 7 || (p === 6 && rhymeLines.includes(l))) return;
+        if (cell.reading?.rhyme === group) {
+          out.push(finding(ctx, "bou-in", l, [p], `${lineName(l)}の${positionName(p)}「${charAt(l, p)}」を押韻と同じ韻目（${group}）で読んでいます（冒韻）。意図したものか確認してください。`));
         }
       });
     }
@@ -180,7 +180,7 @@ export function evaluate(
   // 【詞】【辭】欄にだけある読み
   for (let l = 0; l < lineCount; l++) {
     (grid[l] ?? []).forEach((cell, p) => {
-      if (cell.supplementOnly && cell.reading !== null) {
+      if (p < 7 && cell.supplementOnly && cell.reading !== null) {
         const r = cell.reading;
         out.push(finding(ctx, "supplement-reading", l, [p], `${lineName(l)}の${positionName(p)}「${charAt(l, p)}」は、平仄データで【詞】【辭】欄にだけある読み（${r.tone}・${r.rhyme}）で判定しています。この読みでよいか確認してください。`));
       }
