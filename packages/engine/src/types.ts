@@ -98,3 +98,56 @@ export type Options = {
   /** 規則ごとの重みの上書き（流派差に合わせる） */
   severities?: Partial<Record<string, Severity>>;
 };
+
+// ---- 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1・§4.4） ----
+
+/** 詩語頻度表（data/phrases/）の1語 */
+export type PhraseEntry = {
+  /** 語 */
+  w: string;
+  /** 出現回数 */
+  n: number;
+  /** 位置ごとの出現回数（"1-2" など） */
+  at: Record<string, number>;
+  /** ありうる平仄パターン（「？」はデータにない字） */
+  p: string[];
+  /** 末字の韻目 */
+  r: string[];
+  /** 用例 [作者, 題, 句] */
+  e: [string, string, string][];
+};
+
+export type PhraseQuery = {
+  /** 平・仄・◐（平仄を問わない）の並び。必須 */
+  pattern: string;
+  /** 含む字 */
+  contains?: string;
+  /** 末字の韻目 */
+  rhyme?: string;
+};
+
+export type CellConstraint = {
+  line: number;
+  pos: number;
+  /** 平・仄それぞれを置いたときに新しく出る違反と要確認 */
+  options: { pz: PZ; ok: boolean; violations: Finding[]; checks: Finding[] }[];
+  /** 置ける平仄が一つだけならそれ。両方置ける、またはどちらも置けないときは null */
+  required: PZ | null;
+  /** 押韻の位置か、そうならほかの押韻字の韻目（まだなければ空） */
+  rhyme: { position: boolean; groups: string[] };
+};
+
+export type Placement = {
+  line: number;
+  /** 0始まりの開始位置 */
+  start: number;
+  slot: "1-2" | "3-4" | "5-6" | "6-7" | "5-7";
+  /** ok 置ける／depends 読みによって違反が出る／ng 置けない／conflict すでにある別の字と重なる */
+  status: "ok" | "depends" | "ng" | "conflict";
+  /** 置くと全解釈に共通して新しく出る違反 */
+  violations: Finding[];
+  /** 置くと一部の解釈（読み）でだけ新しく出る違反 */
+  dependent: Finding[];
+  /** すでにある別の字と重なる位置（0始まり） */
+  conflicts: number[];
+};
