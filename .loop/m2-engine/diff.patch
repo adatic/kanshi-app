@@ -1,0 +1,1319 @@
+diff --git a/TASKS.md b/TASKS.md
+index c3ed22d..42ca32c 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,19 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m2-engine — 規則エンジン（M2）
++
++ブランチ: `task/m2-engine`
++
++完了条件:
++- [ ] `packages/engine` が純関数 `analyze(入力, データ, オプション)` を公開し、外部依存がない（データは引数で受け取る）
++- [ ] 入力：1句1行のテキスト、または28マスの配列。未入力の「＿」、直前の字として扱う「々」、漢字以外の文字の位置（エラー）を扱う
++- [ ] 字の情報：平仄データ・異体字の対応（候補が複数なら一つに決めない）・国字・データにない字を区別し、misima 互換の記号列（○●◎□■）を返す
++- [ ] 詩格を第1句の2字目と句末から自動判定し、手動で固定もできる。2字目が未入力なら反法・粘法で他の句から推定し、決まらなければ定型に依存する規則を判定しない
++- [ ] CLAUDE.md §4.1 の全規則（hasami-hei・kogan-nyugun・supplement-reading・ichisango-furon を含む）を、重みを `data/rules.json` から読んで判定する。オプション（国字で続行、データにない字を平／仄として扱う、重みの上書き）がある
++- [ ] 両韻字・異体字の候補ごとに読みの組み合わせを作り、解釈ごとの結果を返す。組み合わせが2の10乗を超えたら位置ごとに独立して評価し、その旨を結果に含める
++- [ ] 規則ごとに、適合例と、意図的に1か所だけ崩した違反例のテストがある。両韻字・未入力マス・国字・データにない字を含む例がある。テストの平仄は架空の小さなデータで与え、実在の字の平仄を記憶で使わない（CLAUDE.md §0）
++- [ ] 実データ（`data/`）を読み込んで動くことを確かめるテストがある（期待値は記憶ではなく `data/` から引く）
+ 
+ ## 完了
+ 
+diff --git a/packages/engine/src/analyze.ts b/packages/engine/src/analyze.ts
+new file mode 100644
+index 0000000..8f8c2bb
+--- /dev/null
++++ b/packages/engine/src/analyze.ts
+@@ -0,0 +1,122 @@
++// 詩全体の判定（CLAUDE.md §4.1）。読みが複数ある字は、読みの組み合わせ（解釈）ごとに判定する。
++import { charInfo, pzOf, symbolOf } from "./chars";
++import { detectForm } from "./form";
++import { parseInput } from "./input";
++import type { CellState, RuleContext } from "./rules";
++import { evaluate, evaluateGlobal } from "./rules";
++import type { Analysis, CharInfo, EngineData, Finding, FormResult, Interpretation, Options, Reading } from "./types";
++
++/** 組み合わせがこれを超えたら、位置ごとに独立して評価する（CLAUDE.md §4.1：目安は2の10乗） */
++export const MAX_COMBINATIONS = 2 ** 10;
++
++/** 押韻しうる位置（起句・承句・結句の末字）。ここでは読みを韻目ごとに分ける */
++const isRhymeSlot = (line: number, pos: number) => pos === 6 && (line === 0 || line === 1 || line === 3);
++
++/**
++ * マスの読みを、判定に効く違いごとにまとめる（一つのまとまりが、解釈の一つの選択肢になる）。
++ * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる
++ * - まとまりの代表には、本体の読み（【詞】【辭】欄でない読み）を優先する
++ */
++function choicesOf(info: CharInfo, line: number, pos: number, options: Options): CellState[] {
++  if (info.status === "unknown" && options.unknownAs !== undefined) {
++    return [{ pz: options.unknownAs, reading: null, supplementOnly: false }];
++  }
++  if (info.readings.length === 0) return [{ pz: null, reading: null, supplementOnly: false }];
++  const groups = new Map<string, Reading[]>();
++  for (const r of info.readings) {
++    const key = isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone);
++    groups.set(key, [...(groups.get(key) ?? []), r]);
++  }
++  return [...groups.values()].map((rs) => {
++    const reading = rs.find((r) => r.note === undefined) ?? rs[0]!;
++    return { pz: pzOf(reading.tone), reading, supplementOnly: reading.note !== undefined };
++  });
++}
++
++const findingKey = (f: Finding) => `${f.rule}|${f.severity}|${f.line}|${f.positions.join(",")}`;
++
++/**
++ * 七言絶句を判定する。純関数で、データ（data/ の JSON）は引数で受け取る。
++ * @param input 1句1行のテキスト、または28マスの配列
++ */
++export function analyze(input: string | readonly string[], data: EngineData, options: Options = {}): Analysis {
++  const ctx: RuleContext = { rules: data.rules.rules, options };
++  const kokuji = new Set(data.kokuji.chars.map((k) => k.char));
++  const { lines, errors } = parseInput(input);
++  const chars = lines.map((row) => row.map((cell) => charInfo(cell, data, kokuji)));
++  const symbols = chars.map((row) => row.map(symbolOf).join(""));
++
++  // マスごとの選択肢と、選択肢が2つ以上あるマス
++  const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options)));
++  const open: [number, number][] = [];
++  choices.forEach((row, l) => row.forEach((cs, p) => cs.length > 1 && open.push([l, p])));
++  const total = open.reduce((n, [l, p]) => n * choices[l]![p]!.length, 1);
++  const independent = total > MAX_COMBINATIONS;
++
++  // 解釈ごとの選び方（open の各マスで何番目の選択肢を採るか。-1 は決めない）
++  const picks: number[][] = independent
++    ? open.flatMap(([l, p], i) => choices[l]![p]!.map((_, c) => open.map((__, j) => (j === i ? c : -1))))
++    : cartesian(open.map(([l, p]) => choices[l]![p]!.length));
++
++  const interpretations: Interpretation[] = picks.map((pick) => {
++    const chosen = new Map(open.map(([l, p], i) => [l * 7 + p, pick[i]!]));
++    const grid: CellState[][] = choices.map((row, l) =>
++      row.map((cs, p) => {
++        const c = chosen.get(l * 7 + p);
++        if (c === undefined) return cs[0]!;
++        return c === -1 ? { pz: null, reading: null, supplementOnly: false } : cs[c]!;
++      }),
++    );
++    const readings: Record<number, Reading> = {};
++    for (const [index, c] of chosen) {
++      const r = grid[Math.floor(index / 7)]![index % 7]!.reading;
++      if (c !== -1 && r !== null) readings[index] = r;
++    }
++    const form = detectForm((l, p) => grid[l]?.[p]?.pz ?? null, options.form);
++    const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
++    const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));
++    return { readings, form, findings };
++  });
++
++  // すべての解釈に共通する指摘は全体の findings に入れる
++  const [first, ...rest] = interpretations;
++  const restKeys = rest.map((i) => new Set(i.findings.map(findingKey)));
++  const common = (first?.findings ?? [])
++    .filter((f) => restKeys.every((keys) => keys.has(findingKey(f))))
++    .map(({ interpretation: _omit, ...f }) => f);
++
++  return {
++    form: overallForm(interpretations),
++    chars,
++    symbols,
++    findings: [...evaluateGlobal(chars, ctx), ...common],
++    interpretations,
++    independent,
++    errors,
++  };
++}
++
++/** 指摘の位置に、解釈で読みを選んだマスがあれば、その読みを添える */
++function withInterpretation(f: Finding, readings: Record<number, Reading>): Finding {
++  if (f.line < 0) return f;
++  const used = Object.fromEntries(
++    f.positions.flatMap((p) => {
++      const r = readings[f.line * 7 + p];
++      return r === undefined ? [] : [[f.line * 7 + p, r]];
++    }),
++  );
++  return Object.keys(used).length > 0 ? { ...f, interpretation: used } : f;
++}
++
++function overallForm(interpretations: Interpretation[]): FormResult {
++  const first = interpretations[0]!.form;
++  const ids = new Set(interpretations.map((i) => i.form.id));
++  if (ids.size === 1) return first;
++  const note = "読みによって詩格が変わります（解釈ごとの結果を見てください）。";
++  return { ...first, note: first.note !== undefined ? `${first.note}${note}` : note };
++}
++
++/** 各桁の大きさから、すべての組み合わせを作る */
++function cartesian(sizes: number[]): number[][] {
++  return sizes.reduce<number[][]>((acc, size) => acc.flatMap((prefix) => Array.from({ length: size }, (_, i) => [...prefix, i])), [[]]);
++}
+diff --git a/packages/engine/src/chars.ts b/packages/engine/src/chars.ts
+new file mode 100644
+index 0000000..836fbc6
+--- /dev/null
++++ b/packages/engine/src/chars.ts
+@@ -0,0 +1,61 @@
++// 字の情報（平仄データ・異体字の対応・国字）と、misima 互換の記号（CLAUDE.md §4.1・§4.2・§4.3）。
++import type { Cell } from "./input";
++import { BLANK } from "./input";
++import type { CharInfo, EngineData, PZ, Reading, Tone } from "./types";
++
++export const pzOf = (tone: Tone): PZ => (tone === "平" ? "平" : "仄");
++
++function copyReading(r: { tone: Tone; rhyme: string; note?: string }, via?: string): Reading {
++  const out: Reading = { tone: r.tone, rhyme: r.rhyme };
++  if (r.note !== undefined) out.note = r.note;
++  if (via !== undefined) out.via = via;
++  return out;
++}
++
++/**
++ * マスの字の情報を作る。
++ * - 平仄データにある字は、その読み。異体字の対応で別の字にもつながるなら、その字の読みも via 付きで加え、undetermined にする
++ * - 平仄データにない字は、異体字の対応の候補の読み（via 付き）。候補が一つなら known、複数なら undetermined
++ * - どちらにもなければ、国字なら kokuji、そうでなければ unknown
++ * どの候補が正しいかは決めない（CLAUDE.md §4.3）。
++ */
++export function charInfo(cell: Cell, data: EngineData, kokuji: ReadonlySet<string>): CharInfo {
++  if (cell.kind === "blank") return { char: BLANK, status: "blank", readings: [] };
++  if (cell.kind === "invalid") return { char: cell.input, status: "invalid", readings: [] };
++
++  const c = cell.char;
++  const base: Pick<CharInfo, "char" | "input"> = cell.input === c ? { char: c } : { char: c, input: cell.input };
++  const own = data.chars[c];
++  const others = (data.variants[c] ?? []).filter((v) => v !== c && data.chars[v] !== undefined);
++
++  if (own !== undefined) {
++    const readings = [
++      ...own.map((r) => copyReading(r)),
++      ...others.flatMap((v) => data.chars[v]!.map((r) => copyReading(r, v))),
++    ];
++    return { ...base, status: others.length > 0 ? "undetermined" : "known", readings };
++  }
++  if (others.length > 0) {
++    const readings = others.flatMap((v) => data.chars[v]!.map((r) => copyReading(r, v)));
++    return { ...base, status: others.length > 1 ? "undetermined" : "known", readings };
++  }
++  return { ...base, status: kokuji.has(c) ? "kokuji" : "unknown", readings: [] };
++}
++
++/** misima 互換の記号。○平 ●仄 ◎平仄両方の読み □平仄データにない ■国字 ＿未入力 ×漢字以外 */
++export function symbolOf(info: CharInfo): string {
++  switch (info.status) {
++    case "blank":
++      return BLANK;
++    case "invalid":
++      return "×";
++    case "kokuji":
++      return "■";
++    case "unknown":
++      return "□";
++    default: {
++      const pzs = new Set(info.readings.map((r) => pzOf(r.tone)));
++      return pzs.size === 2 ? "◎" : pzs.has("平") ? "○" : "●";
++    }
++  }
++}
+diff --git a/packages/engine/src/form.ts b/packages/engine/src/form.ts
+new file mode 100644
+index 0000000..2f33667
+--- /dev/null
++++ b/packages/engine/src/form.ts
+@@ -0,0 +1,43 @@
++// 詩格の判定（CLAUDE.md §4.1「詩格（定型）」）。
++import { lineName } from "./messages";
++import type { FormId, FormResult, PZ } from "./types";
++
++const flip = (pz: PZ): PZ => (pz === "平" ? "仄" : "平");
++
++/**
++ * 第1句の2字目（平なら平起式、仄なら仄起式）と、第1句の末字（平なら首句入韻、仄なら不入韻）から詩格を決める。
++ * - 2字目が未入力などで決まらなければ、反法・粘法（起承は逆、承転は同じ、転結は逆）で他の句の2字目から推定する
++ * - どの句の2字目も決まらなければ、詩格は決めない（id: null）
++ * - 末字が決まらなければ、入韻かどうかは決めず、不入韻として判定する（定型の制約が緩いほうを採る）
++ * fixed があれば、それを使う。
++ */
++export function detectForm(pzAt: (line: number, pos: number) => PZ | null, fixed?: FormId): FormResult {
++  if (fixed !== undefined) return { id: fixed, auto: false };
++
++  const notes: string[] = [];
++  let second = pzAt(0, 1);
++  if (second === null) {
++    // 起句の2字目は、承句と逆、転句と逆、結句と同じ
++    const fromOthers: [number, (pz: PZ) => PZ][] = [
++      [1, flip],
++      [2, flip],
++      [3, (pz) => pz],
++    ];
++    for (const [line, toFirst] of fromOthers) {
++      const pz = pzAt(line, 1);
++      if (pz !== null) {
++        second = toFirst(pz);
++        notes.push(`起句の2字目が決まらないため、${lineName(line)}の2字目から反法・粘法で起式を推定しました。`);
++        break;
++      }
++    }
++  }
++  if (second === null) {
++    return { id: null, auto: true, note: "どの句の2字目も決まらないため、詩格を決めていません。定型に依存する検査はしていません。" };
++  }
++
++  const last = pzAt(0, 6);
++  if (last === null) notes.push("起句の末字が決まらないため、入韻かどうかは決めず、不入韻として判定しました。");
++  const id: FormId = `${second === "平" ? "heiki" : "sokki"}-${last === "平" ? "nyuin" : "funyuin"}`;
++  return notes.length > 0 ? { id, auto: true, note: notes.join("") } : { id, auto: true };
++}
+diff --git a/packages/engine/src/index.ts b/packages/engine/src/index.ts
+index fda16f7..c0f851c 100644
+--- a/packages/engine/src/index.ts
++++ b/packages/engine/src/index.ts
+@@ -1,3 +1,4 @@
+ // 七言絶句の規則エンジン（CLAUDE.md §4.1）。
+-// 純関数のみで構成し、外部依存を持たない。公開APIは M2 で実装する。
+-export {};
++// 純関数のみで構成し、外部依存を持たない。データ（data/ の JSON）は引数で受け取る。
++export { analyze, MAX_COMBINATIONS } from "./analyze";
++export type * from "./types";
+diff --git a/packages/engine/src/input.ts b/packages/engine/src/input.ts
+new file mode 100644
+index 0000000..82b4ca4
+--- /dev/null
++++ b/packages/engine/src/input.ts
+@@ -0,0 +1,66 @@
++// 入力の解析（CLAUDE.md §4.1「入力」）。
++import type { InputError } from "./types";
++import { lineName, positionName } from "./messages";
++
++export const BLANK = "＿";
++const REPEAT = "々";
++
++export type Cell =
++  | { kind: "han"; char: string; input: string }
++  | { kind: "blank"; input: string }
++  | { kind: "invalid"; input: string };
++
++const isHan = (c: string) => /^\p{Script=Han}$/u.test(c);
++
++/**
++ * 1句1行のテキスト、または28マスの配列を、句ごとのマスに分ける。
++ * - 行の前後の空白と、テキストの前後の空行は無視する（貼り付けのゆれ）
++ * - 「＿」は未入力のマス
++ * - 「々」は直前の漢字として扱う
++ * - それ以外の漢字でない文字（句の途中の空白・記号・かな）はエラーとして位置を返す。字数には数える
++ */
++export function parseInput(input: string | readonly string[]): { lines: Cell[][]; errors: InputError[] } {
++  const rows: string[][] =
++    typeof input === "string"
++      ? trimEmptyEnds(input.split(/\r?\n/).map((l) => l.replace(/^\s+|\s+$/gu, ""))).map((l) => [...l])
++      : chunk([...input], 7);
++
++  const errors: InputError[] = [];
++  let previous: string | null = null;
++  const lines = rows.map((row, line) =>
++    row.map((input, position): Cell => {
++      if (input === BLANK) return { kind: "blank", input };
++      if (input === REPEAT) {
++        if (previous !== null) return { kind: "han", char: previous, input };
++        errors.push({ line, position, char: input, message: `${lineName(line)}の${positionName(position)}の「々」は、前に繰り返す字がありません。` });
++        return { kind: "invalid", input };
++      }
++      if (isHan(input)) {
++        previous = input;
++        return { kind: "han", char: input, input };
++      }
++      errors.push({
++        line,
++        position,
++        char: input,
++        message: `${lineName(line)}の${positionName(position)}「${input}」は漢字ではありません。詩の本文には漢字だけを入れてください。`,
++      });
++      return { kind: "invalid", input };
++    }),
++  );
++  return { lines, errors };
++}
++
++function trimEmptyEnds(lines: string[]): string[] {
++  let start = 0;
++  let end = lines.length;
++  while (start < end && lines[start] === "") start++;
++  while (end > start && lines[end - 1] === "") end--;
++  return lines.slice(start, end);
++}
++
++function chunk<T>(items: T[], size: number): T[][] {
++  const out: T[][] = [];
++  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
++  return out;
++}
+diff --git a/packages/engine/src/messages.ts b/packages/engine/src/messages.ts
+new file mode 100644
+index 0000000..4dd9c88
+--- /dev/null
++++ b/packages/engine/src/messages.ts
+@@ -0,0 +1,13 @@
++// 利用者に見せる文言（CLAUDE.md §9：こなれた自然な日本語）。
++
++const LINE_NAMES = ["起句", "承句", "転句", "結句"];
++
++/** 0始まりの句番号 → 「起句」など。5句目以降は「第5句」 */
++export const lineName = (line: number) => LINE_NAMES[line] ?? `第${line + 1}句`;
++
++/** 0始まりの位置 → 「2字目」 */
++export const positionName = (position: number) => `${position + 1}字目`;
++
++/** 0始まりの位置の列 → 「2字目・4字目」 */
++export const positionsName = (positions: number[]) => positions.map(positionName).join("・");
++
+diff --git a/packages/engine/src/rules.ts b/packages/engine/src/rules.ts
+new file mode 100644
+index 0000000..9f2ed34
+--- /dev/null
++++ b/packages/engine/src/rules.ts
+@@ -0,0 +1,231 @@
++// 規則（CLAUDE.md §4.1「検査する規則」）。重みは data/rules.json から読み、オプションで上書きできる。
++import { pzOf } from "./chars";
++import { lineName, positionName, positionsName } from "./messages";
++import type { CharInfo, FormDef, Finding, Options, PZ, Reading, RuleDef, Severity } from "./types";
++
++/** 解釈の中の1マス。pz が null のマス（未入力・データにない字など）は、そのマスを使う比較をしない */
++export type CellState = {
++  pz: PZ | null;
++  /** 選んだ読み（データにない字を平／仄として扱うときなどは null） */
++  reading: Reading | null;
++  /** 選んだ読みが【詞】【辭】欄にだけある */
++  supplementOnly: boolean;
++};
++
++export type RuleContext = {
++  rules: Record<string, RuleDef>;
++  options: Options;
++};
++
++export function severityOf(ctx: RuleContext, rule: string): Severity {
++  const override = ctx.options.severities?.[rule];
++  if (override !== undefined) return override;
++  if (rule === "koku-ji" && ctx.options.allowKokuji) return "check";
++  const def = ctx.rules[rule];
++  if (def === undefined) throw new Error(`rules.json に規則 ${rule} がありません`);
++  return def.severity;
++}
++
++const finding = (ctx: RuleContext, rule: string, line: number, positions: number[], message: string): Finding => ({
++  rule,
++  severity: severityOf(ctx, rule),
++  line,
++  positions,
++  message,
++});
++
++const SYMBOL_PZ: Record<string, PZ> = { "○": "平", "●": "仄", "◎": "平" };
++const HASAMI_BASE = "○●●";
++
++/**
++ * 一つの解釈（各マスの平仄と読みが決まった状態）について、読みに依存する規則を判定する。
++ * form が null（詩格が決まらない）なら、定型に依存する規則（pattern・ichisango-furon・hasami-hei）は判定しない。
++ */
++export function evaluate(
++  grid: CellState[][],
++  chars: CharInfo[][],
++  form: FormDef | null,
++  ctx: RuleContext,
++): Finding[] {
++  const out: Finding[] = [];
++  const pz = (l: number, p: number) => grid[l]?.[p]?.pz ?? null;
++  const lineCount = Math.min(grid.length, 4);
++  const rhymeLines = form?.rhymeLines ?? [1, 3];
++
++  for (let l = 0; l < lineCount; l++) {
++    const def = form?.lines[l];
++    const name = lineName(l);
++    const at = (p: number) => pz(l, p);
++
++    // 挟み平：押韻しない句で、律句の5〜7字目 ○●● が ●○● になっている
++    const hasami =
++      def !== undefined &&
++      !rhymeLines.includes(l) &&
++      def.base.slice(4) === HASAMI_BASE &&
++      at(4) === "仄" &&
++      at(5) === "平" &&
++      at(6) === "仄";
++    if (hasami) {
++      out.push(finding(ctx, "hasami-hei", l, [4, 5, 6], `${name}の5〜7字目が「仄平仄」です。挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`));
++    }
++    const hasamiPositions = hasami ? [4, 5] : [];
++
++    if (def !== undefined) {
++      const mismatch: number[] = [];
++      const loose: number[] = [];
++      [...def.pattern].forEach((sym, p) => {
++        const actual = at(p);
++        if (actual === null || hasamiPositions.includes(p)) return;
++        if (sym === "◐") {
++          if (actual !== SYMBOL_PZ[def.base[p]!]) loose.push(p);
++        } else if (sym !== "◎" && actual !== SYMBOL_PZ[sym]) {
++          mismatch.push(p);
++        }
++      });
++      if (mismatch.length > 0) {
++        const expected = mismatch.map((p) => `${positionName(p)}は${SYMBOL_PZ[def.pattern[p]!]}`).join("、");
++        out.push(finding(ctx, "pattern", l, mismatch, `${name}は定型（${form!.name}）では${expected}です。`));
++      }
++      if (loose.length > 0) {
++        out.push(finding(ctx, "ichisango-furon", l, loose, `${name}の${positionsName(loose)}は律句と平仄が違いますが、一三五不論の範囲なので許容されます。`));
++      }
++    }
++
++    const [p2, p4, p6] = [at(1), at(3), at(5)];
++    if (p2 !== null && p4 !== null && p2 === p4) {
++      out.push(finding(ctx, "nishi-fudo", l, [1, 3], `${name}の2字目と4字目がどちらも${p2}です。二四不同では平仄を違えます。`));
++    }
++    if (p2 !== null && p6 !== null && p2 !== p6 && !hasami) {
++      out.push(finding(ctx, "niroku-tsui", l, [1, 5], `${name}の2字目（${p2}）と6字目（${p6}）の平仄が違います。二六対では平仄をそろえます。`));
++    }
++
++    const tail = [at(4), at(5), at(6)];
++    if (tail.every((t) => t === "平")) {
++      out.push(finding(ctx, "ka-sanren-hei", l, [4, 5, 6], `${name}の5〜7字目がすべて平です（下三連・三平）。`));
++    } else if (tail.every((t) => t === "仄")) {
++      out.push(finding(ctx, "ka-sanren-soku", l, [4, 5, 6], `${name}の5〜7字目がすべて仄です（下三連・三仄）。三平ほど厳しくは問われませんが、確認してください。`));
++    }
++
++    if (at(3) === "平" && at(2) === "仄" && at(4) === "仄") {
++      out.push(finding(ctx, "kohei", l, [3], `${name}の4字目の平が、3字目と5字目の仄に挟まれています（孤平）。`));
++    }
++  }
++
++  // 反法・粘法：起承は2字目が逆、承転は同じ、転結は逆
++  const pairs: [number, number, "diff" | "same"][] = [
++    [0, 1, "diff"],
++    [1, 2, "same"],
++    [2, 3, "diff"],
++  ];
++  let brokenLink = false;
++  for (const [a, b, rel] of pairs) {
++    if (b >= lineCount) continue;
++    const pa = pz(a, 1);
++    const pb = pz(b, 1);
++    if (pa === null || pb === null) continue;
++    if (rel === "diff" && pa === pb) {
++      out.push(finding(ctx, "hanpo-nenpo", b, [1], `${lineName(a)}と${lineName(b)}の2字目がどちらも${pa}です。反法では平仄を逆にします。`));
++      brokenLink = true;
++    } else if (rel === "same" && pa !== pb) {
++      out.push(finding(ctx, "hanpo-nenpo", b, [1], `${lineName(a)}（${pa}）と${lineName(b)}（${pb}）の2字目の平仄が違います。粘法ではそろえます。`));
++      brokenLink = true;
++    }
++  }
++  if (brokenLink) {
++    out.push(finding(ctx, "youtai", -1, [], "反法・粘法が守られていない句があります。拗体（不粘）として意図した作りかどうかは、作者が判断してください。"));
++  }
++
++  // 押韻
++  const rhymeCell = (l: number) => (l < lineCount ? grid[l]?.[6] : undefined);
++  const charAt = (l: number, p: number) => chars[l]?.[p]?.char ?? "";
++  for (const l of rhymeLines) {
++    if (l < lineCount && pz(l, 6) === "仄") {
++      out.push(finding(ctx, "rhyme-tone", l, [6], `${lineName(l)}の押韻字「${charAt(l, 6)}」が仄声です。押韻字は平声にします。`));
++    }
++  }
++  const rhymeOf = (l: number) => {
++    const c = rhymeCell(l);
++    return c?.pz === "平" && c.reading !== null ? c.reading.rhyme : null;
++  };
++  const r1 = rhymeOf(1);
++  const r3 = rhymeOf(3);
++  if (r1 !== null && r3 !== null && r1 !== r3) {
++    out.push(finding(ctx, "rhyme-group", 3, [6], `結句の押韻字「${charAt(3, 6)}」（${r3}）が、承句の押韻字（${r1}）と同じ韻目ではありません。`));
++  }
++  const ref = r1 ?? r3;
++  const r0 = rhymeLines.includes(0) ? rhymeOf(0) : null;
++  if (r0 !== null && ref !== null && r0 !== ref) {
++    if (r1 !== null && r3 !== null && r1 !== r3) {
++      out.push(finding(ctx, "rhyme-group", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）が、承句の押韻字（${r1}）と同じ韻目ではありません。`));
++    } else {
++      out.push(finding(ctx, "kogan-nyugun", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）だけが、承句・結句の韻目（${ref}）と違います。孤雁入群格として意図したものかどうか、作者が判断してください。`));
++    }
++  }
++
++  // 冒韻：押韻位置以外の字が、押韻と同じ韻目の読みを持つ（読みのどれか一つでも）
++  const group = ref ?? r0;
++  if (group !== null) {
++    for (let l = 0; l < lineCount; l++) {
++      (chars[l] ?? []).forEach((info, p) => {
++        if (p === 6 && rhymeLines.includes(l)) return;
++        if (info.readings.some((r) => r.rhyme === group)) {
++          out.push(finding(ctx, "bou-in", l, [p], `${lineName(l)}の${positionName(p)}「${info.char}」は、押韻と同じ韻目（${group}）の読みを持ちます（冒韻）。意図したものか確認してください。`));
++        }
++      });
++    }
++  }
++
++  // 【詞】【辭】欄にだけある読み
++  for (let l = 0; l < lineCount; l++) {
++    (grid[l] ?? []).forEach((cell, p) => {
++      if (cell.supplementOnly && cell.reading !== null) {
++        const r = cell.reading;
++        out.push(finding(ctx, "supplement-reading", l, [p], `${lineName(l)}の${positionName(p)}「${charAt(l, p)}」は、平仄データで【詞】【辭】欄にだけある読み（${r.tone}・${r.rhyme}）で判定しています。この読みでよいか確認してください。`));
++      }
++    });
++  }
++
++  return out;
++}
++
++/** 読みに依存しない規則：句数・字数、同字重出、国字、データにない字 */
++export function evaluateGlobal(chars: CharInfo[][], ctx: RuleContext): Finding[] {
++  const out: Finding[] = [];
++  if (chars.length !== 4) {
++    out.push(finding(ctx, "length", -1, [], `句の数が${chars.length}です。七言絶句は4句です。`));
++  }
++  chars.slice(0, 4).forEach((line, l) => {
++    if (line.length !== 7) out.push(finding(ctx, "length", l, [], `${lineName(l)}の字数が${line.length}字です。7字にしてください。`));
++  });
++
++  // 同字重出：同じ字が出てくる句ごとに一つ
++  const places = new Map<string, [number, number][]>();
++  chars.forEach((line, l) =>
++    line.forEach((info, p) => {
++      if (info.status === "blank" || info.status === "invalid") return;
++      places.set(info.char, [...(places.get(info.char) ?? []), [l, p]]);
++    }),
++  );
++  for (const [c, at] of places) {
++    if (at.length < 2) continue;
++    const where = at.map(([l, p]) => `${lineName(l)}の${positionName(p)}`).join("・");
++    for (const l of [...new Set(at.map(([line]) => line))]) {
++      const positions = at.filter(([line]) => line === l).map(([, p]) => p);
++      out.push(finding(ctx, "douji", l, positions, `「${c}」が${at.length}回使われています（${where}）。畳語や意図した繰り返しかどうか、作者が判断してください。`));
++    }
++  }
++
++  chars.forEach((line, l) =>
++    line.forEach((info, p) => {
++      const where = `${lineName(l)}の${positionName(p)}「${info.char}」`;
++      if (info.status === "kokuji") {
++        out.push(finding(ctx, "koku-ji", l, [p], `${where}は国字で、平仄がありません。`));
++      } else if (info.status === "unknown") {
++        const as = ctx.options.unknownAs;
++        out.push(finding(ctx, "unknown-char", l, [p], as !== undefined ? `${where}は平仄データにありません。${as}として扱って判定しました。` : `${where}は平仄データにありません。この位置の平仄は判定していません。`));
++      }
++    }),
++  );
++  return out;
++}
++
+diff --git a/packages/engine/src/types.ts b/packages/engine/src/types.ts
+new file mode 100644
+index 0000000..6c2e5c9
+--- /dev/null
++++ b/packages/engine/src/types.ts
+@@ -0,0 +1,100 @@
++// 規則エンジンの公開型（CLAUDE.md §4.1「型（目安）」をもとにする）。
++
++export type Tone = "平" | "上" | "去" | "入";
++export type PZ = "平" | "仄";
++
++/** 字の読み。via は、異体字の対応で別の字として引いたときの、その字。 */
++export type Reading = { tone: Tone; rhyme: string; note?: string; via?: string };
++
++/**
++ * known        平仄データにある字（異体字の対応で一つの字に決まる場合を含む）
++ * undetermined 異体字の対応で候補が複数あり、どの字か一つに決まらない
++ * unknown      平仄データにも異体字の対応にもない
++ * kokuji       国字
++ * blank        未入力のマス（「＿」）
++ * invalid      漢字以外の文字
++ */
++export type CharStatus = "known" | "undetermined" | "unknown" | "kokuji" | "blank" | "invalid";
++
++export type CharInfo = {
++  char: string;
++  /** 入力された文字がこの字と違うとき（「々」など）の、入力どおりの文字 */
++  input?: string;
++  status: CharStatus;
++  readings: Reading[];
++};
++
++export type Severity = "ok" | "variant" | "check" | "violation";
++
++export type Finding = {
++  rule: string;
++  severity: Severity;
++  /** 0始まり。句に結び付かない指摘（句数など）は -1 */
++  line: number;
++  /** 0始まり */
++  positions: number[];
++  /** 利用者向けの日本語 */
++  message: string;
++  /** 読みによって結果が変わる指摘で、どの読みでの結果か（キーは 句×7＋位置） */
++  interpretation?: Record<number, Reading>;
++};
++
++export type InputError = { line: number; position: number; char: string; message: string };
++
++export type FormId = "heiki-nyuin" | "heiki-funyuin" | "sokki-nyuin" | "sokki-funyuin";
++
++export type FormResult = {
++  /** 判定に使った詩格。決まらないときは null（定型に依存する規則は判定しない） */
++  id: FormId | null;
++  /** true なら自動判定、false なら利用者が固定した */
++  auto: boolean;
++  /** 自動判定の補足（未入力のため推定した、など） */
++  note?: string;
++};
++
++export type Interpretation = {
++  /** この解釈で選んだ読み（読みが複数ある位置だけ。キーは 句×7＋位置） */
++  readings: Record<number, Reading>;
++  form: FormResult;
++  findings: Finding[];
++};
++
++export type Analysis = {
++  /** すべての解釈で同じ詩格ならそれ。解釈によって違えば、最初の解釈の詩格に note を付けて返す */
++  form: FormResult;
++  chars: CharInfo[][];
++  /** misima 互換の記号列（句ごと）。○平 ●仄 ◎平仄両方の読み □平仄データにない ■国字 ＿未入力 ×漢字以外 */
++  symbols: string[];
++  /** すべての解釈に共通する指摘と、読みに依存しない指摘 */
++  findings: Finding[];
++  /** 読みの組み合わせごとの結果。読みが一つに決まる詩では1件 */
++  interpretations: Interpretation[];
++  /** 組み合わせが多すぎて、位置ごとに独立して評価したとき true（CLAUDE.md §4.1） */
++  independent: boolean;
++  errors: InputError[];
++};
++
++// ---- データ（data/ の JSON をそのまま渡す） ----
++
++export type FormLine = { pattern: string; base: string };
++export type FormDef = { id: FormId; name: string; rhymeLines: number[]; lines: FormLine[] };
++export type RuleDef = { name: string; severity: Severity; basis: string };
++
++export type EngineData = {
++  chars: Record<string, { tone: Tone; rhyme: string; note?: string }[]>;
++  variants: Record<string, string[]>;
++  kokuji: { chars: { char: string; note?: string }[] };
++  forms: { forms: FormDef[] };
++  rules: { rules: Record<string, RuleDef> };
++};
++
++export type Options = {
++  /** 詩格を固定する。省略すると自動判定 */
++  form?: FormId;
++  /** 平仄データにない字を、この平仄として扱う */
++  unknownAs?: PZ;
++  /** 国字を違反ではなく要確認として続行する */
++  allowKokuji?: boolean;
++  /** 規則ごとの重みの上書き（流派差に合わせる） */
++  severities?: Partial<Record<string, Severity>>;
++};
+diff --git a/packages/engine/test/fixture.ts b/packages/engine/test/fixture.ts
+new file mode 100644
+index 0000000..b7e89d5
+--- /dev/null
++++ b/packages/engine/test/fixture.ts
+@@ -0,0 +1,103 @@
++// テスト用の架空データと、詩を組み立てる道具。
++//
++// CLAUDE.md §0 により、テストの期待値に実在の字の平仄を記憶で使わない。
++// ここでは Unicode の決まった範囲の字に、テスト専用の平仄・韻目を機械的に割り当てる。
++// 実在の字の平仄とは関係がない。定型（forms.json）と規則（rules.json）は本物を使う。
++import { readFileSync } from "node:fs";
++import type { EngineData, FormDef, FormId, Reading } from "../src/types";
++
++const readJson = (path: string) => JSON.parse(readFileSync(new URL(`../../../data/${path}`, import.meta.url), "utf-8"));
++
++export const realForms: EngineData["forms"] = readJson("forms.json");
++export const realRules: EngineData["rules"] = readJson("rules.json");
++
++const range = (start: number, count: number) => Array.from({ length: count }, (_, i) => String.fromCodePoint(start + i));
++
++/** 平の字（韻目は押韻に使う韻目と別にして、冒韻にならないようにする） */
++export const P = range(0x6000, 32);
++/** 仄の字 */
++export const Z = range(0x6100, 32);
++/** 押韻用の平の字（韻目 A） */
++export const R = range(0x6200, 8);
++/** 押韻用の平の字（韻目 B） */
++export const R2 = range(0x6210, 4);
++/** 平と仄の両方の読みを持つ字（両韻字） */
++export const RYO = range(0x6300, 16);
++
++export const RHYME_A = "上平一東";
++export const RHYME_B = "下平一先";
++const PLAIN_P = "上平二冬";
++const PLAIN_Z = "去声二宋";
++
++/** 押韻で韻目 A と B の両方の読みを持つ平の字 */
++export const RHY2 = String.fromCodePoint(0x6400);
++/** 【詞】欄にだけ韻目 A の読みがある平の字 */
++export const SUPP = String.fromCodePoint(0x6401);
++/** 平の読みが本体と【詞】欄の両方にある字（韻目はどちらも押韻と別） */
++export const SUPP_MIX = String.fromCodePoint(0x6402);
++/** 異体字の対応で、押韻用の字 R[7] の一つだけにつながる字（自身はデータにない） */
++export const VAR_ONE = String.fromCodePoint(0x6500);
++/** 異体字の対応で、平の字 P[31] と仄の字 Z[31] の両方につながる字（自身はデータにない） */
++export const VAR_TWO = String.fromCodePoint(0x6501);
++/** データにない字 */
++export const UNKNOWN = String.fromCodePoint(0x6600);
++/** 国字（テストデータで国字として登録する字） */
++export const KOKUJI = "峠";
++
++const chars: EngineData["chars"] = {};
++for (const c of P) chars[c] = [{ tone: "平", rhyme: PLAIN_P }];
++for (const c of Z) chars[c] = [{ tone: "去", rhyme: PLAIN_Z }];
++for (const c of R) chars[c] = [{ tone: "平", rhyme: RHYME_A }];
++for (const c of R2) chars[c] = [{ tone: "平", rhyme: RHYME_B }];
++for (const c of RYO) chars[c] = [{ tone: "平", rhyme: PLAIN_P }, { tone: "去", rhyme: PLAIN_Z }];
++chars[RHY2] = [{ tone: "平", rhyme: RHYME_A }, { tone: "平", rhyme: RHYME_B }];
++chars[SUPP] = [{ tone: "平", rhyme: RHYME_A, note: "【詞】" }];
++chars[SUPP_MIX] = [
++  { tone: "平", rhyme: "上平三江", note: "【詞】" },
++  { tone: "平", rhyme: PLAIN_P },
++];
++
++export const fixtureData: EngineData = {
++  chars,
++  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!] },
++  kokuji: { chars: [{ char: KOKUJI }] },
++  forms: realForms,
++  rules: realRules,
++};
++
++export const form = (id: FormId): FormDef => realForms.forms.find((f) => f.id === id)!;
++
++/**
++ * 記号で書いた4句から詩を組み立てる。字はすべて別の字になる（同字重出にならない）。
++ *   ○ 平の字  ● 仄の字  ◎ 押韻用の字（韻目 A）  ＿ 未入力
++ * それ以外の文字（RYO などの特別な字、句読点）はそのまま使う。
++ */
++export function build(...lines: string[]): string {
++  let p = 0;
++  let z = 0;
++  let r = 0;
++  return lines
++    .map((line) =>
++      [...line]
++        .map((s) => (s === "○" ? P[p++]! : s === "●" ? Z[z++]! : s === "◎" ? R[r++]! : s))
++        .join(""),
++    )
++    .join("\n");
++}
++
++/** 定型の base（律句どおり）を記号の4句にする。押韻する句の末字は◎。 */
++export function baseLines(id: FormId): string[] {
++  const f = form(id);
++  return f.lines.map((l, i) => (f.rhymeLines.includes(i) ? l.base.slice(0, 6) + "◎" : l.base));
++}
++
++/** 記号の句の1字だけを差し替える */
++export function replaceAt(lines: string[], line: number, pos: number, ch: string): string[] {
++  return lines.map((l, i) => (i === line ? [...l].map((c, j) => (j === pos ? ch : c)).join("") : l));
++}
++
++export const reading = (tone: Reading["tone"], rhyme: string, extra: Partial<Reading> = {}): Reading => ({
++  tone,
++  rhyme,
++  ...extra,
++});
+diff --git a/packages/engine/test/interpretations.test.ts b/packages/engine/test/interpretations.test.ts
+new file mode 100644
+index 0000000..cdb0007
+--- /dev/null
++++ b/packages/engine/test/interpretations.test.ts
+@@ -0,0 +1,143 @@
++// 両韻字・異体字の候補ごとの判定（CLAUDE.md §4.1「多音字・両韻字」）と、字の情報・記号列。
++import { describe, expect, it } from "vitest";
++import { analyze } from "../src/index";
++import type { Analysis, Finding } from "../src/types";
++import {
++  KOKUJI,
++  P,
++  R,
++  RHY2,
++  RHYME_A,
++  RHYME_B,
++  RYO,
++  UNKNOWN,
++  VAR_ONE,
++  VAR_TWO,
++  Z,
++  baseLines,
++  build,
++  fixtureData,
++  replaceAt,
++} from "./fixture";
++
++const HN = baseLines("heiki-nyuin");
++// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
++const run = (lines: string[]) => analyze(build(...lines), fixtureData);
++const keyOf = (f: Finding) => `${f.severity}:${f.rule}:${f.line}:${f.positions.join(",")}`;
++const nonOk = (fs: Finding[]) => fs.filter((f) => f.severity !== "ok").map(keyOf).sort();
++/** 解釈ごとに「選んだ読みの声調 → 指摘」 */
++const byTone = (a: Analysis, index: number) =>
++  Object.fromEntries(a.interpretations.map((i) => [i.readings[index]!.tone, nonOk(i.findings)]));
++
++describe("両韻字（平と仄の両方の読みを持つ字）", () => {
++  it("◐の位置なら、どちらの読みでも違反はなく、仄で読むと一三五不論の揺れ", () => {
++    const a = run(replaceAt(HN, 0, 0, RYO[0]!)); // 起句1字目（律句は○）
++    expect(a.chars[0]![0]!.readings.map((r) => r.tone)).toEqual(["平", "去"]);
++    expect(a.symbols[0]![0]).toBe("◎");
++    expect(byTone(a, 0)).toEqual({ 平: [], 去: ["variant:ichisango-furon:0:0"] });
++    // 解釈によって違う指摘は、全体の findings には入れない
++    expect(nonOk(a.findings)).toEqual([]);
++  });
++
++  it("4字目なら、平で読めば違反、仄で読めば適合（どちらかに決めない）", () => {
++    const a = run(replaceAt(HN, 0, 3, RYO[0]!)); // 起句4字目（定型は●）
++    expect(byTone(a, 3)).toEqual({
++      平: ["violation:kohei:0:3", "violation:nishi-fudo:0:1,3", "violation:pattern:0:3"],
++      去: [],
++    });
++    expect(nonOk(a.findings)).toEqual([]);
++    const kohei = a.interpretations.flatMap((i) => i.findings).find((f) => f.rule === "kohei")!;
++    expect(kohei.interpretation).toEqual({ 3: { tone: "平", rhyme: "上平二冬" } });
++  });
++
++  it("どの解釈にも共通する指摘は全体の findings に入る", () => {
++    let lines = replaceAt(HN, 0, 0, RYO[0]!);
++    lines = replaceAt(lines, 3, 6, "●"); // 結句の押韻字を仄に
++    const a = run(lines);
++    expect(a.interpretations).toHaveLength(2);
++    expect(nonOk(a.findings)).toEqual(["violation:rhyme-tone:3:6"]);
++  });
++
++  it("首句の2字目が両韻字なら、解釈ごとに詩格が変わる", () => {
++    const a = run(replaceAt(HN, 0, 1, RYO[0]!));
++    const forms = Object.fromEntries(a.interpretations.map((i) => [i.readings[1]!.tone, i.form.id]));
++    expect(forms).toEqual({ 平: "heiki-nyuin", 去: "sokki-nyuin" });
++    expect(a.form.note).toMatch(/読み/);
++  });
++});
++
++describe("押韻で韻目が複数ある字", () => {
++  it("押韻の位置では韻目ごとに解釈を分ける", () => {
++    const a = run(replaceAt(HN, 3, 6, RHY2));
++    const byRhyme = Object.fromEntries(a.interpretations.map((i) => [i.readings[27]!.rhyme, nonOk(i.findings)]));
++    expect(byRhyme).toEqual({ [RHYME_A]: [], [RHYME_B]: ["violation:rhyme-group:3:6"] });
++  });
++
++  it("押韻の位置以外では、同じ平仄の読みは一つの解釈にまとめる", () => {
++    const a = run(replaceAt(HN, 2, 2, RHY2)); // 転句3字目（平）
++    expect(a.interpretations).toHaveLength(1);
++    // ただし冒韻は、どれかの読みが押韻と同じ韻目なら出す
++    expect(nonOk(a.findings)).toEqual(["check:bou-in:2:2"]);
++  });
++});
++
++describe("異体字の対応", () => {
++  it("候補が一つなら、その字の読みで判定する（status は known、via に候補）", () => {
++    const a = run(replaceAt(HN, 3, 6, VAR_ONE));
++    const info = a.chars[3]![6]!;
++    expect(info.status).toBe("known");
++    expect(info.readings).toEqual([{ tone: "平", rhyme: RHYME_A, via: R[7] }]);
++    expect(nonOk(a.findings)).toEqual([]);
++  });
++
++  it("候補が複数なら一つに決めず、候補ごとに解釈を分ける（status は undetermined）", () => {
++    const a = run(replaceAt(HN, 0, 3, VAR_TWO)); // 起句4字目（定型は●）
++    const info = a.chars[0]![3]!;
++    expect(info.status).toBe("undetermined");
++    expect(info.readings.map((r) => r.via)).toEqual([P[31], Z[31]]);
++    const byVia = Object.fromEntries(a.interpretations.map((i) => [i.readings[3]!.via, nonOk(i.findings).length > 0]));
++    expect(byVia).toEqual({ [P[31]!]: true, [Z[31]!]: false });
++  });
++});
++
++describe("組み合わせが多すぎるとき", () => {
++  it("2の10乗を超えたら位置ごとに独立して評価する", () => {
++    // 両韻字を別々の11か所に置く → 2^11 通り（判定の結果ではなく、組み合わせの数を確かめる）
++    const slots: [number, number][] = [
++      [0, 0], [0, 2], [1, 0], [1, 2], [1, 4], [2, 0], [2, 2], [3, 0], [3, 2], [0, 4], [3, 4],
++    ];
++    let lines = HN;
++    slots.forEach(([l, p], i) => (lines = replaceAt(lines, l, p, RYO[i]!)));
++    const a = run(lines);
++    expect(a.independent).toBe(true);
++    // 両韻字の位置ごとに、平と仄の2通り
++    expect(a.interpretations).toHaveLength(22);
++    for (const i of a.interpretations) expect(Object.keys(i.readings)).toHaveLength(1);
++  });
++
++  it("2の10乗以下なら全部の組み合わせを作る", () => {
++    const slots: [number, number][] = [[0, 0], [0, 2], [1, 0], [1, 2], [1, 4], [2, 0], [2, 2], [3, 0], [3, 2], [0, 4]];
++    let lines = HN;
++    slots.forEach(([l, p], i) => (lines = replaceAt(lines, l, p, RYO[i]!)));
++    const a = run(lines);
++    expect(a.independent).toBe(false);
++    expect(a.interpretations).toHaveLength(1024);
++  });
++});
++
++describe("字の情報と記号列（misima 互換）", () => {
++  it("○平 ●仄 ◎両方 □データにない ■国字 ＿未入力 ×漢字以外", () => {
++    const text = build("○●" + RYO[0] + UNKNOWN + KOKUJI + "＿・", ...HN.slice(1));
++    const a = analyze(text, fixtureData);
++    expect(a.symbols[0]).toBe("○●◎□■＿×");
++    expect(a.chars[0]!.map((c) => c.status)).toEqual([
++      "known",
++      "known",
++      "known",
++      "unknown",
++      "kokuji",
++      "blank",
++      "invalid",
++    ]);
++  });
++});
+diff --git a/packages/engine/test/real-data.test.ts b/packages/engine/test/real-data.test.ts
+new file mode 100644
+index 0000000..a7b8735
+--- /dev/null
++++ b/packages/engine/test/real-data.test.ts
+@@ -0,0 +1,66 @@
++// 実データ（data/）を読み込んで動くことを確かめる。期待値は記憶ではなく data/ から引く（CLAUDE.md §0）。
++import { readFileSync } from "node:fs";
++import { describe, expect, it } from "vitest";
++import { analyze } from "../src/index";
++import type { EngineData } from "../src/types";
++
++const readJson = (path: string) => JSON.parse(readFileSync(new URL(`../../../data/${path}`, import.meta.url), "utf-8"));
++const data: EngineData = {
++  chars: readJson("chars.json"),
++  variants: readJson("variants.json"),
++  kokuji: readJson("kokuji.json"),
++  forms: readJson("forms.json"),
++  rules: readJson("rules.json"),
++};
++
++const entries = Object.entries(data.chars);
++const isP = (t: string) => t === "平";
++/** 本体の読みが一つだけで、平仄が pz の字を、まだ使っていないものから取る。rhyme を渡すとその韻目に、avoid を渡すとそれ以外の韻目に限る */
++function picker() {
++  const used = new Set<string>();
++  return (pz: "平" | "仄", opts: { rhyme?: string; avoid?: string } = {}) => {
++    const hit = entries.find(
++      ([c, rs]) =>
++        !used.has(c) &&
++        rs.length === 1 &&
++        rs[0]!.note === undefined &&
++        isP(rs[0]!.tone) === (pz === "平") &&
++        (opts.rhyme === undefined || rs[0]!.rhyme === opts.rhyme) &&
++        (opts.avoid === undefined || rs[0]!.rhyme !== opts.avoid),
++    )!;
++    used.add(hit[0]);
++    return hit[0];
++  };
++}
++
++describe("実データでの動作", () => {
++  it("律句どおりに data/ から字を選んで作った詩は、どの定型でも指摘なし", () => {
++    for (const form of data.forms.forms) {
++      const pick = picker();
++      const rhyme = entries.find(([, rs]) => rs.length === 1 && isP(rs[0]!.tone) && !rs[0]!.note)![1][0]!.rhyme;
++      const lines = form.lines.map((l, i) =>
++        [...l.base]
++          .map((s, pos) =>
++            pos === 6 && form.rhymeLines.includes(i)
++              ? pick("平", { rhyme })
++              : pick(s === "○" ? "平" : "仄", { avoid: rhyme }), // 冒韻にならないよう押韻と別の韻目から
++          )
++          .join(""),
++      );
++      const a = analyze(lines.join("\n"), data);
++      expect(a.findings.filter((f) => f.severity !== "ok"), `${form.id}: ${lines.join("/")}`).toEqual([]);
++      expect(a.form).toEqual({ id: form.id, auto: true });
++    }
++  });
++
++  it("平と仄の両方の読みを持つ字は◎、国字は■、異体字は候補の字の読みで引く", () => {
++    const ryo = entries.find(([, rs]) => rs.some((r) => isP(r.tone)) && rs.some((r) => !isP(r.tone)))![0];
++    const kokuji = data.kokuji.chars[0]!.char;
++    const [variantKey, [target]] = Object.entries(data.variants).find(
++      ([k, v]) => v.length === 1 && !(k in data.chars),
++    )! as [string, string[]];
++    const a = analyze([ryo, kokuji, variantKey].join(""), data);
++    expect(a.symbols[0]!.slice(0, 2)).toBe("◎■");
++    expect(a.chars[0]![2]!.readings).toEqual(data.chars[target!]!.map((r) => ({ ...r, via: target })));
++  });
++});
+diff --git a/packages/engine/test/rules.test.ts b/packages/engine/test/rules.test.ts
+new file mode 100644
+index 0000000..14fd587
+--- /dev/null
++++ b/packages/engine/test/rules.test.ts
+@@ -0,0 +1,269 @@
++// 規則ごとの適合例と違反例（CLAUDE.md §6.1）。
++// 違反例は、律句どおりの基準の詩（forms.json の base）から意図的に1か所だけ崩したもの。
++// 1か所崩すと連鎖して反応する規則もあるので、出る指摘を過不足なく突き合わせる。
++import { describe, expect, it } from "vitest";
++import { analyze } from "../src/index";
++import type { Analysis, FormId, Options } from "../src/types";
++import {
++  KOKUJI,
++  R2,
++  SUPP,
++  SUPP_MIX,
++  UNKNOWN,
++  baseLines,
++  build,
++  fixtureData,
++  replaceAt,
++} from "./fixture";
++
++const run = (lines: string[], options: Options = {}) => analyze(build(...lines), fixtureData, options);
++
++/** 「重み:規則:句:位置」の一覧（ok は除く） */
++const issues = (a: Analysis) =>
++  a.findings
++    .filter((f) => f.severity !== "ok")
++    .map((f) => `${f.severity}:${f.rule}:${f.line}:${f.positions.join(",")}`)
++    .sort();
++
++const FORMS: FormId[] = ["heiki-nyuin", "heiki-funyuin", "sokki-nyuin", "sokki-funyuin"];
++const HN = baseLines("heiki-nyuin");
++// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
++
++describe("適合例：律句どおりの詩", () => {
++  for (const id of FORMS) {
++    it(`${id} は指摘なしで、詩格を自動判定する`, () => {
++      const a = run(baseLines(id));
++      expect(issues(a)).toEqual([]);
++      expect(a.form).toEqual({ id, auto: true });
++      expect(a.errors).toEqual([]);
++      expect(a.interpretations).toHaveLength(1);
++      expect(a.independent).toBe(false);
++    });
++  }
++});
++
++describe("pattern・ichisango-furon（定型）", () => {
++  it("◐の位置の揺れは、許容される変格（一三五不論）だけ", () => {
++    expect(issues(run(replaceAt(HN, 0, 0, "●")))).toEqual(["variant:ichisango-furon:0:0"]);
++  });
++
++  it("4字目を崩すと、定型との不一致・二四不同・孤平になる", () => {
++    // 起句 ○○●●●○◎ → ○○●○●○◎
++    expect(issues(run(replaceAt(HN, 0, 3, "○")))).toEqual([
++      "violation:kohei:0:3",
++      "violation:nishi-fudo:0:1,3",
++      "violation:pattern:0:3",
++    ]);
++  });
++
++  it("詩格を固定すると、自動判定より優先する", () => {
++    const a = run(baseLines("heiki-funyuin"), { form: "sokki-funyuin" });
++    expect(a.form).toEqual({ id: "sokki-funyuin", auto: false });
++    expect(issues(a).filter((s) => s.includes(":pattern:")).length).toBeGreaterThan(0);
++  });
++});
++
++describe("niroku-tsui（二六対）", () => {
++  it("6字目を崩すと二六対の違反", () => {
++    // 起句 ○○●●●○◎ → ○○●●●●◎
++    expect(issues(run(replaceAt(HN, 0, 5, "●")))).toEqual(["violation:niroku-tsui:0:1,5", "violation:pattern:0:5"]);
++  });
++});
++
++describe("hanpo-nenpo（反法・粘法）・youtai", () => {
++  it("転句の2字目を崩すと、粘法と反法の違反、拗体の可能性（要確認）", () => {
++    // 転句 ●●○○○●● → ●○○○○●●
++    expect(issues(run(replaceAt(HN, 2, 1, "○")))).toEqual([
++      "check:youtai:-1:",
++      "violation:hanpo-nenpo:2:1",
++      "violation:hanpo-nenpo:3:1",
++      "violation:niroku-tsui:2:1,5",
++      "violation:nishi-fudo:2:1,3",
++      "violation:pattern:2:1",
++    ]);
++  });
++});
++
++describe("ka-sanren-hei・ka-sanren-soku（下三連）", () => {
++  it("5〜7字目がすべて平なら三平の違反", () => {
++    // 起句 ○○●●●○◎ → ○○●●○○◎
++    expect(issues(run(replaceAt(HN, 0, 4, "○")))).toEqual(["violation:ka-sanren-hei:0:4,5,6", "violation:pattern:0:4"]);
++  });
++
++  it("5〜7字目がすべて仄なら三仄の要確認", () => {
++    // 転句 ●●○○○●● → ●●○○●●●
++    expect(issues(run(replaceAt(HN, 2, 4, "●")))).toEqual(["check:ka-sanren-soku:2:4,5,6", "violation:pattern:2:4"]);
++  });
++
++  it("重みは上書きできる", () => {
++    const a = run(replaceAt(HN, 2, 4, "●"), { severities: { "ka-sanren-soku": "violation" } });
++    expect(issues(a)).toContain("violation:ka-sanren-soku:2:4,5,6");
++  });
++});
++
++describe("kohei（孤平）", () => {
++  it("3字目を崩して4字目の平が仄に挟まれると孤平（3字目自体は一三五不論）", () => {
++    // 承句 ●●○○●●◎ → ●●●○●●◎
++    expect(issues(run(replaceAt(HN, 1, 2, "●")))).toEqual(["variant:ichisango-furon:1:2", "violation:kohei:1:3"]);
++  });
++});
++
++describe("kohei（孤平）の境界", () => {
++  it("4字目の平の左が仄でも、右（5字目）が平なら孤平ではない", () => {
++    // 承句 ●●○○●●◎ → ●●●○○●◎（3字目と5字目はどちらも◐）
++    const lines = replaceAt(replaceAt(HN, 1, 2, "●"), 1, 4, "○");
++    expect(issues(run(lines))).toEqual(["variant:ichisango-furon:1:2,4"]);
++  });
++});
++
++describe("hasami-hei（挟み平）", () => {
++  it("押韻しない句の ○●● を ●○● に換えると、許容される変格だけ", () => {
++    // 転句 ●●○○○●● → ●●○○●○●（挟み平という一つの置き換え）
++    const lines = replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○");
++    expect(issues(run(lines))).toEqual(["variant:hasami-hei:2:4,5,6"]);
++  });
++
++  it("句末が ○○● の句を ●○● にしても挟み平ではない（5字目の一三五不論）", () => {
++    const HF = baseLines("heiki-funyuin"); // 起句 ○○●●○○●
++    expect(issues(run(replaceAt(HF, 0, 4, "●")))).toEqual(["variant:ichisango-furon:0:4"]);
++  });
++});
++
++describe("rhyme-tone・rhyme-group・kogan-nyugun（押韻）", () => {
++  it("押韻字が仄なら押韻の声調の違反", () => {
++    // 結句 ○○●●●○◎ → ○○●●●○●
++    expect(issues(run(replaceAt(HN, 3, 6, "●")))).toEqual(["violation:rhyme-tone:3:6"]);
++  });
++
++  it("結句の押韻字だけ別の韻目なら韻目の違反", () => {
++    expect(issues(run(replaceAt(HN, 3, 6, R2[0]!)))).toEqual(["violation:rhyme-group:3:6"]);
++  });
++
++  it("首句の押韻字だけ別の韻目なら孤雁入群格の可能性（要確認）", () => {
++    expect(issues(run(replaceAt(HN, 0, 6, R2[0]!)))).toEqual(["check:kogan-nyugun:0:6"]);
++  });
++});
++
++describe("bou-in（冒韻）", () => {
++  it("押韻位置以外に押韻と同じ韻目の字があると要確認", () => {
++    // 転句の3字目（平）を、押韻と同じ韻目 A の字にする
++    expect(issues(run(replaceAt(HN, 2, 2, "◎")))).toEqual(["check:bou-in:2:2"]);
++  });
++});
++
++describe("douji（同字重出）", () => {
++  it("同じ字が2回あれば、それぞれの句で要確認", () => {
++    const text = build(...HN).split("\n");
++    const first = [...text[0]!][0]!;
++    text[3] = first + [...text[3]!].slice(1).join("");
++    const a = analyze(text.join("\n"), fixtureData);
++    expect(issues(a)).toEqual(["check:douji:0:0", "check:douji:3:0"]);
++  });
++
++  it("「々」は直前の字として扱い、同字重出として出す", () => {
++    const text = build(...HN).split("\n");
++    text[0] = [...text[0]!].map((c, i) => (i === 1 ? "々" : c)).join("");
++    const a = analyze(text.join("\n"), fixtureData);
++    expect(a.chars[0]![1]!.input).toBe("々");
++    expect(a.chars[0]![1]!.char).toBe(a.chars[0]![0]!.char);
++    expect(issues(a)).toEqual(["check:douji:0:0,1"]);
++  });
++});
++
++describe("koku-ji・unknown-char（国字・データにない字）", () => {
++  it("国字は違反。その位置の平仄は問わない", () => {
++    expect(issues(run(replaceAt(HN, 2, 0, KOKUJI)))).toEqual(["violation:koku-ji:2:0"]);
++  });
++
++  it("国字はオプションで要確認に下げて続行できる", () => {
++    expect(issues(run(replaceAt(HN, 2, 0, KOKUJI), { allowKokuji: true }))).toEqual(["check:koku-ji:2:0"]);
++  });
++
++  it("データにない字は要確認。その位置の平仄は問わない", () => {
++    expect(issues(run(replaceAt(HN, 2, 0, UNKNOWN)))).toEqual(["check:unknown-char:2:0"]);
++  });
++
++  it("データにない字をオプションで平として扱うと、その平仄で判定する", () => {
++    // 転句1字目は◐で律句は●。平として扱うと一三五不論の揺れになる
++    expect(issues(run(replaceAt(HN, 2, 0, UNKNOWN), { unknownAs: "平" }))).toEqual([
++      "check:unknown-char:2:0",
++      "variant:ichisango-furon:2:0",
++    ]);
++  });
++});
++
++describe("supplement-reading（【詞】【辭】欄の読み）", () => {
++  it("【詞】欄にだけある読みで判定した位置は要確認", () => {
++    expect(issues(run(replaceAt(HN, 3, 6, SUPP)))).toEqual(["check:supplement-reading:3:6"]);
++  });
++});
++
++describe("supplement-reading の境界", () => {
++  it("同じ平仄の本体の読みもあれば、本体の読みで判定し、要確認にしない", () => {
++    expect(issues(run(replaceAt(HN, 2, 2, SUPP_MIX)))).toEqual([]);
++  });
++});
++
++describe("length（句数・字数）と入力エラー", () => {
++  it("3句しかなければ句数の違反", () => {
++    expect(issues(run(HN.slice(0, 3)))).toContain("violation:length:-1:");
++  });
++
++  it("6字の句は字数の違反", () => {
++    const lines = [...HN];
++    lines[1] = lines[1]!.slice(0, 6);
++    expect(issues(run(lines))).toContain("violation:length:1:");
++  });
++
++  it("漢字以外の文字は位置つきのエラー（字数にも数える）", () => {
++    const lines = [...HN];
++    lines[0] = lines[0] + "，";
++    const a = run(lines);
++    expect(a.errors).toEqual([{ line: 0, position: 7, char: "，", message: expect.any(String) }]);
++    expect(issues(a)).toContain("violation:length:0:");
++    expect(a.symbols[0]!.at(-1)).toBe("×");
++  });
++
++  it("行の前後の空白と、前後の空行は無視する", () => {
++    const text = "\n  " + build(...HN).replaceAll("\n", "  \n") + "\n\n";
++    expect(issues(analyze(text, fixtureData))).toEqual([]);
++  });
++
++  it("28マスの配列でも入力できる", () => {
++    const cells = [...build(...HN).replaceAll("\n", "")];
++    expect(cells).toHaveLength(28);
++    expect(issues(analyze(cells, fixtureData))).toEqual([]);
++  });
++});
++
++describe("未入力のマス（＿）", () => {
++  it("未入力の句があっても、入っている字だけで判定する", () => {
++    const lines = [...HN];
++    lines[1] = "＿＿＿＿＿＿＿";
++    const a = run(lines);
++    expect(issues(a)).toEqual([]);
++    expect(a.symbols[1]).toBe("＿＿＿＿＿＿＿");
++    expect(a.chars[1]![0]!.status).toBe("blank");
++  });
++
++  it("首句の2字目が未入力なら、反法・粘法で他の句から起式を推定する", () => {
++    const a = run(replaceAt(HN, 0, 1, "＿"));
++    expect(a.form.id).toBe("heiki-nyuin");
++    expect(a.form.note).toMatch(/推定/);
++    expect(issues(a)).toEqual([]);
++  });
++
++  it("首句の末字が未入力なら、入韻かどうかは決めず不入韻として判定する", () => {
++    const a = run(replaceAt(HN, 0, 6, "＿"));
++    expect(a.form.id).toBe("heiki-funyuin");
++    expect(a.form.note).toMatch(/入韻/);
++  });
++
++  it("どの句の2字目も未入力なら詩格は決めず、定型に依存する規則は判定しない", () => {
++    let lines = HN;
++    for (let i = 0; i < 4; i++) lines = replaceAt(lines, i, 1, "＿");
++    const a = run(lines);
++    expect(a.form.id).toBeNull();
++    expect(issues(a).filter((s) => /:(pattern|ichisango-furon|hasami-hei):/.test(s))).toEqual([]);
++  });
++});
