@@ -13,9 +13,9 @@
 | 本体にも載り、別の韻目の【詞】【辭】欄にも載る字 | 652 |
 | 元データ内の重複（同じ字・同じ韻目） | 32 |
 | 当てた修正（corrections.json） | 1 |
-| 異体字の対応（variants.json の見出し字） | 2844 |
-| 対応の候補が2字以上になる字（ambiguous.txt） | 485 |
-| Unihan で補った対応（unihan-supplemented.txt） | 98 |
+| 異体字の対応（variants.json の見出し字） | 4018 |
+| 対応の候補が2字以上になる字（ambiguous.txt） | 536 |
+| Unihan で補った対応（unihan-supplemented.txt） | 1327 |
 | 対応先がデータにない字（unmapped.txt） | 1378 |
 | 国字（kokuji.json） | 28 |
 | 国字の一覧にあり、平水韻にも載る字 | 0 |
