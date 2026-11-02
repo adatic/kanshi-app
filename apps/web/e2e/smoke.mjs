@@ -70,6 +70,12 @@ try {
     await page.goto(`${ORIGIN}/`);
     await page.waitForSelector("#grid-mode .gin");
     const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
+    const pasteText = (text) =>
+      page.evaluate((t) => {
+        const dt = new DataTransfer();
+        dt.setData("text/plain", t);
+        document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      }, text);
     const focused = () => page.evaluate(() => Number(document.activeElement?.getAttribute("data-index") ?? -1));
     const actualSymbols = () =>
       page.$$eval("#grid-mode .grow.gact", (rows) => rows.map((r) => [...r.querySelectorAll(".gsym")].map((s) => s.textContent || "＿").join("")));
@@ -138,11 +144,7 @@ try {
     // 詩全体（改行つき）の貼り付けは、句ごとに分けて入る
     await page.locator("#grid-clear").click();
     await cell(0).click();
-    await page.evaluate((text) => {
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
-    }, q03.join("\n"));
+    await pasteText(q03.join("\n"));
     check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 詩全体の貼り付けが句ごとに入る`);
     if (shots) await page.screenshot({ path: `${shots}/${label}-grid.png`, fullPage: true });
 
@@ -200,6 +202,48 @@ try {
     // 元の詩に戻す
     await cell(18).click();
     await page.keyboard.insertText(q03[2].slice(4, 6));
+
+    // ---- 必須要素 ----
+    const register = async (w) => {
+      await page.fill("#required-input", w);
+      await page.locator("#required-add").click();
+    };
+    await register("あい");
+    check((await page.locator(".required-note").textContent()).includes("漢字だけ"), `${label}: 必須要素は漢字以外を理由つきで断る`);
+    await register(word0);
+    check(
+      (await page.locator(".required-item .present").first().textContent()).includes("起句の1-2字目"),
+      `${label}: 詩に入っている必須要素は、その位置を示す`,
+    );
+    // 空のマス目に、もう一つの語を置ける位置から入れる
+    const word2 = q03[2].slice(4, 6);
+    await page.locator("#grid-clear").click();
+    await register(word2);
+    const item2 = page.locator(".required-item").nth(1);
+    const places = await item2.locator(".place-req").count();
+    check(places > 0, `${label}: 必須要素の置ける位置を示す（${places}か所）`);
+    const target = await item2.locator(".place-req").first().textContent();
+    await item2.locator(".place-req").first().click();
+    check((await item2.locator(".present").textContent()).includes(target), `${label}: 置ける位置を選ぶと、その位置に入る（${target}）`);
+    await register(q03[1].slice(0, 2));
+    check((await page.locator(".required-note").textContent()).includes("2語まで"), `${label}: 必須要素は2語まで`);
+    await page.locator(".required-item .remove").first().click();
+    check((await page.locator(".required-item").count()) === 1, `${label}: 必須要素の登録を外せる`);
+    // 列の中身が隣の列にはみ出さない（ページ全体がはみ出さなくても、列どうしで重なることがある）
+    const spill = await page.evaluate(() =>
+      [".side", ".poem-area", ".cell-panel"].flatMap((sel) => {
+        const box = document.querySelector(sel).getBoundingClientRect();
+        return [...document.querySelectorAll(`${sel} *`)]
+          .filter((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().right > box.right + 1)
+          .map((el) => `${sel} ${el.tagName.toLowerCase()}.${el.className}`);
+      }),
+    );
+    check(spill.length === 0, `${label}: 列の中身が列の外にはみ出さない${spill.length ? `（${spill.slice(0, 3).join(", ")}）` : ""}`);
+    if (shots) await page.screenshot({ path: `${shots}/${label}-required.png`, fullPage: true });
+    // 元の詩に戻す（詩全体の貼り付け）
+    await page.locator("#grid-clear").click();
+    await cell(0).click();
+    await pasteText(q03.join("\n"));
 
     // ---- 貼り付けモード。マス目の詩を引き継ぐ ----
     await page.locator("#tab-paste").click();

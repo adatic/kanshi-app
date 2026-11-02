@@ -3,8 +3,9 @@ import { analyze } from "@kanshi/engine";
 import type { EngineData, FormId, Options } from "@kanshi/engine";
 import { assistPanel } from "./assistView";
 import { loadEngineData, loadRhymes, phraseStore, type Rhyme } from "./data";
-import { BLANK, emptyGrid, gridToText, textToGrid } from "./grid";
+import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid } from "./grid";
 import { gridEditor } from "./gridEditor";
+import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
 import { cellPanel, h, resultParts, resultView } from "./render";
 import { buildView, cellDetail } from "./view";
 
@@ -128,6 +129,74 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   const gridClear = h("button", { type: "button", class: "small", id: "grid-clear" }, "すべて消す");
   gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "マス目の字をすべて消しますか？"));
 
+  // ---- 必須要素（最大2語）と、置ける位置 ----
+  let required: string[] = [];
+  const requiredInput = h("input", {
+    id: "required-input",
+    type: "text",
+    lang: "zh-Hant",
+    autocomplete: "off",
+    spellcheck: "false",
+    "aria-describedby": "required-help",
+  }) as HTMLInputElement;
+  const requiredAdd = h("button", { type: "button", class: "small", id: "required-add" }, "登録");
+  const requiredNote = h("p", { class: "required-note", role: "status" });
+  const requiredList = h("div", { class: "required-list" });
+  const addRequired = () => {
+    const error = validateRequired(requiredInput.value, required);
+    requiredNote.textContent = error ?? "";
+    if (error !== null) return;
+    required = [...required, requiredInput.value.trim()];
+    requiredInput.value = "";
+    update();
+  };
+  requiredAdd.addEventListener("click", addRequired);
+  requiredInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      addRequired();
+    }
+  });
+  const requiredCard = h(
+    "section",
+    { class: "required", "aria-labelledby": "required-title" },
+    h("h2", { id: "required-title" }, `必須要素（最大${MAX_REQUIRED}語）`),
+    h("p", { id: "required-help", class: "help" }, "必ず残すと決めた2字・3字の語。登録すると、置ける句と位置を示します。"),
+    h("div", { class: "required-entry" }, requiredInput, requiredAdd),
+    requiredNote,
+    requiredList,
+  );
+  const requiredItem = (r: RequiredView): HTMLElement => {
+    const placeButton = (pl: { line: number; start: number; label: string }, extra = "") => {
+      const b = h("button", { type: "button", class: "small place-req", "aria-label": `「${r.word}」を${pl.label}に入れる` }, `${pl.label}${extra}`);
+      const at = pl.line * WIDTH + pl.start;
+      b.addEventListener("click", () => editor.place(at, r.word, at));
+      return b;
+    };
+    const remove = h("button", { type: "button", class: "small remove", "aria-label": `「${r.word}」の登録を外す` }, "外す");
+    remove.addEventListener("click", () => {
+      required = required.filter((w) => w !== r.word);
+      update();
+    });
+    return h(
+      "div",
+      { class: "required-item" },
+      h("p", { class: "required-head" }, h("span", { class: "cand-word", lang: "zh-Hant" }, r.word), remove),
+      r.present.length > 0 ? h("p", { class: "present" }, `詩に入っています：${r.present.map((p) => p.label).join("、")}`) : null,
+      r.ok.length > 0 ? h("div", { class: "places" }, h("p", { class: "explain" }, "置ける位置"), ...r.ok.map((pl) => placeButton(pl))) : null,
+      r.depends.length > 0
+        ? h(
+            "div",
+            { class: "places depends" },
+            h("p", { class: "explain" }, "字の読みによっては違反が出る位置"),
+            ...r.depends.map((pl) => h("div", {}, placeButton(pl), h("details", {}, h("summary", {}, "理由"), h("ul", {}, ...pl.notes.map((n) => h("li", {}, n)))))),
+          )
+        : null,
+      r.present.length === 0 && r.ok.length === 0 && r.depends.length === 0 ? h("p", { class: "none" }, "いまの詩には、違反を出さずに置ける位置がありません。") : null,
+      h("p", { class: "explain counts" }, `置くと違反が出る位置 ${r.ng}　別の字と重なる位置 ${r.conflict}`),
+    );
+  };
+
   const gridMode = h(
     "section",
     { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
@@ -207,6 +276,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     }
     gridMode.hidden = mode !== "grid";
     pasteMode.hidden = mode !== "paste";
+    requiredCard.hidden = mode !== "grid";
     update();
   };
   for (const m of ["grid", "paste"] as const) {
@@ -228,6 +298,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
       const a = analyze(grid, data, options);
       const v = buildView(a, data);
       editor.refresh(v, showPattern);
+      requiredList.replaceChildren(...required.map((w) => requiredItem(requiredView(w, grid, data, options))));
       gridResult.replaceChildren(...resultParts(v, showPattern));
       panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
       const turn = ++assistTurn;
@@ -272,7 +343,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     "div",
     { class: "app" },
     h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
-    h("div", { class: "workbench" }, settings.el, gridMode, pasteMode),
+    h("div", { class: "workbench" }, h("div", { class: "side" }, settings.el, requiredCard), gridMode, pasteMode),
   );
 }
 

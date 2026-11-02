@@ -792,3 +792,86 @@ button.more {
 .settings .options > * {
   min-width: 0;
 }
+
+/* 左の列：設定と必須要素 */
+.side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.required {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.required-entry {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.required-entry input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  font-family: var(--f-han);
+  font-size: 1.1rem;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.required-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--shu);
+}
+.required-note:empty {
+  display: none;
+}
+.required-list {
+  display: grid;
+  gap: 10px;
+}
+.required-item {
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+.required-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.required-item .present {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--rokusho);
+}
+.places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.places > .explain {
+  flex-basis: 100%;
+}
+.places.depends > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+  font-size: 0.8rem;
+}
+.places.depends .place-req {
+  border-color: var(--odo);
+}
+.required-item .counts {
+  font-size: 0.78rem;
+}
