@@ -13,10 +13,11 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p packages/engine/tsconfig.json",
-    "test": "npm run typecheck && npm run data:verify && vitest run",
+    "test": "npm run typecheck && npm run data:unit && npm run data:verify && vitest run",
     "data:fetch": "python3 scripts/fetch_sources.py",
     "data:build": "python3 scripts/build_data.py",
-    "data:verify": "python3 scripts/build_data.py --check"
+    "data:verify": "python3 scripts/build_data.py --check",
+    "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\""
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
