@@ -344,10 +344,10 @@ index c0f851c..99e3965 100644
  export type * from "./types";
 diff --git a/packages/engine/src/queries.ts b/packages/engine/src/queries.ts
 new file mode 100644
-index 0000000..98665ea
+index 0000000..13501e1
 --- /dev/null
 +++ b/packages/engine/src/queries.ts
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,212 @@
 +// 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。
 +// 判定の基準を二重に持たないよう、制約と配置は analyze に仮の字を置いて判定した結果から求める。
 +import { analyze } from "./analyze";
@@ -357,6 +357,7 @@ index 0000000..98665ea
 +  CellConstraint,
 +  EngineData,
 +  Finding,
++  InputError,
 +  Options,
 +  PhraseEntry,
 +  PhraseQuery,
@@ -395,20 +396,18 @@ index 0000000..98665ea
 +/** 文言の中で仮の字の代わりに見せる言葉 */
 +const PROBE_LABEL = "（置く字）";
 +
-+/** 平仄データ・異体字の対応・国字のどれにもない漢字を、拡張B領域から決まった順に選ぶ */
-+function probeChars(data: EngineData, count: number): string[] {
++/** 平仄データ・異体字の対応・国字のどれにもなく、詩の本文にもない漢字を、拡張B領域から決まった順に選ぶ */
++function probeChar(data: EngineData, used: ReadonlySet<string>): string {
 +  const kokuji = new Set(data.kokuji.chars.map((k) => k.char));
-+  const out: string[] = [];
-+  for (let cp = 0x20000; out.length < count; cp++) {
++  for (let cp = 0x20000; ; cp++) {
 +    const c = String.fromCodePoint(cp);
-+    if (data.chars[c] === undefined && data.variants[c] === undefined && !kokuji.has(c)) out.push(c);
++    if (data.chars[c] === undefined && data.variants[c] === undefined && !kokuji.has(c) && !used.has(c)) return c;
 +  }
-+  return out;
 +}
 +
-+/** 仮の字を足したデータ。平の字は rhyme の韻目、仄の字は仮の韻目で読む */
-+function withProbe(data: EngineData, pz: PZ, rhyme: string): { data: EngineData; char: string } {
-+  const [char] = probeChars(data, 1) as [string];
++/** 仮の字を足したデータ。平の字は rhyme の韻目、仄の字は仮の韻目で読む。本文にある字（used）とは重ならない */
++function withProbe(data: EngineData, pz: PZ, rhyme: string, used: ReadonlySet<string>): { data: EngineData; char: string } {
++  const char = probeChar(data, used);
 +  const reading = pz === "平" ? { tone: "平" as const, rhyme } : { tone: "去" as const, rhyme: PROBE_RHYME };
 +  return { data: { ...data, chars: { ...data.chars, [char]: [reading] } }, char };
 +}
@@ -480,7 +479,7 @@ index 0000000..98665ea
 +    // 押韻の位置では、ほかの押韻字のどれかの韻目で違反がなければ置ける（韻目がまだなければ仮の韻目）
 +    const rhymes = pz === "平" && groups.length > 0 ? groups : [PROBE_RHYME];
 +    const results = rhymes.map((rhyme) => {
-+      const probe = withProbe(data, pz, rhyme);
++      const probe = withProbe(data, pz, rhyme, new Set(grid.flat()));
 +      const g = grid.map((row) => [...row]);
 +      g[line]![pos] = probe.char;
 +      const a = analyze(toText(g), probe.data, options);
@@ -519,6 +518,7 @@ index 0000000..98665ea
 +/**
 + * 2字・3字の語を置ける句と位置の一覧（2字語は各句の1-2・3-4・5-6・6-7字目、3字語は5-7字目）。
 + * - すでにある別の字と重なる位置は conflict（置いて判定はしない。同じ字が入っている位置は重ならない扱い）
++ * - 置いたマスに入力エラー（漢字以外など）が出る語や、「＿」を含む語は invalid（位置と理由を errors に返す）
 + * - 置いて判定し、新しい違反が全解釈に共通して出れば ng、一部の解釈（読み）でだけ出れば depends、出なければ ok
 + */
 +export function placementsFor(
@@ -540,22 +540,31 @@ index 0000000..98665ea
 +        const existing = grid[line]![start + i]!;
 +        return existing !== BLANK && existing !== c ? [start + i] : [];
 +      });
-+      if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts };
++      if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts, errors: [] };
 +      const g = grid.map((row) => [...row]);
 +      chars.forEach((c, i) => (g[line]![start + i] = c));
 +      const a = analyze(toText(g), data, options);
++      // 置いたマスの入力エラー（漢字以外・繰り返す字のない「々」）と、語の中の「＿」は invalid（CLAUDE.md §4.1）
++      const placed = (e: InputError) => e.line === line && e.position >= start && e.position < start + chars.length;
++      const errors: InputError[] = [
++        ...a.errors.filter(placed),
++        ...chars.flatMap((c, i) =>
++          c === BLANK ? [{ line, position: start + i, char: c, message: "語に「＿」（未入力のマス）は使えません。" }] : [],
++        ),
++      ].sort((x, y) => x.position - y.position);
++      if (errors.length > 0) return { line, start, slot, status: "invalid", violations: [], dependent: [], conflicts, errors };
 +      const common = newOnes(violations(a), violations(base));
 +      const dependent = newOnes(anyViolations(a), baseAny).filter((f) => !common.some((c) => keyOf(c) === keyOf(f)));
 +      const status = common.length > 0 ? "ng" : dependent.length > 0 ? "depends" : "ok";
-+      return { line, start, slot, status, violations: common, dependent, conflicts };
++      return { line, start, slot, status, violations: common, dependent, conflicts, errors };
 +    }),
 +  );
 +}
 diff --git a/packages/engine/src/types.ts b/packages/engine/src/types.ts
-index 6c2e5c9..fb14b40 100644
+index 6c2e5c9..94e2938 100644
 --- a/packages/engine/src/types.ts
 +++ b/packages/engine/src/types.ts
-@@ -98,3 +98,56 @@ export type Options = {
+@@ -98,3 +98,58 @@ export type Options = {
    /** 規則ごとの重みの上書き（流派差に合わせる） */
    severities?: Partial<Record<string, Severity>>;
  };
@@ -603,27 +612,29 @@ index 6c2e5c9..fb14b40 100644
 +  /** 0始まりの開始位置 */
 +  start: number;
 +  slot: "1-2" | "3-4" | "5-6" | "6-7" | "5-7";
-+  /** ok 置ける／depends 読みによって違反が出る／ng 置けない／conflict すでにある別の字と重なる */
-+  status: "ok" | "depends" | "ng" | "conflict";
++  /** ok 置ける／depends 読みによって違反が出る／ng 置けない／conflict すでにある別の字と重なる／invalid 語に漢字以外などがある */
++  status: "ok" | "depends" | "ng" | "conflict" | "invalid";
 +  /** 置くと全解釈に共通して新しく出る違反 */
 +  violations: Finding[];
 +  /** 置くと一部の解釈（読み）でだけ新しく出る違反 */
 +  dependent: Finding[];
 +  /** すでにある別の字と重なる位置（0始まり） */
 +  conflicts: number[];
++  /** 置いたマスの入力エラー（status が invalid のとき） */
++  errors: InputError[];
 +};
 diff --git a/packages/engine/test/queries.test.ts b/packages/engine/test/queries.test.ts
 new file mode 100644
-index 0000000..45f49b6
+index 0000000..efd6a7c
 --- /dev/null
 +++ b/packages/engine/test/queries.test.ts
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,182 @@
 +// 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。
 +// 平仄は架空のデータ（fixture.ts）で与え、実在の字の平仄を記憶で使わない（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
 +import { constraintsAt, placementsFor, searchPhrases } from "../src/index";
 +import type { PhraseEntry } from "../src/types";
-+import { P, R, RHYME_A, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "./fixture";
++import { KOKUJI, P, R, RHYME_A, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "./fixture";
 +
 +const HN = baseLines("heiki-nyuin");
 +// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -699,6 +710,19 @@ index 0000000..45f49b6
 +    expect(c.rhyme).toEqual({ position: false, groups: [] });
 +  });
 +
++  it("本文にデータにない字があっても、仮の字と取り違えない（離れたマスの判定が変わらない）", () => {
++    // 起句4字目に、仮の字として選ばれうる最初の候補（拡張B領域の先頭）を置く
++    const first = String.fromCodePoint(0x20000);
++    expect(fixtureData.chars[first]).toBeUndefined();
++    const withUnknown = build(...replaceAt(replaceAt(HN, 0, 3, first), 2, 0, "＿"));
++    const c = constraintsAt(withUnknown, fixtureData, 2, 0); // 転句1字目は◐
++    expect(c.required).toBeNull();
++    expect(c.options.map((o) => [o.pz, o.ok])).toEqual([
++      ["平", true],
++      ["仄", true],
++    ]);
++  });
++
 +  it("今その位置に入っている字には左右されない", () => {
 +    const blank = constraintsAt(build(...replaceAt(HN, 0, 3, "＿")), fixtureData, 0, 3);
 +    const filled = constraintsAt(build(...replaceAt(HN, 0, 3, "○")), fixtureData, 0, 3);
@@ -754,6 +778,30 @@ index 0000000..45f49b6
 +    expect(p.status).toBe("ok");
 +  });
 +
++  it("漢字以外を含む語は invalid で、置いたマスの位置と理由を返す", () => {
++    for (const word of ["ab", P[28]! + " ", P[28]! + "、"]) {
++      const p = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++      expect(p.status, word).toBe("invalid");
++      expect(p.errors.length, word).toBeGreaterThan(0);
++      expect(p.errors.every((e) => e.line === 2 && (e.position === 2 || e.position === 3)), word).toBe(true);
++    }
++  });
++
++  it("「＿」を含む語も invalid", () => {
++    const p = placementsFor(P[28]! + "＿", poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(p.status).toBe("invalid");
++    expect(p.errors.map((e) => e.position)).toEqual([3]);
++  });
++
++  it("国字を含む語は既定では置けず、国字で続行するオプションでは置ける", () => {
++    const word = P[28]! + KOKUJI;
++    const ng = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(ng.status).toBe("ng");
++    expect(ng.violations.map((f) => f.rule)).toEqual(["koku-ji"]);
++    const ok = placementsFor(word, poem, fixtureData, { allowKokuji: true }).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(ok.status).toBe("ok");
++  });
++
 +  it("押韻の位置に置く3字語は、韻目も確かめる", () => {
 +    const poem2 = build(HN[0]!, HN[1]!, HN[2]!, HN[3]!.slice(0, 4) + "＿＿＿");
 +    const ok = placementsFor(Z[30]! + P[28]! + R[7]!, poem2, fixtureData).find((x) => x.line === 3)!;
@@ -765,7 +813,7 @@ index 0000000..45f49b6
 +});
 diff --git a/scripts/placements-report.test.ts b/scripts/placements-report.test.ts
 new file mode 100644
-index 0000000..02f1b12
+index 0000000..cf4f16c
 --- /dev/null
 +++ b/scripts/placements-report.test.ts
 @@ -0,0 +1,126 @@
@@ -791,7 +839,7 @@ index 0000000..02f1b12
 +
 +const WORDS = ["雲雀", "薰風", "熏風", "春風", "明月", "寒山寺"];
 +const LINE_NAMES = ["起句", "承句", "転句", "結句"];
-+const MARK: Record<Placement["status"], string> = { ok: "○ 置ける", depends: "△ 読みによる", ng: "× 置けない", conflict: "— 字がある" };
++const MARK: Record<Placement["status"], string> = { ok: "○ 置ける", depends: "△ 読みによる", ng: "× 置けない", conflict: "— 字がある", invalid: "！ 入力エラー" };
 +
 +const EMPTY = Array(4).fill("＿＿＿＿＿＿＿").join("\n");
 +const PARTIAL = ["昨夜風開露井桃", "未央前殿月輪高", "＿＿＿＿＿＿＿", "簾外春寒＿＿＿"].join("\n");
