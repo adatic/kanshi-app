@@ -26,13 +26,17 @@ MANIFEST = ROOT / "data" / "corpus.json"
 PATTERN = "全唐诗/poet.tang.*.json"
 
 
+def _load_manifest() -> dict:
+    return json.loads(MANIFEST.read_text(encoding="utf-8"))
+
+
 def cache_dir(commit: str) -> Path:
     return ROOT / ".cache" / f"chinese-poetry-{commit[:7]}"
 
 
 def corpus_files() -> tuple[str, list[tuple[str, Path]]]:
     """（コミット, [(上流のパス, キャッシュのパス)]）。ファイルは番号の順。"""
-    doc = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    doc = _load_manifest()
     out = cache_dir(doc["commit"])
     return doc["commit"], [(f, out / f) for f in doc["files"]]
 
@@ -57,7 +61,7 @@ def write_manifest(repo: Path) -> int:
 
 
 def fetch() -> int:
-    doc = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    doc = _load_manifest()
     commit = doc["commit"]
     ok = True
     for path, expected in doc["files"].items():

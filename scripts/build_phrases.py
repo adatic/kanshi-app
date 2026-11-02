@@ -22,14 +22,13 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import re
 import shutil
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 from fetch_corpus import corpus_files
-import re
-
 from golden_text import HAN
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -133,25 +132,37 @@ def load_corpus():
                 yield p["author"], p["title"], p["paragraphs"]
 
 
+def _group_phrases(counted: dict, readings, rhyme_order: dict[str, int]) -> dict[str, dict[str, list]]:
+    """集計した語に読みの情報を付け、先頭字・字数ごとに出現回数順でまとめる。"""
+    by_first: dict[str, dict[str, list]] = defaultdict(lambda: {"2": [], "3": []})
+    for word, info in counted.items():
+        entry = {
+            "w": word,
+            "n": info["n"],
+            "at": info["at"],
+            "p": patterns(word, readings),
+            "r": last_rhymes(word, readings, rhyme_order),
+            "e": info["e"],
+        }
+        by_first[word[0]][str(len(word))].append(entry)
+    for groups in by_first.values():
+        for entries in groups.values():
+            entries.sort(key=lambda e: (-e["n"], e["w"]))
+    return by_first
+
+
 def build() -> dict[Path, str]:
     chars = json.loads((ROOT / "data" / "chars.json").read_text(encoding="utf-8"))
     variants = json.loads((ROOT / "data" / "variants.json").read_text(encoding="utf-8"))
     rhymes = json.loads((ROOT / "data" / "rhymes.json").read_text(encoding="utf-8"))
     rhyme_order = {r["id"]: i for i, r in enumerate(rhymes)}
     readings = reading_lookup(chars, variants)
-    counted = count_phrases(load_corpus())
-
-    by_first: dict[str, dict[str, list]] = defaultdict(lambda: {"2": [], "3": []})
-    for w, info in counted.items():
-        entry = {"w": w, "n": info["n"], "at": info["at"], "p": patterns(w, readings), "r": last_rhymes(w, readings, rhyme_order), "e": info["e"]}
-        by_first[w[0]][str(len(w))].append(entry)
+    by_first = _group_phrases(count_phrases(load_corpus()), readings, rhyme_order)
 
     outputs: dict[Path, str] = {}
     index = {}
     for first in sorted(by_first, key=ord):
         groups = by_first[first]
-        for size in groups:
-            groups[size].sort(key=lambda e: (-e["n"], e["w"]))
         name = f"{ord(first):x}.json"
         index[first] = {"file": name, "2": len(groups["2"]), "3": len(groups["3"])}
         outputs[OUT / name] = json.dumps(groups, ensure_ascii=False, separators=(",", ":")) + "\n"
