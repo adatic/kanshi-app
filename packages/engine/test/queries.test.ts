@@ -111,6 +111,16 @@ describe("placementsFor（語を置ける位置）", () => {
     expect(placementsFor(three, poem, fixtureData).map((p) => `${p.line}:${p.slot}`)).toEqual(["0:5-7", "1:5-7", "2:5-7", "3:5-7"]);
   });
 
+  it("at で句と位置を一つに絞ると、その位置の結果だけを、全部を調べたときと同じ内容で返す", () => {
+    const all = placementsFor(twoP, poem, fixtureData);
+    for (const p of all) {
+      expect(placementsFor(twoP, poem, fixtureData, {}, { line: p.line, slot: p.slot })).toEqual([p]);
+    }
+    // 語の字数に合わない位置（2字語の 5-7）や、範囲外の句は空
+    expect(placementsFor(twoP, poem, fixtureData, {}, { line: 2, slot: "5-7" })).toEqual([]);
+    expect(placementsFor(twoP, poem, fixtureData, {}, { line: 4, slot: "1-2" })).toEqual([]);
+  });
+
   it("未入力の句で、定型に合う位置は置ける、合わない位置は理由つきで置けない", () => {
     const at = Object.fromEntries(placementsFor(twoP, poem, fixtureData).filter((p) => p.line === 2).map((p) => [p.slot, p]));
     expect(at["3-4"]!.status).toBe("ok"); // ◐○ に 平平

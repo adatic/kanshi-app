@@ -184,22 +184,25 @@ const SLOTS: Record<number, { start: number; slot: Placement["slot"] }[]> = {
  * - すでにある別の字と重なる位置は conflict（置いて判定はしない。同じ字が入っている位置は重ならない扱い）
  * - 置いたマスに入力エラー（漢字以外など）が出る語や、「＿」を含む語は invalid（位置と理由を errors に返す）
  * - 置いて判定し、新しい違反が全解釈に共通して出れば ng、一部の解釈（読み）でだけ出れば depends、出なければ ok
+ * at を渡すと、その句・位置だけを調べる（詩語候補を一つの位置で確かめるときに、ほかの位置の判定を省く）。
  */
 export function placementsFor(
   phrase: string,
   input: string | readonly string[],
   data: EngineData,
   options: Options = {},
+  at?: { line: number; slot: Placement["slot"] },
 ): Placement[] {
   const chars = [...phrase];
-  const slots = SLOTS[chars.length];
-  if (slots === undefined) return [];
+  const slots = SLOTS[chars.length]?.filter((s) => at === undefined || s.slot === at.slot);
+  const lines = at === undefined ? [0, 1, 2, 3] : [0, 1, 2, 3].filter((l) => l === at.line);
+  if (slots === undefined || slots.length === 0 || lines.length === 0) return [];
   const grid = toGrid(input);
   const base = analyze(toCells(grid), data, options);
   const baseAny = anyViolations(base);
   const baseViolations = violations(base);
 
-  return [0, 1, 2, 3].flatMap((line) =>
+  return lines.flatMap((line) =>
     slots.map(({ start, slot }): Placement => {
       const conflicts = chars.flatMap((c, i) => {
         const existing = grid[line]![start + i]!;
