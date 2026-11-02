@@ -4,7 +4,16 @@
 
 ## 進行中
 
-（なし）
+### m2-forms — 定型と規則のデータ（M2）
+
+ブランチ: `task/m2-forms`
+
+完了条件:
+- [ ] `data/forms.json` に4定型（◐つきの pattern と、律句どおりの base）と照合元（版番号つき）がある
+- [ ] 照合元の記事（ja・zh「近体詩」）を版を固定して `data/raw/` に取得するスクリプトがある
+- [ ] テストが記事の本文から律句を読み取り、資料の組み立て方（相対・相黏・首句の入韻）で4定型を作って `forms.json` と一致することを確かめる。◐の位置が一三五不論（禁忌に抵触しない限り問わない）と合うことも確かめる
+- [ ] `data/rules.json` に CLAUDE.md §4.1 の全規則（人間の判断で足した hasami-hei・kogan-nyugun・supplement-reading を含む）と ichisango-furon が、既定の重みと根拠つきであり、重みが CLAUDE.md の表と一致することをテストで確かめる
+- [ ] 照合で見つかった食い違いとその判断が `DECISIONS.md` に、出典が `DATA_SOURCES.md` にある
 
 ## 完了
 
