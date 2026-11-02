@@ -241,6 +241,17 @@ class UnihanSupplementTest(unittest.TestCase):
         self.assertEqual(supplemented, [])
         self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
 
+    def test_unihan_is_followed_only_one_step(self):
+        # 甲 → 乙（OpenCC）→ 丙（Unihan 1段目）→ 丁（Unihan 2段目）。データにあるのは 丁 だけ
+        variants, _, unmapped, supplemented = self.run_variants(
+            ["丁"],
+            jp={"甲": ["乙"]},
+            unihan={"乙": [("kZVariant", "丙")], "丙": [("kSemanticVariant", "丁")]},
+        )
+        self.assertEqual(variants, {})
+        self.assertEqual(supplemented, [])
+        self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
+
     def test_one_target_reached_by_several_paths_is_one_row(self):
         # 甲 からも、OpenCC の候補 乙 からも 丙 にたどり着く。甲 は簡体字→繁体字で自分自身にも対応する
         variants, _, _, supplemented = self.run_variants(
