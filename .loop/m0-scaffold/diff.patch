@@ -64,6 +64,52 @@ index 0000000..470dd7b
 +- `packages/engine` に依存パッケージを足さない。
 +- 平仄・韻目・定型の正誤を**記憶で判断しない**。データ（平水韻）や名詩の実例を根拠として示せない意見は述べない。
 +- 公開APIを変える必要があると考えたら、変える前に理由を出力して止まる。
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 2518e62..2187625 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -352,25 +352,35 @@ type EditEvent = {
+ 
+ ### 7.4 呼び出し方
+ 
+-Codex CLI の非対話モード（`codex exec`）を使う。**フラグはバージョンによって変わるので、M0で `codex exec --help` を実行して確認し、実際に動いたコマンドでこの節を書き換えること。**
++Codex CLI の非対話モード（`codex exec`）を使う。以下は M0 で codex-cli 0.166.0 を使って実際に動かしたコマンド。**フラグはバージョンによって変わるので、Codex を更新したら `codex exec --help` で確認し、この節を直すこと。**
++
++- `-o <file>`：Codex の最終メッセージ（レビュー本文）だけをファイルに書き出す。標準出力には途中経過も混ざるので、レビュー結果としては `-o` の出力を使う。
++- 途中経過は `.log` に保存する（`.gitignore` で除外。コミットしない）。
++- `--color never`：ログに色の制御文字を入れない。
+ 
+ ```bash
+-# レビュー（読み取り専用）
+-codex exec --sandbox read-only \
++# レビュー（読み取り専用）。n は往復の回数（1〜3）
++codex exec --sandbox read-only --color never \
++  -o .loop/<task>/review-<n>.md \
+   "$(cat prompts/codex-review.md)
+ 
+ 対象タスク: <task>
+ 完了条件: TASKS.md の該当項目
+ 差分: .loop/<task>/diff.patch" \
+-  > .loop/<task>/review-1.md
++  > .loop/<task>/review-<n>.log 2>&1
+ 
+ # リファクタリング（作業ディレクトリ内のみ書き込み可）
+-codex exec --sandbox workspace-write \
++codex exec --sandbox workspace-write --color never \
++  -o .loop/refactor-<milestone>.codex.md \
+   "$(cat prompts/codex-refactor.md)
+ 
+-対象: packages/engine/src"
++対象: packages/engine/src" \
++  > .loop/refactor-<milestone>.log 2>&1
+ ```
+ 
++注意：
++- 読み取り専用の環境では、Codex が `npm test` を実行しても Vitest が一時ファイルを書けずに止まることがある。テストの成否は Claude Code が自分で `npm test` を実行して確かめる。
++
+ プロンプトの雛形は `prompts/` に置く。
+ 
+ - `prompts/codex-review.md`：見る観点を固定する。①完了条件を満たしているか ②テストが規則の境界を突いているか（崩した位置が1か所か、両韻字の扱い） ③仕様（このファイル）との食い違い ④読みにくさ・重複。指摘には重要度（高／中／低）と該当行を付けさせる。**平仄や韻目の正誤について、データや名詩の根拠なしに意見を述べないよう指示する。**
 diff --git a/TASKS.md b/TASKS.md
 new file mode 100644
 index 0000000..d8bc52c
