@@ -28,6 +28,8 @@ export type Exception = {
   evidence: string[];
   needsReview: boolean;
   question?: string;
+  /** 人間が規則外として承認した記録 */
+  approved?: string;
 };
 
 export type Question = { title: string; detail: string; options: string[] };
@@ -195,6 +197,7 @@ export function renderReport(results: GoldenResult[], exceptions: Exception[]): 
     for (const f of a.findings.filter((f) => f.severity === "violation")) out.push(`- 違反：${f.message}`);
     out.push(`- 分類：${e?.category ?? "**未分類**"}${e?.needsReview ? "（人間の確認を求める）" : ""}`);
     if (e) out.push(`- 理由：${e.reason}`, ...e.evidence.map((x) => `  - ${x}`));
+    if (e?.approved) out.push(`- 承認：${e.approved}`);
     out.push("");
   }
   out.push(
@@ -226,7 +229,9 @@ export function renderNeedsReview(exceptions: Exception[], questions: Question[]
     "## 詩の分類",
     "",
   ];
-  for (const e of exceptions.filter((x) => x.needsReview)) {
+  const pending = exceptions.filter((x) => x.needsReview);
+  if (pending.length === 0) out.push("（なし）", "");
+  for (const e of pending) {
     const r = byId.get(e.poem);
     out.push(`### ${e.poem} ${r?.poem.title ?? ""}（${r?.poem.author ?? ""}）`, "");
     if (r) out.push("```", ...r.poem.lines!.map((l, i) => `${l}  ${r.analysis.symbols[i]}`), "```", "");
@@ -235,6 +240,7 @@ export function renderNeedsReview(exceptions: Exception[], questions: Question[]
     out.push("");
   }
   out.push("## そのほかの判断事項", "");
+  if (questions.length === 0) out.push("（なし）", "");
   for (const q of questions) {
     out.push(`### ${q.title}`, "", q.detail, "", ...q.options.map((o) => `- ${o}`), "");
   }
