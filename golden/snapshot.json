@@ -1,0 +1,1772 @@
+{
+  "description": "ゴールデンテストの判定結果のスナップショット（golden/golden.test.ts が GOLDEN_UPDATE=1 のときだけ書き出す）。差分が出たら理由を説明する。一括更新は人間の承認が要る（CLAUDE.md §0）。",
+  "poems": [
+    {
+      "id": "q01",
+      "title": "芙蓉樓送辛漸",
+      "author": "王昌齡",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○●○○●●○",
+        "○○●●●○○",
+        "●○◎●◎◎●",
+        "●●○○●●○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:2:0"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:2:4,5,6",
+        "violation:niroku-tsui:2:1,5",
+        "violation:pattern:2:5"
+      ]
+    },
+    {
+      "id": "q02",
+      "title": "閨怨",
+      "author": "王昌齡",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○◎●●◎○○",
+        "○●◎○●●○",
+        "●●●○○●●",
+        "●◎○□●◎○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:bou-in:2:3",
+        "check:supplement-reading:0:0",
+        "check:unknown-char:3:3"
+      ],
+      "readingDependent": [
+        "check:bou-in:0:4",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:hanpo-nenpo:3:1",
+        "violation:ka-sanren-hei:0:4,5,6",
+        "violation:kohei:1:3",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:4",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q03",
+      "title": "春宮曲",
+      "author": "王昌齡",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○○●●○",
+        "●○○●●○○",
+        "○○○●○○●",
+        "○●○○●●○"
+      ],
+      "interpretations": 1,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": []
+    },
+    {
+      "id": "q04",
+      "title": "九月九日憶山東兄弟",
+      "author": "王維",
+      "form": {
+        "id": "sokki-funyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●●◎□●●",
+        "●○○●●◎◎",
+        "○○○●○○●",
+        "□●○○●●○"
+      ],
+      "interpretations": 8,
+      "independent": false,
+      "findings": [
+        "check:douji:0:2,5",
+        "check:supplement-reading:3:2",
+        "check:unknown-char:0:4",
+        "check:unknown-char:3:0",
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:2"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:1:4,5,6",
+        "check:supplement-reading:0:3",
+        "violation:niroku-tsui:1:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:1:5",
+        "violation:rhyme-tone:1:6"
+      ]
+    },
+    {
+      "id": "q05",
+      "title": "涼州詞",
+      "author": "王翰",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "□○●●●○○",
+        "●●○○●●○",
+        "●●○○○●●",
+        "●○◎●◎○◎"
+      ],
+      "interpretations": 24,
+      "independent": false,
+      "findings": [
+        "check:bou-in:3:1",
+        "check:supplement-reading:1:2",
+        "check:unknown-char:0:0",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:3:4,5,6",
+        "violation:pattern:3:4",
+        "violation:rhyme-tone:3:6"
+      ]
+    },
+    {
+      "id": "q06",
+      "title": "後宮詞",
+      "author": "白居易",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○○◎◎○",
+        "●◎○●●○○",
+        "○○●●○◎●",
+        "○●○◎●●○"
+      ],
+      "interpretations": 64,
+      "independent": false,
+      "findings": [
+        "check:supplement-reading:0:1",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:hanpo-nenpo:2:1",
+        "violation:ka-sanren-hei:0:4,5,6",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:1:1,5",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:2:5",
+        "violation:pattern:3:3"
+      ]
+    },
+    {
+      "id": "q07",
+      "title": "宮中詞",
+      "author": "朱慶餘",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○○●●○",
+        "●○◎◎●○○",
+        "○○●●○◎●",
+        "○●○○◎●○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:douji:0:0,1",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "violation:kohei:1:3",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:1:3",
+        "violation:pattern:2:5"
+      ]
+    },
+    {
+      "id": "q08",
+      "title": "近試上張水部",
+      "author": "朱慶餘",
+      "form": {
+        "id": "heiki-funyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●○●●○○●",
+        "●●○○●●○",
+        "○◎○○●○□",
+        "●○◎●●○○"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "check:bou-in:2:5",
+        "check:unknown-char:2:6",
+        "variant:hasami-hei:2:4,5,6",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:2:1",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:2:1",
+        "violation:hanpo-nenpo:3:1",
+        "violation:nishi-fudo:2:1,3",
+        "violation:pattern:2:1"
+      ]
+    },
+    {
+      "id": "q09",
+      "title": "逢入京使",
+      "author": "岑參",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "●○○◎●◎◎",
+        "○●◎○●◎○",
+        "●●◎○○●●",
+        "○○◎●●○○"
+      ],
+      "interpretations": 512,
+      "independent": false,
+      "findings": [
+        "check:douji:0:5,6",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0"
+      ],
+      "readingDependent": [
+        "check:bou-in:0:5",
+        "check:bou-in:3:2",
+        "check:bou-in:3:5",
+        "check:ka-sanren-soku:0:4,5,6",
+        "violation:kohei:1:3",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:1:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:5",
+        "violation:rhyme-group:0:6",
+        "violation:rhyme-group:3:6"
+      ]
+    },
+    {
+      "id": "q10",
+      "title": "黃鶴樓送孟浩然之廣陵",
+      "author": "李白",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●○○○○●○",
+        "○○◎●●○○",
+        "○◎●●●○●",
+        "◎●◎○○●○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "check:youtai:-1:",
+        "variant:hasami-hei:2:4,5,6",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2",
+        "violation:hanpo-nenpo:1:1",
+        "violation:niroku-tsui:0:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:4",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:3",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:4",
+        "violation:pattern:3:5"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:3:0",
+        "violation:hanpo-nenpo:2:1",
+        "violation:hanpo-nenpo:3:1",
+        "violation:nishi-fudo:2:1,3",
+        "violation:pattern:2:1"
+      ]
+    },
+    {
+      "id": "q11",
+      "title": "早發白帝城",
+      "author": "李白",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○○●●●○◎",
+        "○●○○●●○",
+        "●●□○□◎●",
+        "◎○●◎●◎○"
+      ],
+      "interpretations": 512,
+      "independent": false,
+      "findings": [
+        "check:unknown-char:2:2",
+        "check:unknown-char:2:4",
+        "variant:ichisango-furon:1:0"
+      ],
+      "readingDependent": [
+        "check:bou-in:1:0",
+        "violation:kohei:3:3",
+        "violation:niroku-tsui:2:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5",
+        "violation:rhyme-group:0:6",
+        "violation:rhyme-group:3:6"
+      ]
+    },
+    {
+      "id": "q12",
+      "title": "夜上受降城聞笛",
+      "author": "李益",
+      "form": {
+        "id": "sokki-funyuin",
+        "auto": true
+      },
+      "symbols": [
+        "◎●○○○●●",
+        "●◎○●●◎○",
+        "◎○○●◎○●",
+        "●●◎○●◎◎"
+      ],
+      "interpretations": 384,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:2"
+      ],
+      "readingDependent": [
+        "check:bou-in:3:5",
+        "check:ka-sanren-soku:3:4,5,6",
+        "check:supplement-reading:3:6",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:hanpo-nenpo:2:1",
+        "violation:kohei:3:3",
+        "violation:niroku-tsui:1:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:1:1",
+        "violation:pattern:1:5",
+        "violation:pattern:3:5",
+        "violation:rhyme-tone:3:6"
+      ]
+    },
+    {
+      "id": "q13",
+      "title": "賈生",
+      "author": "李商隱",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○●○○●●○",
+        "●○○◎◎○○",
+        "●○●●○○●",
+        "◎●◎○●●○"
+      ],
+      "interpretations": 64,
+      "independent": false,
+      "findings": [
+        "check:douji:1:1",
+        "check:douji:3:1,4",
+        "check:douji:3:3",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:0"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:1:4,5,6",
+        "violation:kohei:3:3",
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:1:3",
+        "violation:pattern:1:4"
+      ]
+    },
+    {
+      "id": "q14",
+      "title": "隋宮",
+      "author": "李商隱",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "◎◎○○◎●○",
+        "●◎○●●○○",
+        "○○●●◎○●",
+        "●●◎◎●●◎"
+      ],
+      "interpretations": 1024,
+      "independent": false,
+      "findings": [
+        "check:douji:3:0,4",
+        "check:douji:3:1,5",
+        "check:supplement-reading:0:3"
+      ],
+      "readingDependent": [
+        "check:bou-in:0:2",
+        "check:ka-sanren-soku:3:4,5,6",
+        "check:kogan-nyugun:0:6",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:hanpo-nenpo:2:1",
+        "violation:kohei:3:3",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:1:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:nishi-fudo:1:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:4",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5",
+        "violation:rhyme-group:0:6",
+        "violation:rhyme-group:3:6",
+        "violation:rhyme-tone:3:6"
+      ]
+    },
+    {
+      "id": "q15",
+      "title": "瑤池",
+      "author": "李商隱",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○○◎●○○",
+        "○●○○●●○",
+        "●●●◎◎●●",
+        "●◎○●◎◎○"
+      ],
+      "interpretations": 128,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:2:4,5,6",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:3:1",
+        "violation:ka-sanren-hei:3:4,5,6",
+        "violation:kohei:2:3",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:nishi-fudo:2:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:2:3",
+        "violation:pattern:2:4",
+        "violation:pattern:3:1",
+        "violation:pattern:3:4",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q16",
+      "title": "嫦娥",
+      "author": "李商隱",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○◎◎○●●◎",
+        "◎○◎●●○◎",
+        "○○◎●○○●",
+        "●●○○●●○"
+      ],
+      "interpretations": 256,
+      "independent": false,
+      "findings": [
+        "check:douji:3:4,5"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:0:4,5,6",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:kohei:0:3",
+        "violation:niroku-tsui:0:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:4",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5",
+        "violation:rhyme-tone:1:6"
+      ]
+    },
+    {
+      "id": "q17",
+      "title": "夜雨寄北",
+      "author": "李商隱",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○●○○●●○",
+        "○○●●◎○○",
+        "○◎◎●○○●",
+        "●●○○●●○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "check:bou-in:0:3",
+        "check:douji:0:3,6",
+        "check:douji:1:0",
+        "check:douji:1:1",
+        "check:douji:1:2",
+        "check:douji:1:3",
+        "check:douji:3:2",
+        "check:douji:3:3",
+        "check:douji:3:4",
+        "check:douji:3:5",
+        "check:supplement-reading:2:3",
+        "check:supplement-reading:3:0",
+        "variant:ichisango-furon:0:0"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:1:4",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:2:1",
+        "violation:hanpo-nenpo:3:1",
+        "violation:ka-sanren-hei:1:4,5,6",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:2:1,3",
+        "violation:pattern:1:4",
+        "violation:pattern:2:1"
+      ]
+    },
+    {
+      "id": "q18",
+      "title": "寄令狐郎中",
+      "author": "李商隱",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○○●●◎○",
+        "○●○○●●○",
+        "○●○○●○●",
+        "●○○●●◎◎"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:douji:1:2,3",
+        "variant:hasami-hei:2:4,5,6",
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:3:4,5,6",
+        "check:kogan-nyugun:0:6",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:pattern:0:5",
+        "violation:pattern:3:5",
+        "violation:rhyme-group:0:6",
+        "violation:rhyme-tone:3:6"
+      ]
+    },
+    {
+      "id": "q19",
+      "title": "爲有",
+      "author": "李商隱",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "□●○◎○●◎",
+        "●○○●●○○",
+        "○○●●○○□",
+        "○●○○●●○"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "check:douji:0:4",
+        "check:douji:2:0",
+        "check:unknown-char:0:0",
+        "check:unknown-char:2:6",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3"
+      ]
+    },
+    {
+      "id": "q20",
+      "title": "江南逢李龜年",
+      "author": "杜甫",
+      "form": {
+        "id": "heiki-funyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○◎●●○○●",
+        "○●○○◎●◎",
+        "◎●○○●○●",
+        "●○○●●○○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [],
+      "readingDependent": [
+        "check:ka-sanren-soku:1:4,5,6",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:4",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5",
+        "violation:rhyme-tone:1:6"
+      ]
+    },
+    {
+      "id": "q21",
+      "title": "贈別·其一",
+      "author": "杜牧",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "◎◎●●●◎○",
+        "●●○○●●○",
+        "○○●●○○●",
+        "◎●○○●◎◎"
+      ],
+      "interpretations": 384,
+      "independent": false,
+      "findings": [
+        "check:douji:0:0,1",
+        "check:douji:0:2,3",
+        "check:douji:0:4",
+        "check:douji:2:2",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:2:1"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:3:4,5,6",
+        "check:supplement-reading:1:0",
+        "check:supplement-reading:3:0",
+        "violation:hanpo-nenpo:1:1",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5",
+        "violation:rhyme-tone:3:6"
+      ]
+    },
+    {
+      "id": "q22",
+      "title": "贈別·其二",
+      "author": "杜牧",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○●●●○○",
+        "◎●○○●◎○",
+        "●●●○○●●",
+        "●○○●●○○"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "check:bou-in:0:1",
+        "check:douji:0:1,6",
+        "check:supplement-reading:0:2",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:1:0",
+        "violation:niroku-tsui:1:1,5",
+        "violation:pattern:1:5"
+      ]
+    },
+    {
+      "id": "q23",
+      "title": "金谷園",
+      "author": "杜牧",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○◎●●●○○",
+        "○●○○●●○",
+        "●●○○◎□●",
+        "●○◎●◎○○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "check:unknown-char:2:5"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:0:1",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:ka-sanren-hei:3:4,5,6",
+        "violation:niroku-tsui:0:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:4",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:4",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q24",
+      "title": "寄揚州韓綽判官",
+      "author": "杜牧",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○●●●○○",
+        "○●○○●●○",
+        "●●●○○●●",
+        "●○○●◎◎○"
+      ],
+      "interpretations": 8,
+      "independent": false,
+      "findings": [
+        "check:bou-in:0:5",
+        "check:bou-in:2:3",
+        "check:douji:0:2,3",
+        "check:douji:0:5,6",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:3:4,5,6",
+        "violation:niroku-tsui:3:1,5",
+        "violation:pattern:3:4",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q25",
+      "title": "遣懷",
+      "author": "杜牧",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "●●○○●●◎",
+        "●○○●●◎◎",
+        "●○●●○○◎",
+        "○●○○●●○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:bou-in:3:0",
+        "check:supplement-reading:3:5",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:0:4,5,6",
+        "check:ka-sanren-soku:1:4,5,6",
+        "check:kogan-nyugun:0:6",
+        "violation:ka-sanren-hei:2:4,5,6",
+        "violation:niroku-tsui:1:1,5",
+        "violation:pattern:0:4",
+        "violation:pattern:1:5",
+        "violation:pattern:2:6",
+        "violation:rhyme-group:0:6",
+        "violation:rhyme-tone:1:6"
+      ]
+    },
+    {
+      "id": "q26",
+      "title": "秋夕",
+      "author": "杜牧",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○●○○●●◎",
+        "◎○●◎●○○",
+        "○○●●○◎●",
+        "●◎◎○●●○"
+      ],
+      "interpretations": 256,
+      "independent": false,
+      "findings": [
+        "check:supplement-reading:1:4",
+        "variant:ichisango-furon:0:0"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:0:4,5,6",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:3:1",
+        "violation:kohei:1:3",
+        "violation:kohei:3:3",
+        "violation:niroku-tsui:2:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:0:4",
+        "violation:pattern:1:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1"
+      ]
+    },
+    {
+      "id": "q27",
+      "title": "將赴吳興登樂遊原一絕",
+      "author": "杜牧",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○●●●○○",
+        "○●○○●●○",
+        "●●●○○●●",
+        "●○○●◎◎○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "check:douji:1:1,5",
+        "check:supplement-reading:3:1",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:kogan-nyugun:0:6",
+        "violation:ka-sanren-hei:3:4,5,6",
+        "violation:niroku-tsui:3:1,5",
+        "violation:pattern:3:4",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q28",
+      "title": "赤壁",
+      "author": "杜牧",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "◎●◎○●●○",
+        "●◎◎●●○○",
+        "○○◎◎○○◎",
+        "○●○◎□●○"
+      ],
+      "interpretations": 20,
+      "independent": true,
+      "findings": [
+        "check:unknown-char:3:4",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:hanpo-nenpo:2:1",
+        "violation:kohei:0:3",
+        "violation:niroku-tsui:1:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:nishi-fudo:2:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:1:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:6",
+        "violation:pattern:3:3"
+      ]
+    },
+    {
+      "id": "q29",
+      "title": "泊秦淮",
+      "author": "杜牧",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "○◎○●●◎○",
+        "●●○○●●○",
+        "○●◎○○●●",
+        "●○◎●●◎○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:douji:0:1,5"
+      ],
+      "readingDependent": [
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q30",
+      "title": "徵人怨",
+      "author": "柳中庸",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○○●●○",
+        "○○●●◎○○",
+        "◎○●●○○◎",
+        "●●○○●●○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "check:douji:0:0,1",
+        "check:douji:0:3",
+        "check:douji:1:0,1",
+        "check:douji:3:3"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:1:4,5,6",
+        "violation:ka-sanren-hei:2:4,5,6",
+        "violation:pattern:1:4",
+        "violation:pattern:2:6"
+      ]
+    },
+    {
+      "id": "q31",
+      "title": "金陵圖",
+      "author": "韋莊",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○●○○●◎○",
+        "●○○●●○○",
+        "○◎●●○○●",
+        "●●○○●●○"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "check:douji:0:3",
+        "check:douji:0:4",
+        "check:douji:1:0",
+        "check:douji:1:1,5",
+        "check:douji:1:2",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2"
+      ],
+      "readingDependent": [
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:2:1",
+        "violation:hanpo-nenpo:3:1",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:2:1,3",
+        "violation:pattern:0:5",
+        "violation:pattern:2:1"
+      ]
+    },
+    {
+      "id": "q32",
+      "title": "滁州西澗",
+      "author": "韋應物",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●○○●●○○",
+        "●●○○◎●○",
+        "○○●●●○●",
+        "●●○○○●◎"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "check:youtai:-1:",
+        "variant:hasami-hei:2:4,5,6",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2",
+        "violation:hanpo-nenpo:2:1",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:4",
+        "violation:pattern:3:5"
+      ],
+      "readingDependent": [
+        "violation:rhyme-tone:3:6"
+      ]
+    },
+    {
+      "id": "q33",
+      "title": "桃花溪",
+      "author": "張旭",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○○●●○",
+        "●○○●●○○",
+        "○○●●○○●",
+        "●●○○○●○"
+      ],
+      "interpretations": 1,
+      "independent": false,
+      "findings": [
+        "check:douji:0:0,1",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:3:4"
+      ],
+      "readingDependent": []
+    },
+    {
+      "id": "q34",
+      "title": "寄人",
+      "author": "張泌",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "●◎○○●●○",
+        "●○□●●○○",
+        "○○◎●○◎●",
+        "◎□◎○●●○"
+      ],
+      "interpretations": 256,
+      "independent": false,
+      "findings": [
+        "check:douji:0:2,3",
+        "check:unknown-char:1:2",
+        "check:unknown-char:3:1"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:2:2",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:kohei:3:3",
+        "violation:niroku-tsui:0:1,5",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q35",
+      "title": "題金陵渡",
+      "author": "張祜",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○○●●○○",
+        "●●◎○●●○",
+        "○●●○○●●",
+        "●◎○●●○○"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:3:1",
+        "violation:kohei:1:3",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:3:1"
+      ]
+    },
+    {
+      "id": "q36",
+      "title": "贈內人",
+      "author": "張祜",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "◎○○●●○◎",
+        "●●◎◎●◎○",
+        "○●●○○●●",
+        "●○○●●○○"
+      ],
+      "interpretations": 64,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:1:2",
+        "check:supplement-reading:3:3",
+        "violation:kohei:1:3",
+        "violation:niroku-tsui:1:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:1:3",
+        "violation:pattern:1:5"
+      ]
+    },
+    {
+      "id": "q37",
+      "title": "集靈臺·其一",
+      "author": "張祜",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●○○●●○○",
+        "○●○◎●●○",
+        "●●●○○●●",
+        "●○○●●○○"
+      ],
+      "interpretations": 2,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:1:3"
+      ]
+    },
+    {
+      "id": "q38",
+      "title": "集靈臺·其二",
+      "author": "張祜",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○○○●○",
+        "○○◎●●○○",
+        "●○○●◎○●",
+        "●□○○○●○"
+      ],
+      "interpretations": 6,
+      "independent": false,
+      "findings": [
+        "check:supplement-reading:2:0",
+        "check:unknown-char:3:1",
+        "variant:ichisango-furon:0:4",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:4"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:2:4"
+      ]
+    },
+    {
+      "id": "q39",
+      "title": "楓橋夜泊",
+      "author": "張繼",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●●○□○●○",
+        "○○○●●○○",
+        "○○○●○○●",
+        "●●○○●●○"
+      ],
+      "interpretations": 1,
+      "independent": false,
+      "findings": [
+        "check:unknown-char:0:3",
+        "variant:ichisango-furon:0:4",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:2"
+      ],
+      "readingDependent": []
+    },
+    {
+      "id": "q40",
+      "title": "隴西行",
+      "author": "陳陶",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true,
+        "note": "起句の2字目が決まらないため、承句の2字目から反法・粘法で起式を推定しました。"
+      },
+      "symbols": [
+        "●□○○◎●○",
+        "●○○●◎○○",
+        "●○○●○○●",
+        "◎●○○◎●○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:bou-in:3:2",
+        "check:supplement-reading:3:3",
+        "check:unknown-char:0:1",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:1:4,5,6",
+        "violation:pattern:1:4"
+      ]
+    },
+    {
+      "id": "q41",
+      "title": "雜詩",
+      "author": "佚名",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●○●●●○○",
+        "●●○○●●○",
+        "●●●○○●●",
+        "●○○●●○□"
+      ],
+      "interpretations": 3,
+      "independent": false,
+      "findings": [
+        "check:bou-in:0:5",
+        "check:douji:0:5,6",
+        "check:unknown-char:3:6",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": []
+    },
+    {
+      "id": "q42",
+      "title": "回鄉偶書·其一",
+      "author": "賀知章",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "●●◎○●●◎",
+        "◎○◎●●○○",
+        "◎○◎●◎◎●",
+        "●●●◎○●○"
+      ],
+      "interpretations": 768,
+      "independent": false,
+      "findings": [
+        "check:douji:2:2,5",
+        "variant:ichisango-furon:3:2",
+        "variant:ichisango-furon:3:4",
+        "violation:rhyme-group:3:6"
+      ],
+      "readingDependent": [
+        "check:bou-in:0:2",
+        "check:bou-in:2:0",
+        "check:ka-sanren-soku:0:4,5,6",
+        "check:ka-sanren-soku:2:4,5,6",
+        "check:supplement-reading:1:0",
+        "violation:kohei:0:3",
+        "violation:niroku-tsui:2:1,5",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:0:4",
+        "violation:pattern:2:5",
+        "violation:pattern:3:3",
+        "violation:rhyme-group:0:6"
+      ]
+    },
+    {
+      "id": "q43",
+      "title": "瑤瑟怨",
+      "author": "溫庭筠",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○●○□◎◎○",
+        "●○◎●●○◎",
+        "●○●◎○○●",
+        "●●○◎●●○"
+      ],
+      "interpretations": 64,
+      "independent": false,
+      "findings": [
+        "check:bou-in:2:1",
+        "check:supplement-reading:2:0",
+        "check:unknown-char:0:3",
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:0"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:0:4,5,6",
+        "violation:niroku-tsui:0:1,5",
+        "violation:nishi-fudo:2:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:0:5",
+        "violation:pattern:2:3",
+        "violation:pattern:3:3",
+        "violation:rhyme-tone:1:6"
+      ]
+    },
+    {
+      "id": "q44",
+      "title": "月夜",
+      "author": "劉方平",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true,
+        "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
+      },
+      "symbols": [
+        "◎◎●●●○○",
+        "●●○◎○●○",
+        "○●○○○●●",
+        "○○○●●○○"
+      ],
+      "interpretations": 96,
+      "independent": false,
+      "findings": [
+        "check:douji:1:1,5",
+        "check:supplement-reading:2:6"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:1:1",
+        "check:supplement-reading:1:3",
+        "check:supplement-reading:1:5",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:niroku-tsui:0:1,5",
+        "violation:nishi-fudo:0:1,3",
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:0:3",
+        "violation:pattern:0:5",
+        "violation:pattern:1:1",
+        "violation:pattern:1:3",
+        "violation:pattern:1:4",
+        "violation:pattern:1:5",
+        "violation:pattern:2:1",
+        "violation:pattern:2:3",
+        "violation:pattern:2:5",
+        "violation:pattern:3:1",
+        "violation:pattern:3:3",
+        "violation:pattern:3:5"
+      ]
+    },
+    {
+      "id": "q45",
+      "title": "春怨",
+      "author": "劉方平",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○●●◎○○",
+        "○●○○●●○",
+        "●●◎◎○●●",
+        "○○●●◎○○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "check:supplement-reading:2:1",
+        "variant:ichisango-furon:1:0"
+      ],
+      "readingDependent": [
+        "violation:ka-sanren-hei:0:4,5,6",
+        "violation:ka-sanren-hei:3:4,5,6",
+        "violation:nishi-fudo:2:1,3",
+        "violation:pattern:0:4",
+        "violation:pattern:2:3",
+        "violation:pattern:3:4"
+      ]
+    },
+    {
+      "id": "q46",
+      "title": "烏衣巷",
+      "author": "劉禹錫",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○●○○●●○",
+        "○◎●●●○○",
+        "●○◎●○○◎",
+        "○●○○●●○"
+      ],
+      "interpretations": 16,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:3:0"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:0:0",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:1:1",
+        "violation:hanpo-nenpo:2:1",
+        "violation:ka-sanren-hei:2:4,5,6",
+        "violation:niroku-tsui:1:1,5",
+        "violation:nishi-fudo:1:1,3",
+        "violation:pattern:1:1",
+        "violation:pattern:2:6"
+      ]
+    },
+    {
+      "id": "q47",
+      "title": "春詞",
+      "author": "劉禹錫",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○●●●○○",
+        "◎●○○●●○",
+        "◎●◎◎●○●",
+        "○◎○●●○○"
+      ],
+      "interpretations": 64,
+      "independent": false,
+      "findings": [
+        "check:douji:0:2,3",
+        "variant:hasami-hei:2:4,5,6",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:0:5",
+        "check:youtai:-1:",
+        "violation:hanpo-nenpo:3:1",
+        "violation:kohei:2:3",
+        "violation:niroku-tsui:3:1,5",
+        "violation:nishi-fudo:2:1,3",
+        "violation:nishi-fudo:3:1,3",
+        "violation:pattern:2:3",
+        "violation:pattern:3:1"
+      ]
+    },
+    {
+      "id": "q48",
+      "title": "馬嵬坡",
+      "author": "鄭畋",
+      "form": {
+        "id": "heiki-funyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○◎●○◎●",
+        "○●○○●●○",
+        "○●●○○●●",
+        "●○○●●○○"
+      ],
+      "interpretations": 4,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:2:0",
+        "variant:ichisango-furon:2:2",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:0:5",
+        "violation:niroku-tsui:0:1,5",
+        "violation:pattern:0:5"
+      ]
+    },
+    {
+      "id": "q49",
+      "title": "寒食",
+      "author": "韓翃",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "○○○●◎○○",
+        "○●○○●●○",
+        "●●◎○◎●●",
+        "◎○●●●○○"
+      ],
+      "interpretations": 32,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:2",
+        "variant:ichisango-furon:1:0"
+      ],
+      "readingDependent": [
+        "check:ka-sanren-soku:2:4,5,6",
+        "check:supplement-reading:2:2",
+        "violation:ka-sanren-hei:0:4,5,6",
+        "violation:kohei:2:3",
+        "violation:pattern:0:4",
+        "violation:pattern:2:4"
+      ]
+    },
+    {
+      "id": "q50",
+      "title": "已涼",
+      "author": "韓偓",
+      "form": {
+        "id": "heiki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "●○◎●●○○",
+        "○●◎○●◎○",
+        "●●◎○○●●",
+        "●○○●●○○"
+      ],
+      "interpretations": 72,
+      "independent": false,
+      "findings": [
+        "variant:ichisango-furon:0:0",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:3:0",
+        "variant:ichisango-furon:3:2"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:0:2",
+        "violation:kohei:1:3",
+        "violation:niroku-tsui:1:1,5",
+        "violation:pattern:1:5"
+      ]
+    },
+    {
+      "id": "q51",
+      "title": "宮詞",
+      "author": "顧況",
+      "form": {
+        "id": "sokki-nyuin",
+        "auto": true
+      },
+      "symbols": [
+        "◎●○○●●○",
+        "●○○●●○○",
+        "○○●●○○●",
+        "◎●○○●●○"
+      ],
+      "interpretations": 8,
+      "independent": false,
+      "findings": [
+        "check:douji:0:2",
+        "check:douji:3:2",
+        "variant:ichisango-furon:1:0",
+        "variant:ichisango-furon:1:2"
+      ],
+      "readingDependent": [
+        "check:supplement-reading:3:0"
+      ]
+    }
+  ]
+}
