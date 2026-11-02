@@ -3,18 +3,22 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { analyze, constraintsAt, placementsFor, searchPhrases } from "../packages/engine/src/index";
-import type { EngineData, Options, PhraseEntry, Placement } from "../packages/engine/src/types";
+import type { CharInfo, EngineData, Options, PhraseEntry, Placement } from "../packages/engine/src/types";
 import { loadEngineData } from "../golden/golden";
 
 const root = new URL("../", import.meta.url);
 const data: EngineData = loadEngineData();
 const index: { chars: Record<string, { file: string }> } = JSON.parse(readFileSync(new URL("data/phrases/index.json", root), "utf-8"));
 
+function loadPhraseGroups(file: string): Record<string, PhraseEntry[]> {
+  return JSON.parse(readFileSync(new URL(`data/phrases/${file}`, root), "utf-8"));
+}
+
 /** 頻度表から語を引く（先頭の字のファイルだけを読む） */
 function lookup(word: string): PhraseEntry | undefined {
   const info = index.chars[[...word][0]!];
   if (info === undefined) return undefined;
-  const groups: Record<string, PhraseEntry[]> = JSON.parse(readFileSync(new URL(`data/phrases/${info.file}`, root), "utf-8"));
+  const groups = loadPhraseGroups(info.file);
   return groups[String([...word].length)]?.find((e) => e.w === word);
 }
 
@@ -25,10 +29,15 @@ const MARK: Record<Placement["status"], string> = { ok: "○ 置ける", depends
 const EMPTY = Array(4).fill("＿＿＿＿＿＿＿").join("\n");
 const PARTIAL = ["昨夜風開露井桃", "未央前殿月輪高", "＿＿＿＿＿＿＿", "簾外春寒＿＿＿"].join("\n");
 
+function describeReadings(char: CharInfo): string {
+  const readings = char.readings.map((r) => `${r.tone}・${r.rhyme}${r.note ?? ""}${r.via ? `（${r.via}として）` : ""}`);
+  return `${char.char}：${readings.length > 0 ? readings.join("／") : "平仄データにない"}`;
+}
+
 function wordSection(word: string): string[] {
   const e = lookup(word);
   const a = analyze(word, data);
-  const readings = a.chars[0]!.map((c) => `${c.char}：${c.readings.length > 0 ? c.readings.map((r) => `${r.tone}・${r.rhyme}${r.note ?? ""}${r.via ? `（${r.via}として）` : ""}`).join("／") : "平仄データにない"}`);
+  const readings = a.chars[0]!.map(describeReadings);
   const out = [`### ${word}`, "", `- 平仄データ：${readings.join("　")}`];
   if (e === undefined) {
     out.push("- 頻度表：唐詩の用例なし（CLAUDE.md §4.4：表示するだけで、拒否しない）");
@@ -51,17 +60,19 @@ function placementTable(word: string, poem: string, options: Options = {}): stri
   return [`**${word}**`, "", `| 句 | ${slots.map((s) => `${s}字目`).join(" | ")} |`, `|---|${slots.map(() => "---").join("|")}|`, ...rows, "", ...reasons, ""];
 }
 
-function render(): string {
-  const partial = analyze(PARTIAL, data);
+function constraintRows(poem: string, chars: CharInfo[][]): string[] {
   const blanks: [number, number][] = [];
-  partial.chars.forEach((row, l) => row.forEach((c, p) => c.status === "blank" && blanks.push([l, p])));
-  const constraints = blanks.map(([l, p]) => {
-    const c = constraintsAt(PARTIAL, data, l, p);
+  chars.forEach((row, l) => row.forEach((c, p) => c.status === "blank" && blanks.push([l, p])));
+  return blanks.map(([l, p]) => {
+    const c = constraintsAt(poem, data, l, p);
     const rhyme = c.rhyme.position ? `押韻の位置（韻目：${c.rhyme.groups.join("・") || "未定"}）` : "";
     const why = c.options.filter((o) => !o.ok).map((o) => `${o.pz}だと「${o.violations.map((f) => f.message).join(" ")}」`).join("。");
     return `| ${LINE_NAMES[l]}の${p + 1}字目 | ${c.required ?? "どちらでも"} | ${rhyme} | ${why} |`;
   });
+}
 
+function render(): string {
+  const partial = analyze(PARTIAL, data);
   return [
     "# 詩語の配置結果",
     "",
@@ -91,7 +102,7 @@ function render(): string {
     "",
     "| マス | 置ける平仄 | 押韻 | 置けない平仄の理由 |",
     "|---|---|---|---|",
-    ...constraints,
+    ...constraintRows(PARTIAL, partial.chars),
     "",
     "### 語を置ける位置（placementsFor）",
     "",
@@ -107,7 +118,7 @@ function searchExamples(): string[] {
   const cs = [4, 5, 6].map((p) => constraintsAt(PARTIAL, data, 3, p));
   const pattern = cs.map((c) => c.required ?? "◐").join("");
   const rhyme = cs[2]!.rhyme.groups[0];
-  const all = Object.values(index.chars).flatMap(({ file }) => (JSON.parse(readFileSync(new URL(`data/phrases/${file}`, root), "utf-8")) as Record<string, PhraseEntry[]>)["3"] ?? []);
+  const all = Object.values(index.chars).flatMap(({ file }) => loadPhraseGroups(file)["3"] ?? []);
   const hits = searchPhrases(all, rhyme === undefined ? { pattern } : { pattern, rhyme }).slice(0, 5);
   return [
     `結句の5〜7字目：平仄パターン「${pattern}」${rhyme ? `、末字の韻目「${rhyme}」` : ""}で検索した上位5件（出現回数の多い順）。`,

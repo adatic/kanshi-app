@@ -18,8 +18,11 @@ import type {
 // ---------------------------------------------------------------------------
 // 詩語の検索（§4.4）
 
-const matchesPattern = (pattern: string, p: string) =>
-  [...pattern].length === [...p].length && [...pattern].every((s, i) => s === "◐" || s === [...p][i]);
+function matchesPattern(pattern: string, candidate: string): boolean {
+  const required = [...pattern];
+  const actual = [...candidate];
+  return required.length === actual.length && required.every((symbol, i) => symbol === "◐" || symbol === actual[i]);
+}
 
 /**
  * 頻度表の語を絞り込む。読み込みはエンジンの外で行い、語の一覧を渡す。
@@ -73,6 +76,14 @@ function toGrid(input: string | readonly string[]): string[][] {
 
 /** analyze に渡す28マスの配列。文字列に戻さないので、マスの中の改行が句の区切りとして読まれない */
 const toCells = (grid: string[][]) => grid.flat();
+
+/** 元の格子を保ち、指定した位置から字を置いたコピーを返す */
+function withCells(grid: string[][], line: number, start: number, chars: readonly string[]): string[][] {
+  const copy = grid.map((row) => [...row]);
+  chars.forEach((char, i) => (copy[line]![start + i] = char));
+  return copy;
+}
+
 const keyOf = (f: Finding) => `${f.rule}|${f.severity}|${f.line}|${f.positions.join(",")}`;
 const violations = (a: Analysis) => a.findings.filter((f) => f.severity === "violation");
 const checks = (a: Analysis) => a.findings.filter((f) => f.severity === "check");
@@ -125,18 +136,20 @@ export function constraintsAt(
   const base = analyze(toCells(grid), data, options);
   const rhymePosition = isRhymePosition(base, line, pos);
   const groups = rhymePosition ? rhymeGroups(base, line) : [];
+  const used = new Set(toCells(grid));
+  const baseViolations = violations(base);
+  const baseChecks = checks(base);
 
   const tryPz = (pz: PZ) => {
     // 押韻の位置では、ほかの押韻字のどれかの韻目で違反がなければ置ける（韻目がまだなければ仮の韻目）
     const rhymes = pz === "平" && groups.length > 0 ? groups : [PROBE_RHYME];
     const results = rhymes.map((rhyme) => {
-      const probe = withProbe(data, pz, rhyme, new Set(grid.flat()));
-      const g = grid.map((row) => [...row]);
-      g[line]![pos] = probe.char;
+      const probe = withProbe(data, pz, rhyme, used);
+      const g = withCells(grid, line, pos, [probe.char]);
       const a = analyze(toCells(g), probe.data, options);
       // 文言の中の仮の字は、利用者には意味がないので「（置く字）」に置き換える
       const plain = (fs: Finding[]) => fs.map((f) => ({ ...f, message: f.message.replaceAll(probe.char, PROBE_LABEL) }));
-      return { violations: plain(newOnes(violations(a), violations(base))), checks: plain(newOnes(checks(a), checks(base))) };
+      return { violations: plain(newOnes(violations(a), baseViolations)), checks: plain(newOnes(checks(a), baseChecks)) };
     });
     const best = results.find((r) => r.violations.length === 0) ?? results[0]!;
     return { pz, ok: best.violations.length === 0, violations: best.violations, checks: best.checks };
@@ -184,6 +197,7 @@ export function placementsFor(
   const grid = toGrid(input);
   const base = analyze(toCells(grid), data, options);
   const baseAny = anyViolations(base);
+  const baseViolations = violations(base);
 
   return [0, 1, 2, 3].flatMap((line) =>
     slots.map(({ start, slot }): Placement => {
@@ -192,8 +206,7 @@ export function placementsFor(
         return existing !== BLANK && existing !== c ? [start + i] : [];
       });
       if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts, errors: [] };
-      const g = grid.map((row) => [...row]);
-      chars.forEach((c, i) => (g[line]![start + i] = c));
+      const g = withCells(grid, line, start, chars);
       const a = analyze(toCells(g), data, options);
       // 置いたマスの入力エラー（漢字以外・繰り返す字のない「々」）と、語の中の「＿」は invalid（CLAUDE.md §4.1）
       const placed = (e: InputError) => e.line === line && e.position >= start && e.position < start + chars.length;
@@ -204,7 +217,7 @@ export function placementsFor(
         ),
       ].sort((x, y) => x.position - y.position);
       if (errors.length > 0) return { line, start, slot, status: "invalid", violations: [], dependent: [], conflicts, errors };
-      const common = newOnes(violations(a), violations(base));
+      const common = newOnes(violations(a), baseViolations);
       const dependent = newOnes(anyViolations(a), baseAny).filter((f) => !common.some((c) => keyOf(c) === keyOf(f)));
       const status = common.length > 0 ? "ng" : dependent.length > 0 ? "depends" : "ok";
       return { line, start, slot, status, violations: common, dependent, conflicts, errors };
