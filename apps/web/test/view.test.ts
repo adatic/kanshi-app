@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { analyze } from "@kanshi/engine";
 import { buildView } from "../src/view";
-import { KOKUJI, RYO, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
+import { KOKUJI, RHY2, RYO, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
 
 const HN = baseLines("heiki-nyuin");
 // HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -58,9 +58,27 @@ describe("buildView", () => {
     expect(v.readingChoices).toHaveLength(1);
     const [choice] = v.readingChoices;
     expect(choice!.cell).toBe(`起句の4字目「${RYO[0]}」`);
-    const byLabel = Object.fromEntries(choice!.options.map((o) => [o.label, o.always.length]));
-    expect(byLabel).toEqual({ "平・上平二冬": 3, "去・去声二宋": 0 });
+    const byLabel = Object.fromEntries(choice!.options.map((o) => [o.label, o.always.map((f) => f.severity)]));
+    expect(byLabel).toEqual({ "平・上平二冬": ["violation", "violation", "violation"], "去・去声二宋": [] });
+    expect(choice!.options.map((o) => o.clean)).toEqual([false, true]);
     expect(v.violations).toEqual([]); // 読みによる違反は、確定の違反には入れない
+  });
+
+  it("どの読みでも出る違反があれば、読みで加わる違反がなくても clean にしない", () => {
+    // 両韻字に加えて、別の位置に国字（どの読みでも違反）
+    const v = view(replaceAt(replaceAt(HN, 0, 3, RYO[0]!), 2, 0, KOKUJI));
+    expect(v.violations.map((f) => f.rule)).toEqual(["koku-ji"]);
+    const zi = v.readingChoices[0]!.options.find((o) => o.label === "去・去声二宋")!;
+    expect([zi.always, zi.sometimes, zi.clean]).toEqual([[], [], false]);
+  });
+
+  it("一部の読みでだけ出る要確認も、読みごとの結果に出す", () => {
+    // 起句末を、押韻で韻目 A と B の読みを持つ字にする（B なら孤雁入群格の可能性）
+    const v = view(replaceAt(HN, 0, 6, RHY2));
+    const options = v.readingChoices[0]!.options;
+    const kogan = options.flatMap((o) => o.always).filter((f) => f.ruleName === "孤雁入群格の可能性");
+    expect(kogan).toHaveLength(1);
+    expect(kogan[0]!.severity).toBe("check");
   });
 
   it("入力エラーを文で返す", () => {

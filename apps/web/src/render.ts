@@ -1,6 +1,6 @@
 // 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
 import type { Severity } from "@kanshi/engine";
-import type { FindingView, PoemView } from "./view";
+import type { FindingView, PoemView, ReadingFindingView } from "./view";
 
 type Attrs = Record<string, string>;
 
@@ -108,27 +108,28 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
           h(
             "ul",
             {},
-            ...c.options.map((o) =>
-              h(
+            ...c.options.map((o) => {
+              const item = (f: ReadingFindingView) =>
+                h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`);
+              const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
+              return h(
                 "li",
                 {},
                 h("span", { class: "label" }, o.label),
-                o.always.length === 0 && o.sometimes.length === 0
-                  ? h("span", { class: "result ok" }, "この読みなら違反なし")
+                nothingAdded
+                  ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
                   : null,
-                o.always.length > 0
-                  ? h("ul", { class: "always" }, ...o.always.map((m) => h("li", {}, h("span", { class: "mark", "aria-hidden": "true" }, "✕"), m)))
-                  : null,
+                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(item)) : null,
                 o.sometimes.length > 0
                   ? h(
                       "details",
                       { class: "sometimes" },
-                      h("summary", {}, `ほかの字の読みによっては出る違反（${o.sometimes.length}件）`),
-                      h("ul", {}, ...o.sometimes.map((m) => h("li", {}, m))),
+                      h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
+                      h("ul", {}, ...o.sometimes.map(item)),
                     )
                   : null,
-              ),
-            ),
+              );
+            }),
           ),
         ),
       ),

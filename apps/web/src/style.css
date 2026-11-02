@@ -387,10 +387,19 @@ h4 {
   padding: 0;
   font-size: 0.85rem;
 }
-.choice .always .mark {
-  color: var(--shu);
+.choice .mark {
   font-weight: 700;
   margin-right: 6px;
+}
+.choice .mark.sev-violation {
+  color: var(--shu);
+}
+.choice .mark.sev-check {
+  color: var(--odo);
+}
+.choice .result {
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 .choice .sometimes {
   font-size: 0.85rem;
@@ -401,8 +410,9 @@ h4 {
   cursor: pointer;
 }
 .choice .sometimes ul {
+  list-style: none;
   margin: 2px 0 0;
-  padding-left: 1.2em;
+  padding-left: 1em;
 }
 .errors {
   border-color: var(--shu) !important;
