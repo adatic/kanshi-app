@@ -674,3 +674,121 @@ h4 {
     transition: background-color 0.15s;
   }
 }
+
+/* 選んだマスの条件と詩語候補 */
+.assist {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.assist h3 {
+  margin: 10px 0 2px;
+  font-size: 0.9rem;
+}
+.constraint > li.ng {
+  color: var(--shu);
+}
+.constraint .problems {
+  list-style: none;
+  margin: 2px 0 4px 2.2em;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.constraint .problems.checks {
+  color: var(--odo);
+}
+.assist .rhyme {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+}
+.slot-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+.slot-tabs button[aria-pressed="true"] {
+  border-color: var(--ai);
+  background: var(--ai-soft);
+  color: var(--ai);
+  font-weight: 600;
+}
+.cands {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.cand {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--line);
+}
+.cand .place {
+  grid-row: span 2;
+  align-self: center;
+}
+.cand-word {
+  font-family: var(--f-han);
+  font-size: 1.25rem;
+  margin-right: 6px;
+}
+.cand-meta {
+  grid-column: 2;
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-width: 0;
+}
+.cand details,
+.usage details {
+  grid-column: 2;
+  font-size: 0.8rem;
+}
+.cand summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.cand .depends summary {
+  color: var(--odo);
+}
+.cand details ul {
+  margin: 2px 0 0;
+  padding-left: 1em;
+}
+.examples {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+.examples .ex-line {
+  font-family: var(--f-han);
+  margin-right: 6px;
+}
+.examples .ex-src {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.usage p {
+  margin: 4px 0;
+}
+button.more {
+  justify-self: start;
+  margin-top: 4px;
+}
+.settings select {
+  width: 100%;
+  min-width: 0;
+}
+.settings .options > * {
+  min-width: 0;
+}

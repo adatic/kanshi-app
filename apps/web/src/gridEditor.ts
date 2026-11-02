@@ -11,6 +11,8 @@ export type GridEditor = {
   /** 判定結果を表示に反映する */
   refresh(view: PoemView, showPattern: boolean): void;
   focus(index: number): void;
+  /** 語をマス目に入れ（onChange を呼ぶ）、focusAt のマスを選ぶ */
+  place(index: number, text: string, focusAt: number): void;
 };
 
 const LINE_NAMES = ["起句", "承句", "転句", "結句"];
@@ -43,7 +45,7 @@ export function gridEditor(opts: {
     write(i, value);
   };
 
-  const write = (i: number, value: string) => {
+  const write = (i: number, value: string, focusAt?: number) => {
     const r = writeAt(grid, i, value);
     const messages: string[] = [];
     if (r.rejected.length > 0) messages.push(`「${r.rejected.join("」「")}」は漢字ではないので、マスに入れていません。`);
@@ -52,7 +54,7 @@ export function gridEditor(opts: {
     grid = r.grid;
     for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
     opts.onChange([...grid]);
-    focus(r.next);
+    focus(focusAt ?? r.next);
   };
 
   const lines = Array.from({ length: CELLS / WIDTH }, (_, l) => {
@@ -166,5 +168,6 @@ export function gridEditor(opts: {
       });
     },
     focus,
+    place: (index, text, focusAt) => write(index, text, focusAt),
   };
 }

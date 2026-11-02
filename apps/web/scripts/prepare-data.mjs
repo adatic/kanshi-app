@@ -10,4 +10,6 @@ const FILES = ["chars.json", "variants.json", "kokuji.json", "forms.json", "rule
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 for (const f of FILES) cpSync(`${root}data/${f}`, `${out}${f}`);
-console.log(`データを用意した（${FILES.length}ファイル）`);
+// 詩語頻度表（先頭の字ごとのファイルと、平仄パターンの探索用の索引）。画面は必要なファイルだけを読む
+cpSync(`${root}data/phrases`, `${out}phrases`, { recursive: true });
+console.log(`データを用意した（${FILES.length}ファイルと詩語頻度表）`);
