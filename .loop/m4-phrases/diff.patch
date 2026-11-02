@@ -483,18 +483,20 @@ index 0000000..62454e9
 +    sys.exit(main())
 diff --git a/scripts/test_build_phrases.py b/scripts/test_build_phrases.py
 new file mode 100644
-index 0000000..1f4492d
+index 0000000..4ff6c72
 --- /dev/null
 +++ b/scripts/test_build_phrases.py
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,127 @@
 +"""scripts/build_phrases.py の単体テスト（詩語の数え方の境界）。`npm test` で走る。
 +
 +平仄・韻目は架空の小さなデータで与え、実在の字の平仄を記憶で使わない（CLAUDE.md §0）。
 +"""
 +
++import json
 +import unittest
 +
-+from build_phrases import MAX_EXAMPLES, count_phrases, last_rhymes, load_exclusions, patterns, phrase_lines, reading_lookup
++from build_phrases import EXCLUDE, MAX_EXAMPLES, count_phrases, last_rhymes, load_corpus, load_exclusions, patterns, phrase_lines, reading_lookup
++from fetch_corpus import corpus_files
 +
 +LINE = "甲乙丙丁戊己庚"  # 7字
 +
@@ -561,10 +563,23 @@ index 0000000..1f4492d
 +        excluded = load_exclusions()
 +        self.assertEqual(len(excluded), 4)
 +
-+    def test_excluded_records_are_not_counted(self):
-+        poems = [("作者", "題", ["甲乙丙丁戊己庚。"]), ("作者", "題", ["甲乙丙丁戊己庚。"])]
-+        self.assertIn("甲乙", count_phrases(poems))
-+        self.assertNotIn("甲乙", count_phrases(poems[:1]))
++    def test_load_corpus_skips_exactly_the_excluded_records(self):
++        # 実際の全集（.cache/）を load_corpus に通し、除外した4件だけが外れることを確かめる
++        records = json.loads(EXCLUDE.read_text(encoding="utf-8"))["records"]
++        excluded = {(r["author"], r["title"]) for r in records}
++        total = sum(len(json.loads(cache.read_text(encoding="utf-8"))) for _, cache in corpus_files()[1])
++        loaded = [(a, t) for a, t, _ in load_corpus()]
++        self.assertEqual(len(loaded), total - len(records))
++        self.assertEqual([x for x in loaded if x in excluded], [])
++        # 同じファイルの、除外していない直前のレコードは残る
++        caches = dict(corpus_files()[1])
++        skipped = {(r["file"], r["index"]) for r in records}
++        for r in records:
++            i = r["index"] - 1
++            while (r["file"], i) in skipped:
++                i -= 1
++            neighbor = json.loads(caches[r["file"]].read_text(encoding="utf-8"))[i]
++            self.assertIn((neighbor["author"], neighbor["title"]), loaded)
 +
 +
 +DATA = {
