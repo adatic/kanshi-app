@@ -241,6 +241,7 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]], un
     候補は「その字自身（データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に並べる。
     OpenCC の候補がどれも平仄データにないときだけ、入力字と OpenCC の候補から Unihan の異体字を
     1段たどり、平仄データにある字を候補に足す（DECISIONS.md (c)）。
+    OpenCC の表にない字も、平仄データになければ、Unihan の異体字を1段たどって補う（DECISIONS.md 2026-11-02 M3）。
     順序に優先の意味はない。どれを採るかはエンジンも決めない（§4.3）。
 
     戻り値: (variants, ambiguous, unmapped, supplemented)
@@ -287,6 +288,26 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]], un
         if known == [key]:
             continue  # データ上で自分自身にしか対応しない字は variants.json に載せない
         variants[key] = known
+    # OpenCC の表にない字も、平仄データにも対応にもなければ、Unihan の異体字を1段たどって補う
+    # （DECISIONS.md 2026-11-02 M3。たどる欄は OpenCC の表にある字と同じ3つ）
+    opencc_keys = {k for k in set(jp) | set(st) if len(k) == 1}
+    for key in sorted((k for k in unihan if k not in chars and k not in opencc_keys), key=ord):
+        labels: dict[str, list[str]] = {}
+        for field, target in unihan[key]:
+            if target in chars:
+                label = f"{field}（{key}から）"
+                if label not in labels.setdefault(target, []):
+                    labels[target].append(label)
+        if not labels:
+            continue
+        variants[key] = list(labels)
+        for target, target_labels in labels.items():
+            supplemented.append(f"{key}\t{target}\t{'・'.join(target_labels)}")
+        if len(labels) > 1:
+            detail = "／".join(
+                f"{t}（Unihan {'・'.join(lbs)}: {format_readings(chars[t])}）" for t, lbs in labels.items()
+            )
+            ambiguous.append(f"{key}\t{len(labels)}/{len(labels)}\t{detail}")
     # 日本語入力で出会いやすい新字体由来の字を先に並べる
     return variants, ambiguous, [row for _, _, row in sorted(unmapped)], supplemented
 
@@ -434,7 +455,7 @@ def build() -> dict[Path, str]:
         REPORTS / "unihan-supplemented.txt": report(
             "Unihan で補った対応",
             [
-                "OpenCC の対応では平仄データにつながらず、Unihan の異体字情報で候補を足した字（DECISIONS.md (c)）。",
+                "OpenCC の対応では平仄データにつながらない字と、OpenCC の表になく平仄データにもない字に、Unihan の異体字情報で候補を足した（DECISIONS.md (c)・2026-11-02 M3）。",
                 "使った欄: kZVariant（字形違い）・kSemanticVariant（意味が同じ）・kJapaneseOldVariant（旧字体）。1段だけたどる。",
                 "書式: 入力字<TAB>足した候補<TAB>欄（どの字からたどったか）",
             ],

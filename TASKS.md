@@ -8,6 +8,17 @@
 
 ## 完了
 
+### m3-unihan-more — 平仄データにない字を Unihan でさらに補う（DECISIONS.md 2026-11-02 M3）
+
+ブランチ: `task/m3-unihan-more`（マージ済み。Codex レビュー1回、記録は `.loop/m3-unihan-more/`）
+
+完了条件:
+- [x] M3 の判断（4首の承認、3つの判断事項）が DECISIONS.md・golden/exceptions.json に記録され、golden/needs-review.md が空になっている
+- [x] 平仄データにも variants.json の見出しにもない字について、Unihan の kZVariant・kSemanticVariant・kJapaneseOldVariant を1段たどり、平仄データにある字を候補として variants.json に足す（OpenCC の表にある字の扱いは今までどおり）
+- [x] 足した対応は根拠（欄名）とともにレポートに出る。候補が2字以上なら ambiguous.txt にも出る
+- [x] 生成は同じ入力から同じ出力（npm test で確かめる）。境界をテストで確かめる
+- [x] ゴールデンの結果の変化を説明してからスナップショットを更新する（DECISIONS.md の判断による更新）
+
 ### m3-golden-run — ゴールデンテストの実行・分類・スナップショット（M3）
 
 ブランチ: `task/m3-golden-run`（マージ済み。Codex レビュー2回、記録は `.loop/m3-golden-run/`）

@@ -2,7 +2,7 @@
 # 新字体→旧字体・簡体字→繁体字の対応で、候補（その字自身を含む）が2字以上になる字。
 # 平仄データにある候補はすべて variants.json に載せた（一つに決めていない）。平仄データにない候補もここに残す。
 # 書式: 入力字<TAB>平仄データにある候補の数/候補の数<TAB>候補（対応の種類: その字の韻目）／…
-# 件数: 485
+# 件数: 536
 
 㐷	1/2	傌（簡体字→繁体字: 平仄データにない）／罵（Unihan kSemanticVariant（傌から）: 去声二十二禡）
 㐹	0/2	㑶（簡体字→繁体字: 平仄データにない）／㐹（簡体字→繁体字: 平仄データにない）
@@ -489,3 +489,54 @@
 𫜪	1/2	齩（簡体字→繁体字: 平仄データにない）／咬（Unihan kSemanticVariant（齩から）: 下平三肴 上声十八巧【詞】）
 𫞗	1/2	潣（簡体字→繁体字: 平仄データにない）／浼（Unihan kSemanticVariant（潣から）: 上声十賄）
 𬯀	1/2	隮（簡体字→繁体字: 平仄データにない）／躋（Unihan kSemanticVariant（隮から）: 上平八齊）
+㓮	2/2	彫（Unihan kSemanticVariant（㓮から）: 下平二蕭）／雕（Unihan kSemanticVariant（㓮から）: 下平二蕭）
+㗖	3/3	啖（Unihan kSemanticVariant（㗖から）: 上声二十七感【詞】）／噉（Unihan kSemanticVariant（㗖から）: 上声二十七感）／啗（Unihan kSemanticVariant（㗖から）: 去声二十八勘）
+㟗	2/2	邠（Unihan kSemanticVariant（㟗から）: 上平十一真【詞】）／豳（Unihan kSemanticVariant（㟗から）: 上平十一真）
+㟢	2/2	崎（Unihan kSemanticVariant（㟢から）: 上平四支）／碕（Unihan kSemanticVariant（㟢から）: 上平四支【詞】 上平五微 上声四紙【詞】）
+㥃	2/2	悶（Unihan kSemanticVariant（㥃から）: 去声十四願）／懣（Unihan kSemanticVariant（㥃から）: 上声十三阮【詞】 上声十四旱）
+㧖	2/2	扼（Unihan kSemanticVariant（㧖から）: 入声十一陌【詞】）／搤（Unihan kSemanticVariant（㧖から）: 去声十卦【詞】 入声九屑【詞】 入声十一陌）
+㿟	2/2	皦（Unihan kSemanticVariant（㿟から）: 上声十七篠）／皎（Unihan kSemanticVariant（㿟から）: 上声十七篠）
+伷	2/2	冑（Unihan kSemanticVariant（伷から）: 去声二十六宥）／胄（Unihan kSemanticVariant（伷から）: 去声二十六宥）
+勑	2/2	敕（Unihan kSemanticVariant（勑から）: 入声十三職）／徠（Unihan kSemanticVariant（勑から）: 上平十灰 去声十一隊）
+卍	2/2	万（Unihan kSemanticVariant（卍から）: 去声十四願【詞】）／萬（Unihan kSemanticVariant（卍から）: 去声十四願）
+呠	2/2	歕（Unihan kSemanticVariant（呠から）: 去声十四願【詞】）／噴（Unihan kSemanticVariant（呠から）: 上平十三元 去声十四願）
+唬	2/2	猇（Unihan kSemanticVariant（唬から）: 下平三肴【詞】）／虓（Unihan kSemanticVariant（唬から）: 下平三肴）
+嘴	2/2	咀（Unihan kSemanticVariant（嘴から）: 上平六魚 上声六語）／觜（Unihan kSemanticVariant（嘴から）: 上平四支 上声四紙）
+埼	2/2	崎（Unihan kSemanticVariant（埼から）: 上平四支）／碕（Unihan kSemanticVariant（埼から）: 上平四支【詞】 上平五微 上声四紙【詞】）
+嵜	2/2	崎（Unihan kSemanticVariant（嵜から）: 上平四支）／碕（Unihan kSemanticVariant（嵜から）: 上平四支【詞】 上平五微 上声四紙【詞】）
+弌	2/2	一（Unihan kSemanticVariant（弌から）: 入声四質）／壹（Unihan kSemanticVariant（弌から）: 入声四質）
+弍	2/2	二（Unihan kSemanticVariant（弍から）: 去声四寘）／貳（Unihan kSemanticVariant（弍から）: 去声四寘）
+扵	2/2	于（Unihan kSemanticVariant（扵から）: 上平七虞）／於（Unihan kSemanticVariant（扵から）: 上平六魚 上平七虞）
+挭	2/2	骾（Unihan kSemanticVariant（挭から）: 上声二十三梗）／鯁（Unihan kSemanticVariant（挭から）: 上声二十三梗）
+欼	2/2	啜（Unihan kSemanticVariant（欼から）: 入声九屑）／歠（Unihan kSemanticVariant（欼から）: 入声九屑）
+濵	2/2	濱（Unihan kSemanticVariant（濵から）: 上平十一真）／瀕（Unihan kSemanticVariant（濵から）: 上平十一真）
+烖	2/2	災（Unihan kSemanticVariant（烖から）: 上平十灰）／菑（Unihan kSemanticVariant（烖から）: 上平四支 上平十灰【詞】）
+穪	2/2	偁（Unihan kSemanticVariant（穪から）: 下平十蒸）／稱（Unihan kSemanticVariant（穪から）: 下平十蒸 去声二十五徑）
+簛	2/2	篩（Unihan kSemanticVariant（簛から）: 上平四支）／簁（Unihan kSemanticVariant（簛から）: 上平九佳【詞】 上声四紙【詞】）
+籄	2/2	簣（Unihan kSemanticVariant（籄から）: 去声四寘 去声十卦）／蕢（Unihan kSemanticVariant（籄から）: 去声四寘 去声十卦）
+繦	2/2	繈（Unihan kSemanticVariant（繦から）: 上声二十二養）／襁（Unihan kSemanticVariant（繦から）: 上声二十二養）
+罁	2/2	堈（Unihan kSemanticVariant（罁から）: 下平七陽）／缸（Unihan kSemanticVariant（罁から）: 上平三江）
+胷	2/2	匈（Unihan kSemanticVariant（胷から）: 上平二冬）／胸（Unihan kSemanticVariant（胷から）: 上平二冬）
+臈	2/2	腊（Unihan kSemanticVariant（臈から）: 入声十一陌）／臘（Unihan kSemanticVariant（臈から）: 入声十五合）
+蘯	2/2	盪（Unihan kSemanticVariant（蘯から）: 上声二十二養 去声二十三漾）／蕩（Unihan kSemanticVariant（蘯から）: 上声二十二養 去声二十三漾）
+譈	2/2	憝（Unihan kSemanticVariant（譈から）: 去声十一隊）／懟（Unihan kSemanticVariant（譈から）: 去声四寘）
+讐	2/2	仇（Unihan kSemanticVariant（讐から）: 下平十一尤【詞】）／讎（Unihan kSemanticVariant（讐から）: 下平十一尤）
+遡	2/2	泝（Unihan kSemanticVariant（遡から）: 去声七遇）／溯（Unihan kSemanticVariant（遡から）: 去声七遇【詞】）
+針	2/2	箴（Unihan kSemanticVariant（針から）: 下平十二侵）／鍼（Unihan kSemanticVariant（針から）: 下平十二侵 下平十四鹽）
+鉆	2/2	鉗（Unihan kSemanticVariant（鉆から）: 下平十四鹽【詞】）／鑽（Unihan kSemanticVariant（鉆から）: 上平十四寒 去声十五翰）
+陭	2/2	崎（Unihan kSemanticVariant（陭から）: 上平四支）／碕（Unihan kSemanticVariant（陭から）: 上平四支【詞】 上平五微 上声四紙【詞】）
+飇	3/3	猋（Unihan kSemanticVariant（飇から）: 下平二蕭【詞】）／颮（Unihan kSemanticVariant（飇から）: 下平三肴 入声三覺）／飆（Unihan kSemanticVariant（飇から）: 下平二蕭）
+﨑	2/2	崎（Unihan kSemanticVariant（﨑から）: 上平四支）／碕（Unihan kSemanticVariant（﨑から）: 上平四支【詞】 上平五微 上声四紙【詞】）
+𠂝	2/2	匝（Unihan kSemanticVariant（𠂝から）: 入声十五合）／眾（Unihan kSemanticVariant（𠂝から）: 去声一送）
+𠊋	2/2	敦（Unihan kSemanticVariant（𠊋から）: 上平十三元 上平十四寒 去声十一隊 去声十四願）／龍（Unihan kSemanticVariant（𠊋から）: 上平二冬 入声十四緝）
+𢕐	2/2	渹（Unihan kSemanticVariant（𢕐から）: 下平八庚【詞】）／訇（Unihan kSemanticVariant（𢕐から）: 下平八庚）
+𥔀	2/2	渹（Unihan kSemanticVariant（𥔀から）: 下平八庚【詞】）／訇（Unihan kSemanticVariant（𥔀から）: 下平八庚）
+𥔎	2/2	崎（Unihan kSemanticVariant（𥔎から）: 上平四支）／碕（Unihan kSemanticVariant（𥔎から）: 上平四支【詞】 上平五微 上声四紙【詞】）
+𥜌	2/2	澳（Unihan kSemanticVariant（𥜌から）: 去声二十號 入声一屋）／襖（Unihan kSemanticVariant（𥜌から）: 上声十九皓）
+𪪝	3/3	邕（Unihan kSemanticVariant（𪪝から）: 上平二冬）／雍（Unihan kSemanticVariant（𪪝から）: 上平二冬 去声二宋）／雝（Unihan kSemanticVariant（𪪝から）: 上平二冬）
+𫅧	2/2	翔（Unihan kSemanticVariant（𫅧から）: 下平七陽）／詳（Unihan kSemanticVariant（𫅧から）: 下平七陽）
+𬺣	2/2	旦（Unihan kSemanticVariant（𬺣から）: 去声十五翰）／足（Unihan kSemanticVariant（𬺣から）: 去声七遇 入声二沃）
+𬺤	3/3	滾（Unihan kSemanticVariant（𬺤から）: 上声十三阮【詞】）／玄（Unihan kSemanticVariant（𬺤から）: 下平一先）／袞（Unihan kSemanticVariant（𬺤から）: 上声十三阮）
+𬺧	2/2	光（Unihan kSemanticVariant（𬺧から）: 下平七陽）／水（Unihan kSemanticVariant（𬺧から）: 上声四紙）
+𬺨	2/2	像（Unihan kSemanticVariant（𬺨から）: 上声二十二養）／象（Unihan kSemanticVariant（𬺨から）: 上声二十二養）
+𬺭	2/2	干（Unihan kSemanticVariant（𬺭から）: 上平十四寒）／幹（Unihan kSemanticVariant（𬺭から）: 上平十四寒【詞】 去声十五翰）

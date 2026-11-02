@@ -1,0 +1,665 @@
+diff --git a/DATA_SOURCES.md b/DATA_SOURCES.md
+index 40c8a08..3192825 100644
+--- a/DATA_SOURCES.md
++++ b/DATA_SOURCES.md
+@@ -75,7 +75,7 @@ CLAUDE.md §3 の方針（データは CC BY 4.0、不可なら上流に従う
+ 
+ - 1字→1字以上の対応だけを使いました（語単位の対応は使っていません）。
+ - 入力字ごとに、候補を「その字自身（平仄データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に集め、平仄データにある候補だけを `data/variants.json` に載せました。**順序に優先の意味はありません。**
+-- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（485字。Unihan で補った候補を含む）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（265字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データになく、次節の Unihan でも補えなかった字（1,378字）は `data/reports/unmapped.txt` に出しています。新字体由来の字（13字）を先頭に並べています。
++- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（536字。Unihan で補った候補を含む）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（265字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データになく、次節の Unihan でも補えなかった字（1,378字）は `data/reports/unmapped.txt` に出しています。新字体由来の字（13字）を先頭に並べています。
+ 
+ ## 3. Unicode Unihan データベース（異体字）
+ 
+@@ -93,8 +93,10 @@ CLAUDE.md §3 の方針（データは CC BY 4.0、不可なら上流に従う
+ 
+ - 使う欄は3つだけです：`kZVariant`（同じ字の字形違い）、`kSemanticVariant`（意味が同じで置き換えられる字）、`kJapaneseOldVariant`（日本の新字体に対する旧字体）。
+ - 使わない欄：`kSpecializedSemanticVariant`（特定の文脈でだけ置き換えられる）、`kSpoofingVariant`（見た目が似ているだけ）、`kSimplifiedVariant`・`kTraditionalVariant`（簡繁は OpenCC で扱う）、`kJapaneseNewVariant`（旧字体→新字体で向きが逆）。
+-- OpenCC の候補がどれも平仄データにない字についてだけ、入力字そのものと OpenCC の候補から Unihan の異体字を**1段だけ**たどり、平仄データにある字を候補に足しました（2段たどっても、新字体由来の字で増える対応はありませんでした）。OpenCC でつながる字には使いません。
+-- 足した対応（98件）は、欄名とたどった字を添えて `data/reports/unihan-supplemented.txt` に出しています。例：艶→豔（艶の kSemanticVariant）、鉱→礦（鑛の kSemanticVariant）、为→為（爲の kSemanticVariant）。
++- OpenCC の表にある字では、OpenCC の候補がどれも平仄データにない字についてだけ、入力字そのものと OpenCC の候補から Unihan の異体字を**1段だけ**たどり、平仄データにある字を候補に足しました（2段たどっても、新字体由来の字で増える対応はありませんでした）。OpenCC でつながる字には使いません。
++- 足した対応は、欄名とたどった字を添えて `data/reports/unihan-supplemented.txt` に出しています。例：艶→豔（艶の kSemanticVariant）、鉱→礦（鑛の kSemanticVariant）、为→為（爲の kSemanticVariant）。
++- 人間の判断（`DECISIONS.md` 2026-11-02 M3）により、OpenCC の表にない字も、平仄データにも対応にもなければ、同じ3つの欄を1段たどって補っています（例：爲→為、壻→婿、牀→床）。ゴールデンテストの唐詩で、平仄データにない字として出ていた10字のうち6字がこれでつながりました。
++- 足した対応は合わせて1,327件です（OpenCC の表にある字への98件を含む）。
+ 
+ ### 限界
+ 
+diff --git a/DECISIONS.md b/DECISIONS.md
+index 0c806a0..1d11975 100644
+--- a/DECISIONS.md
++++ b/DECISIONS.md
+@@ -5,6 +5,27 @@
+ 
+ ---
+ 
++## 2026-11-02 M3 の報告を受けての判断
++
++材料: `golden/needs-review.md`（M3 終了時点）、`data/reports/golden.md`、`data/reports/golden-input.md`
++
++### 規則外の候補4首 → 規則外として認める
++
++- q10 李白「黃鶴樓送孟浩然之廣陵」（拗体）、q21 杜牧「贈別·其一」（不粘）、q32 韋應物「滁州西澗」（不粘）、q42 賀知章「回鄉偶書·其一」（通韻）。
++- `golden/exceptions.json` の4件を確定（needsReview を false にし、承認の記録を付けた）。
++- q42 の「衰」は、平仄データに十灰の読みを加えない（加える根拠となる韻書が手元にないため）。
++
++### 本文の取得元 → 全唐诗/poet.tang のまま
++
++### 唐詩三百首の「樂府」の4句×7字の8首 → ゴールデンに含めない
++
++### 平仄データにない字 → OpenCC の表にない字も、Unihan の同じ3つの欄で補う
++
++- M1 の判断 (c) と同じ欄（kZVariant・kSemanticVariant・kJapaneseOldVariant）を1段だけたどり、平仄データにある字を候補として足す。対象を、OpenCC の対応表にない字（平仄データにも variants.json にもない字）に広げる。
++- 実装は小さなタスク（m3-unihan-more）として行い、ゴールデンの結果の変化を説明してからスナップショットを更新する。
++
++---
++
+ ## 2026-11-02 M2 着手前：定型の照合で見つかった食い違いの判断
+ 
+ 定型（CLAUDE.md §4.1 の平仄図式）を公開資料と照合した結果、○・●・◎の位置は4定型16句すべてで一致した。一方、次の2点が仕様と食い違っていた（CLAUDE.md の指示どおり作業を止めて報告した）。
+diff --git a/TASKS.md b/TASKS.md
+index 8a8b51b..2b630cb 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,16 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m3-unihan-more — 平仄データにない字を Unihan でさらに補う（DECISIONS.md 2026-11-02 M3）
++
++ブランチ: `task/m3-unihan-more`
++
++完了条件:
++- [ ] M3 の判断（4首の承認、3つの判断事項）が DECISIONS.md・golden/exceptions.json に記録され、golden/needs-review.md が空になっている
++- [ ] 平仄データにも variants.json の見出しにもない字について、Unihan の kZVariant・kSemanticVariant・kJapaneseOldVariant を1段たどり、平仄データにある字を候補として variants.json に足す（OpenCC の表にある字の扱いは今までどおり）
++- [ ] 足した対応は根拠（欄名）とともにレポートに出る。候補が2字以上なら ambiguous.txt にも出る
++- [ ] 生成は同じ入力から同じ出力（npm test で確かめる）。境界をテストで確かめる
++- [ ] ゴールデンの結果の変化を説明してからスナップショットを更新する（DECISIONS.md の判断による更新）
+ 
+ ## 完了
+ 
+diff --git a/data/reports/golden.md b/data/reports/golden.md
+index fa621e1..a1091ae 100644
+--- a/data/reports/golden.md
++++ b/data/reports/golden.md
+@@ -11,8 +11,8 @@
+ |---|---|
+ | 対象の詩 | 51首 |
+ | 明確な違反なし（参考。目標ではない） | 47首 |
+-| 明確な違反あり | 4首（すべて分類済み：規則外の候補（拗体）／規則外の候補（不粘）／規則外の候補（通韻）、または平仄データの不足） |
+-| 人間の確認を求める詩（golden/needs-review.md） | 4首 |
++| 明確な違反あり | 4首（すべて分類済み：規則外（拗体）／規則外（不粘）／規則外（通韻）） |
++| 人間の確認を求める詩（golden/needs-review.md） | 0首 |
+ 
+ ### 指摘の内訳（全解釈に共通するもの）
+ 
+@@ -20,10 +20,10 @@
+ |---|---|
+ | 変格・ichisango-furon | 133 |
+ | 要確認・douji | 47 |
+-| 要確認・unknown-char | 18 |
++| 要確認・supplement-reading | 17 |
+ | 違反・pattern | 17 |
+-| 要確認・supplement-reading | 16 |
+ | 要確認・bou-in | 11 |
++| 要確認・unknown-char | 7 |
+ | 変格・hasami-hei | 5 |
+ | 要確認・youtai | 3 |
+ | 違反・hanpo-nenpo | 3 |
+@@ -36,16 +36,16 @@
+ | ID | 題 | 作者 | 詩格 | 記号列 | 違反 | 要確認 | 変格 | 違反の分類 |
+ |---|---|---|---|---|---|---|---|---|
+ | q01 | 芙蓉樓送辛漸 | 王昌齡 | sokki-nyuin | ○●○○●●○／○○●●●○○／●○◎●◎◎●／●●○○●●○ | 0 | 0 | 2 | — |
+-| q02 | 閨怨 | 王昌齡 | heiki-nyuin | ○◎●●◎○○／○●◎○●●○／●●●○○●●／●◎○□●◎○ | 0 | 3 | 0 | — |
++| q02 | 閨怨 | 王昌齡 | heiki-nyuin | ○◎●●◎○○／○●◎○●●○／●●●○○●●／●◎○●●◎○ | 0 | 2 | 0 | — |
+ | q03 | 春宮曲 | 王昌齡 | sokki-nyuin | ●●○○●●○／●○○●●○○／○○○●○○●／○●○○●●○ | 0 | 0 | 4 | — |
+-| q04 | 九月九日憶山東兄弟 | 王維 | sokki-funyuin | ●●●◎□●●／●○○●●◎◎／○○○●○○●／□●○○●●○ | 0 | 4 | 4 | — |
++| q04 | 九月九日憶山東兄弟 | 王維 | sokki-funyuin | ●●●◎◎●●／●○○●●◎◎／○○○●○○●／□●○○●●○ | 0 | 3 | 4 | — |
+ | q05 | 涼州詞 | 王翰 | heiki-nyuin | □○●●●○○／●●○○●●○／●●○○○●●／●○◎●◎○◎ | 0 | 3 | 1 | — |
+ | q06 | 後宮詞 | 白居易 | sokki-nyuin | ●●○○◎◎○／●◎○●●○○／○○●●○◎●／○●○◎●●○ | 0 | 1 | 3 | — |
+ | q07 | 宮中詞 | 朱慶餘 | sokki-nyuin | ●●○○●●○／●○◎◎●○○／○○●●○◎●／○●○○◎●○ | 0 | 1 | 2 | — |
+-| q08 | 近試上張水部 | 朱慶餘 | heiki-funyuin | ●○●●○○●／●●○○●●○／○◎○○●○□／●○◎●●○○ | 0 | 2 | 4 | — |
++| q08 | 近試上張水部 | 朱慶餘 | heiki-funyuin | ●○●●○○●／●●○○●●○／○◎○○●○●／●○◎●●○○ | 0 | 1 | 4 | — |
+ | q09 | 逢入京使 | 岑參 | heiki-nyuin | ●○○◎●◎◎／○●◎○●◎○／●●◎○○●●／○○◎●●○○ | 0 | 1 | 3 | — |
+-| q10 | 黃鶴樓送孟浩然之廣陵 | 李白 | heiki-nyuin | ●○○○○●○／○○◎●●○○／○◎●●●○●／◎●◎○○●○ | 14 | 1 | 6 | 規則外の候補（拗体） |
+-| q11 | 早發白帝城 | 李白 | heiki-nyuin | ○○●●●○◎／○●○○●●○／●●□○□◎●／◎○●◎●◎○ | 0 | 2 | 1 | — |
++| q10 | 黃鶴樓送孟浩然之廣陵 | 李白 | heiki-nyuin | ●○○○○●○／○○◎●●○○／○◎●●●○●／◎●◎○○●○ | 14 | 1 | 6 | 規則外（拗体） |
++| q11 | 早發白帝城 | 李白 | heiki-nyuin | ○○●●●○◎／○●○○●●○／●●○○□◎●／◎○●◎●◎○ | 0 | 2 | 1 | — |
+ | q12 | 夜上受降城聞笛 | 李益 | sokki-funyuin | ◎●○○○●●／●◎○●●◎○／◎○○●◎○●／●●◎○●◎◎ | 0 | 0 | 3 | — |
+ | q13 | 賈生 | 李商隱 | sokki-nyuin | ○●○○●●○／●○○◎◎○○／●○●●○○●／◎●◎○●●○ | 0 | 3 | 4 | — |
+ | q14 | 隋宮 | 李商隱 | heiki-nyuin | ◎◎○○◎●○／●◎○●●○○／○○●●◎○●／●●◎◎●●◎ | 0 | 3 | 0 | — |
+@@ -53,31 +53,31 @@
+ | q16 | 嫦娥 | 李商隱 | heiki-nyuin | ○◎◎○●●◎／◎○◎●●○◎／○○◎●○○●／●●○○●●○ | 0 | 1 | 0 | — |
+ | q17 | 夜雨寄北 | 李商隱 | sokki-nyuin | ○●○○●●○／○○●●◎○○／○◎◎●○○●／●●○○●●○ | 0 | 12 | 1 | — |
+ | q18 | 寄令狐郎中 | 李商隱 | heiki-nyuin | ○○○●●◎○／○●○○●●○／○●○○●○●／●○○●●◎◎ | 0 | 1 | 6 | — |
+-| q19 | 爲有 | 李商隱 | sokki-nyuin | □●○◎○●◎／●○○●●○○／○○●●○○□／○●○○●●○ | 0 | 4 | 3 | — |
++| q19 | 爲有 | 李商隱 | sokki-nyuin | ◎●○◎○●◎／●○○●●○○／○○●●○○●／○●○○●●○ | 0 | 2 | 3 | — |
+ | q20 | 江南逢李龜年 | 杜甫 | heiki-funyuin | ○◎●●○○●／○●○○◎●◎／◎●○○●○●／●○○●●○○ | 0 | 0 | 0 | — |
+-| q21 | 贈別·其一 | 杜牧 | heiki-nyuin | ◎◎●●●◎○／●●○○●●○／○○●●○○●／◎●○○●◎◎ | 1 | 5 | 0 | 規則外の候補（不粘） |
++| q21 | 贈別·其一 | 杜牧 | heiki-nyuin | ◎◎●●●◎○／●●○○●●○／○○●●○○●／◎●○○●◎◎ | 1 | 5 | 0 | 規則外（不粘） |
+ | q22 | 贈別·其二 | 杜牧 | heiki-nyuin | ○○●●●○○／◎●○○●◎○／●●●○○●●／●○○●●○○ | 0 | 3 | 3 | — |
+ | q23 | 金谷園 | 杜牧 | heiki-nyuin | ○◎●●●○○／○●○○●●○／●●○○◎□●／●○◎●◎○○ | 0 | 1 | 0 | — |
+ | q24 | 寄揚州韓綽判官 | 杜牧 | heiki-nyuin | ○○●●●○○／○●○○●●○／●●●○○●●／●○○●◎◎○ | 0 | 4 | 4 | — |
+ | q25 | 遣懷 | 杜牧 | sokki-nyuin | ●●○○●●◎／●○○●●◎◎／●○●●○○◎／○●○○●●○ | 0 | 2 | 4 | — |
+ | q26 | 秋夕 | 杜牧 | sokki-nyuin | ○●○○●●◎／◎○●◎●○○／○○●●○◎●／●◎◎○●●○ | 0 | 1 | 1 | — |
+ | q27 | 將赴吳興登樂遊原一絕 | 杜牧 | heiki-nyuin | ○○●●●○○／○●○○●●○／●●●○○●●／●○○●◎◎○ | 0 | 2 | 4 | — |
+-| q28 | 赤壁 | 杜牧 | sokki-nyuin | ◎●◎○●●○／●◎◎●●○○／○○◎◎○○◎／○●○◎□●○ | 0 | 1 | 2 | — |
++| q28 | 赤壁 | 杜牧 | sokki-nyuin | ◎●◎○●●○／●◎◎●●○○／○○◎◎○○◎／○●○◎●●○ | 0 | 0 | 2 | — |
+ | q29 | 泊秦淮 | 杜牧 | heiki-nyuin | ○◎○●●◎○／●●○○●●○／○●◎○○●●／●○◎●●◎○ | 0 | 1 | 0 | — |
+ | q30 | 徵人怨 | 柳中庸 | sokki-nyuin | ●●○○●●○／○○●●◎○○／◎○●●○○◎／●●○○●●○ | 0 | 4 | 0 | — |
+ | q31 | 金陵圖 | 韋莊 | sokki-nyuin | ○●○○●◎○／●○○●●○○／○◎●●○○●／●●○○●●○ | 0 | 5 | 3 | — |
+-| q32 | 滁州西澗 | 韋應物 | heiki-nyuin | ●○○●●○○／●●○○◎●○／○○●●●○●／●●○○○●◎ | 7 | 1 | 7 | 規則外の候補（不粘） |
++| q32 | 滁州西澗 | 韋應物 | heiki-nyuin | ●○○●●○○／●●○○◎●○／○○●●●○●／●●○○○●◎ | 7 | 1 | 7 | 規則外（不粘） |
+ | q33 | 桃花溪 | 張旭 | sokki-nyuin | ●●○○●●○／●○○●●○○／○○●●○○●／●●○○○●○ | 0 | 1 | 3 | — |
+-| q34 | 寄人 | 張泌 | heiki-nyuin | ●◎○○●●○／●○□●●○○／○○◎●○◎●／◎□◎○●●○ | 0 | 3 | 0 | — |
++| q34 | 寄人 | 張泌 | heiki-nyuin | ●◎○○●●○／●○□●●○○／○○◎●○◎●／◎◎◎○●●○ | 0 | 2 | 0 | — |
+ | q35 | 題金陵渡 | 張祜 | heiki-nyuin | ○○○●●○○／●●◎○●●○／○●●○○●●／●◎○●●○○ | 0 | 0 | 5 | — |
+ | q36 | 贈內人 | 張祜 | heiki-nyuin | ◎○○●●○◎／●●◎◎●◎○／○●●○○●●／●○○●●○○ | 0 | 0 | 5 | — |
+ | q37 | 集靈臺·其一 | 張祜 | heiki-nyuin | ●○○●●○○／○●○◎●●○／●●●○○●●／●○○●●○○ | 0 | 0 | 6 | — |
+-| q38 | 集靈臺·其二 | 張祜 | sokki-nyuin | ●●○○○●○／○○◎●●○○／●○○●◎○●／●□○○○●○ | 0 | 2 | 4 | — |
++| q38 | 集靈臺·其二 | 張祜 | sokki-nyuin | ●●○○○●○／○○◎●●○○／●○○●◎○●／●●○○○●○ | 0 | 1 | 4 | — |
+ | q39 | 楓橋夜泊 | 張繼 | sokki-nyuin | ●●○□○●○／○○○●●○○／○○○●○○●／●●○○●●○ | 0 | 1 | 3 | — |
+-| q40 | 隴西行 | 陳陶 | sokki-nyuin | ●□○○◎●○／●○○●◎○○／●○○●○○●／◎●○○◎●○ | 0 | 3 | 4 | — |
++| q40 | 隴西行 | 陳陶 | sokki-nyuin | ●●○○◎●○／●○○●◎○○／●○○●○○●／◎●○○◎●○ | 0 | 2 | 4 | — |
+ | q41 | 雜詩 | 佚名 | heiki-nyuin | ●○●●●○○／●●○○●●○／●●●○○●●／●○○●●○□ | 0 | 3 | 4 | — |
+-| q42 | 回鄉偶書·其一 | 賀知章 | sokki-nyuin | ●●◎○●●◎／◎○◎●●○○／◎○◎●◎◎●／●●●◎○●○ | 1 | 1 | 2 | 規則外の候補（通韻）、または平仄データの不足 |
+-| q43 | 瑤瑟怨 | 溫庭筠 | sokki-nyuin | ○●○□◎◎○／●○◎●●○◎／●○●◎○○●／●●○◎●●○ | 0 | 3 | 3 | — |
++| q42 | 回鄉偶書·其一 | 賀知章 | sokki-nyuin | ●●◎○●●◎／◎○◎●●○○／◎○◎●◎◎●／●●●◎○●○ | 1 | 1 | 2 | 規則外（通韻） |
++| q43 | 瑤瑟怨 | 溫庭筠 | sokki-nyuin | ○●○○◎◎○／●○◎●●○◎／●○●◎○○●／●●○◎●●○ | 0 | 2 | 3 | — |
+ | q44 | 月夜 | 劉方平 | heiki-nyuin | ◎◎●●●○○／●●○◎○●○／○●○○○●●／○○○●●○○ | 0 | 2 | 0 | — |
+ | q45 | 春怨 | 劉方平 | heiki-nyuin | ○○●●◎○○／○●○○●●○／●●◎◎○●●／○○●●◎○○ | 0 | 1 | 1 | — |
+ | q46 | 烏衣巷 | 劉禹錫 | sokki-nyuin | ○●○○●●○／○◎●●●○○／●○◎●○○◎／○●○○●●○ | 0 | 0 | 3 | — |
+@@ -113,11 +113,12 @@
+ - 違反：結句の5字目は、定型（平起式・首句入韻）では仄です。
+ - 違反：結句の6字目は、定型（平起式・首句入韻）では平です。
+ - 違反：起句と承句の2字目がどちらも平です。反法では平仄を逆にします。
+-- 分類：規則外の候補（拗体）（人間の確認を求める）
++- 分類：規則外（拗体）
+ - 理由：4句すべてに定型との不一致があり、起句と承句の2字目がどちらも平で反法も守られていない。違反の位置の字は、平仄データで平仄が一つに決まる字ばかりで、本文の版の違いもこれらの位置に関わらない。データやロジックの誤りは見つからず、原詩が律詩の平仄に従わない作り（拗体）である可能性が高い。
+   - 違反の位置の字の平仄データの読み：起句「辭」上平四支・「黃」下平七陽・「鶴」入声十藥、承句「花」下平六麻・「月」入声六月・「揚」下平七陽、転句「影」上声二十三梗、結句「見」去声十七霰・「江」上平三江・「天」下平一先・「際」去声八霽（いずれも読みは一つ）
+   - 起句の2字目「人」上平十一真（平）、承句の2字目「花」下平六麻（平）
+   - 本文の版の違い：唐詩三百首のファイルとは転句6字目（山／空。どちらも違反の位置ではない）、御定全唐詩とは違いなし
++- 承認：2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）
+ 
+ ### q21 贈別·其一（杜牧）
+ 
+@@ -130,10 +131,11 @@
+ 
+ - 詩格：heiki-nyuin（読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。）
+ - 違反：承句（仄）と転句（平）の2字目の平仄が違います。粘法ではそろえます。
+-- 分類：規則外の候補（不粘）（人間の確認を求める）
++- 分類：規則外（不粘）
+ - 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いもこの位置に関わらない。ほかの規則の違反はなく、原詩が不粘の作りである可能性が高い。
+   - 承句の2字目「蔻」去声二十六宥（仄。読みは一つ）、転句の2字目「風」上平一東（平。読みは一つ）
+   - 本文の版の違い：唐詩三百首のファイルとは起句3・4字目（褭／嫋）と転句4字目（里／裏）、御定全唐詩とは転句4字目（里／裏）。いずれも2字目ではない
++- 承認：2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）
+ 
+ ### q32 滁州西澗（韋應物）
+ 
+@@ -152,11 +154,12 @@
+ - 違反：結句の5字目は、定型（平起式・首句入韻）では仄です。
+ - 違反：結句の6字目は、定型（平起式・首句入韻）では平です。
+ - 違反：承句（仄）と転句（平）の2字目の平仄が違います。粘法ではそろえます。
+-- 分類：規則外の候補（不粘）（人間の確認を求める）
++- 分類：規則外（不粘）
+ - 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。転句・結句の定型との不一致は、詩格（平起式・首句入韻）の後半の2句を逆の起式で作っていることから生じるもので、転句（挟み平を含む）と結句はそれぞれ単独では二四不同・二六対・下三連・孤平の違反がない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いはない。原詩が不粘の作りである可能性が高い。
+   - 承句の2字目「有」上声二十五有（仄。読みは一つ）、転句の2字目「潮」下平二蕭（平。読みは一つ）
+   - 転句・結句には、定型との不一致と反法・粘法のほかに違反がない（data/reports/golden.md）
+   - 本文の版の違い：唐詩三百首のファイル・御定全唐詩とも違いなし
++- 承認：2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）
+ 
+ ### q42 回鄉偶書·其一（賀知章）
+ 
+@@ -169,11 +172,12 @@
+ 
+ - 詩格：sokki-nyuin（読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。）
+ - 違反：結句の押韻字「來」（上平十灰）が、承句の押韻字（上平四支）と同じ韻目ではありません。
+-- 分類：規則外の候補（通韻）、または平仄データの不足（人間の確認を求める）
++- 分類：規則外（通韻）
+ - 理由：押韻字は起句「回」・承句「衰」・結句「來」。平仄データでは「回」「來」は上平十灰、「衰」は上平四支だけで、承句だけが別の韻目になる（エンジンは結句を承句と比べて違反を出している）。手元のもう一つの資料（ウィキソース「平水韻」2006年版、2008年に差し替えられる前の別の一覧）でも「衰」は上平四支だけに載っている。手元の資料からは、データの誤りとは言えない。
+   - 押韻字の平仄データの読み：「回」上平十灰・去声十一隊、「衰」上平四支、「來」上平十灰
+   - ウィキソース「平水韻」版96365（2006年）：「衰」は「上平,四支」の一覧にだけある
+   - 本文の版の違い：唐詩三百首のファイルとは承句3字目（難／無）、御定全唐詩とは起句4字目（家／鄉）。押韻字ではない
++- 承認：2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）
+ 
+ ## 平仄データにない字（要確認）
+ 
+@@ -181,16 +185,10 @@
+ 
+ | 字 | 出てくる詩 |
+ |---|---|
+-| 壻 | q02、q08、q19 |
+-| 爲 | q04、q19、q34 |
+ | 遍 | q04 |
+ | 葡 | q05 |
+-| 猨 | q11 |
+ | 啼 | q11、q23、q39、q41 |
+-| 鏁 | q28 |
+ | 迴 | q34 |
+-| 掃 | q38、q40 |
+-| 牀 | q43 |
+ 
+ ## 【詞】【辭】欄にだけある読みで判定した箇所（要確認）
+ 
+@@ -198,6 +196,7 @@
+ - q04：結句の3字目「茱」は、平仄データで【詞】【辭】欄にだけある読み（平・上平七虞）で判定しています。この読みでよいか確認してください。
+ - q05：承句の3字目「琵」は、平仄データで【詞】【辭】欄にだけある読み（平・上平四支）で判定しています。この読みでよいか確認してください。
+ - q06：起句の2字目「濕」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十四緝）で判定しています。この読みでよいか確認してください。
++- q11：転句の3字目「猨」は、平仄データで【詞】【辭】欄にだけある読み（平・上平十三元）で判定しています。この読みでよいか確認してください。
+ - q14：起句の4字目「遊」は、平仄データで【詞】【辭】欄にだけある読み（平・下平十一尤）で判定しています。この読みでよいか確認してください。
+ - q17：転句の4字目「剪」は、平仄データで【詞】【辭】欄にだけある読み（上・上声十六銑）で判定しています。この読みでよいか確認してください。
+ - q17：結句の1字目「却」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十藥）で判定しています。この読みでよいか確認してください。
+diff --git a/data/reports/summary.md b/data/reports/summary.md
+index c999398..917e365 100644
+--- a/data/reports/summary.md
++++ b/data/reports/summary.md
+@@ -13,9 +13,9 @@
+ | 本体にも載り、別の韻目の【詞】【辭】欄にも載る字 | 652 |
+ | 元データ内の重複（同じ字・同じ韻目） | 32 |
+ | 当てた修正（corrections.json） | 1 |
+-| 異体字の対応（variants.json の見出し字） | 2844 |
+-| 対応の候補が2字以上になる字（ambiguous.txt） | 485 |
+-| Unihan で補った対応（unihan-supplemented.txt） | 98 |
++| 異体字の対応（variants.json の見出し字） | 4018 |
++| 対応の候補が2字以上になる字（ambiguous.txt） | 536 |
++| Unihan で補った対応（unihan-supplemented.txt） | 1327 |
+ | 対応先がデータにない字（unmapped.txt） | 1378 |
+ | 国字（kokuji.json） | 28 |
+ | 国字の一覧にあり、平水韻にも載る字 | 0 |
+diff --git a/golden/exceptions.json b/golden/exceptions.json
+index 6860e88..539494c 100644
+--- a/golden/exceptions.json
++++ b/golden/exceptions.json
+@@ -19,27 +19,29 @@
+         "pattern:3:4",
+         "pattern:3:5"
+       ],
+-      "category": "規則外の候補（拗体）",
++      "category": "規則外（拗体）",
+       "reason": "4句すべてに定型との不一致があり、起句と承句の2字目がどちらも平で反法も守られていない。違反の位置の字は、平仄データで平仄が一つに決まる字ばかりで、本文の版の違いもこれらの位置に関わらない。データやロジックの誤りは見つからず、原詩が律詩の平仄に従わない作り（拗体）である可能性が高い。",
+       "evidence": [
+         "違反の位置の字の平仄データの読み：起句「辭」上平四支・「黃」下平七陽・「鶴」入声十藥、承句「花」下平六麻・「月」入声六月・「揚」下平七陽、転句「影」上声二十三梗、結句「見」去声十七霰・「江」上平三江・「天」下平一先・「際」去声八霽（いずれも読みは一つ）",
+         "起句の2字目「人」上平十一真（平）、承句の2字目「花」下平六麻（平）",
+         "本文の版の違い：唐詩三百首のファイルとは転句6字目（山／空。どちらも違反の位置ではない）、御定全唐詩とは違いなし"
+       ],
+-      "needsReview": true,
+-      "question": "この詩を拗体（律詩の平仄に従わない作り）として規則外と認めてよいか。"
++      "needsReview": false,
++      "approved": "2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）"
+     },
+     {
+       "poem": "q21",
+-      "findings": ["hanpo-nenpo:2:1"],
+-      "category": "規則外の候補（不粘）",
++      "findings": [
++        "hanpo-nenpo:2:1"
++      ],
++      "category": "規則外（不粘）",
+       "reason": "承句と転句の2字目の平仄が違い、粘法が守られていない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いもこの位置に関わらない。ほかの規則の違反はなく、原詩が不粘の作りである可能性が高い。",
+       "evidence": [
+         "承句の2字目「蔻」去声二十六宥（仄。読みは一つ）、転句の2字目「風」上平一東（平。読みは一つ）",
+         "本文の版の違い：唐詩三百首のファイルとは起句3・4字目（褭／嫋）と転句4字目（里／裏）、御定全唐詩とは転句4字目（里／裏）。いずれも2字目ではない"
+       ],
+-      "needsReview": true,
+-      "question": "この詩を不粘（拗体）として規則外と認めてよいか。"
++      "needsReview": false,
++      "approved": "2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）"
+     },
+     {
+       "poem": "q32",
+@@ -52,28 +54,30 @@
+         "pattern:3:4",
+         "pattern:3:5"
+       ],
+-      "category": "規則外の候補（不粘）",
++      "category": "規則外（不粘）",
+       "reason": "承句と転句の2字目の平仄が違い、粘法が守られていない。転句・結句の定型との不一致は、詩格（平起式・首句入韻）の後半の2句を逆の起式で作っていることから生じるもので、転句（挟み平を含む）と結句はそれぞれ単独では二四不同・二六対・下三連・孤平の違反がない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いはない。原詩が不粘の作りである可能性が高い。",
+       "evidence": [
+         "承句の2字目「有」上声二十五有（仄。読みは一つ）、転句の2字目「潮」下平二蕭（平。読みは一つ）",
+         "転句・結句には、定型との不一致と反法・粘法のほかに違反がない（data/reports/golden.md）",
+         "本文の版の違い：唐詩三百首のファイル・御定全唐詩とも違いなし"
+       ],
+-      "needsReview": true,
+-      "question": "この詩を不粘（拗体）として規則外と認めてよいか。"
++      "needsReview": false,
++      "approved": "2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）"
+     },
+     {
+       "poem": "q42",
+-      "findings": ["rhyme-group:3:6"],
+-      "category": "規則外の候補（通韻）、または平仄データの不足",
++      "findings": [
++        "rhyme-group:3:6"
++      ],
++      "category": "規則外（通韻）",
+       "reason": "押韻字は起句「回」・承句「衰」・結句「來」。平仄データでは「回」「來」は上平十灰、「衰」は上平四支だけで、承句だけが別の韻目になる（エンジンは結句を承句と比べて違反を出している）。手元のもう一つの資料（ウィキソース「平水韻」2006年版、2008年に差し替えられる前の別の一覧）でも「衰」は上平四支だけに載っている。手元の資料からは、データの誤りとは言えない。",
+       "evidence": [
+         "押韻字の平仄データの読み：「回」上平十灰・去声十一隊、「衰」上平四支、「來」上平十灰",
+         "ウィキソース「平水韻」版96365（2006年）：「衰」は「上平,四支」の一覧にだけある",
+         "本文の版の違い：唐詩三百首のファイルとは承句3字目（難／無）、御定全唐詩とは起句4字目（家／鄉）。押韻字ではない"
+       ],
+-      "needsReview": true,
+-      "question": "「衰」に上平十灰の読みがあるとする信頼できる韻書があれば、出典つきで平仄データに加える（data/corrections.json）。なければ、この詩を通韻として規則外と認めてよいか。"
++      "needsReview": false,
++      "approved": "2026-11-02 人間（AKI-SAN）が規則外として承認（DECISIONS.md）"
+     }
+   ]
+ }
+diff --git a/golden/golden.ts b/golden/golden.ts
+index d91a73d..1e34ab0 100644
+--- a/golden/golden.ts
++++ b/golden/golden.ts
+@@ -28,6 +28,8 @@ export type Exception = {
+   evidence: string[];
+   needsReview: boolean;
+   question?: string;
++  /** 人間が規則外として承認した記録 */
++  approved?: string;
+ };
+ 
+ export type Question = { title: string; detail: string; options: string[] };
+@@ -195,6 +197,7 @@ export function renderReport(results: GoldenResult[], exceptions: Exception[]):
+     for (const f of a.findings.filter((f) => f.severity === "violation")) out.push(`- 違反：${f.message}`);
+     out.push(`- 分類：${e?.category ?? "**未分類**"}${e?.needsReview ? "（人間の確認を求める）" : ""}`);
+     if (e) out.push(`- 理由：${e.reason}`, ...e.evidence.map((x) => `  - ${x}`));
++    if (e?.approved) out.push(`- 承認：${e.approved}`);
+     out.push("");
+   }
+   out.push(
+@@ -226,7 +229,9 @@ export function renderNeedsReview(exceptions: Exception[], questions: Question[]
+     "## 詩の分類",
+     "",
+   ];
+-  for (const e of exceptions.filter((x) => x.needsReview)) {
++  const pending = exceptions.filter((x) => x.needsReview);
++  if (pending.length === 0) out.push("（なし）", "");
++  for (const e of pending) {
+     const r = byId.get(e.poem);
+     out.push(`### ${e.poem} ${r?.poem.title ?? ""}（${r?.poem.author ?? ""}）`, "");
+     if (r) out.push("```", ...r.poem.lines!.map((l, i) => `${l}  ${r.analysis.symbols[i]}`), "```", "");
+@@ -235,6 +240,7 @@ export function renderNeedsReview(exceptions: Exception[], questions: Question[]
+     out.push("");
+   }
+   out.push("## そのほかの判断事項", "");
++  if (questions.length === 0) out.push("（なし）", "");
+   for (const q of questions) {
+     out.push(`### ${q.title}`, "", q.detail, "", ...q.options.map((o) => `- ${o}`), "");
+   }
+diff --git a/golden/needs-review.md b/golden/needs-review.md
+index 9b51d6c..88bf0e0 100644
+--- a/golden/needs-review.md
++++ b/golden/needs-review.md
+@@ -6,88 +6,8 @@ Claude Code は平仄・韻の正誤を記憶で判断しない（CLAUDE.md §0
+ 
+ ## 詩の分類
+ 
+-### q10 黃鶴樓送孟浩然之廣陵（李白）
+-
+-```
+-故人西辭黃鶴樓  ●○○○○●○
+-煙花三月下揚州  ○○◎●●○○
+-孤帆遠影碧山盡  ○◎●●●○●
+-唯見長江天際流  ◎●◎○○●○
+-```
+-
+-- 仮の分類：規則外の候補（拗体）
+-- 理由：4句すべてに定型との不一致があり、起句と承句の2字目がどちらも平で反法も守られていない。違反の位置の字は、平仄データで平仄が一つに決まる字ばかりで、本文の版の違いもこれらの位置に関わらない。データやロジックの誤りは見つからず、原詩が律詩の平仄に従わない作り（拗体）である可能性が高い。
+-  - 違反の位置の字の平仄データの読み：起句「辭」上平四支・「黃」下平七陽・「鶴」入声十藥、承句「花」下平六麻・「月」入声六月・「揚」下平七陽、転句「影」上声二十三梗、結句「見」去声十七霰・「江」上平三江・「天」下平一先・「際」去声八霽（いずれも読みは一つ）
+-  - 起句の2字目「人」上平十一真（平）、承句の2字目「花」下平六麻（平）
+-  - 本文の版の違い：唐詩三百首のファイルとは転句6字目（山／空。どちらも違反の位置ではない）、御定全唐詩とは違いなし
+-- 確認したいこと：この詩を拗体（律詩の平仄に従わない作り）として規則外と認めてよいか。
+-
+-### q21 贈別·其一（杜牧）
+-
+-```
+-娉娉褭褭十三餘  ◎◎●●●◎○
+-豆蔻梢頭二月初  ●●○○●●○
+-春風十里揚州路  ○○●●○○●
+-卷上珠簾總不如  ◎●○○●◎◎
+-```
+-
+-- 仮の分類：規則外の候補（不粘）
+-- 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いもこの位置に関わらない。ほかの規則の違反はなく、原詩が不粘の作りである可能性が高い。
+-  - 承句の2字目「蔻」去声二十六宥（仄。読みは一つ）、転句の2字目「風」上平一東（平。読みは一つ）
+-  - 本文の版の違い：唐詩三百首のファイルとは起句3・4字目（褭／嫋）と転句4字目（里／裏）、御定全唐詩とは転句4字目（里／裏）。いずれも2字目ではない
+-- 確認したいこと：この詩を不粘（拗体）として規則外と認めてよいか。
+-
+-### q32 滁州西澗（韋應物）
+-
+-```
+-獨憐幽草澗邊生  ●○○●●○○
+-上有黃鸝深樹鳴  ●●○○◎●○
+-春潮帶雨晚來急  ○○●●●○●
+-野渡無人舟自橫  ●●○○○●◎
+-```
+-
+-- 仮の分類：規則外の候補（不粘）
+-- 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。転句・結句の定型との不一致は、詩格（平起式・首句入韻）の後半の2句を逆の起式で作っていることから生じるもので、転句（挟み平を含む）と結句はそれぞれ単独では二四不同・二六対・下三連・孤平の違反がない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いはない。原詩が不粘の作りである可能性が高い。
+-  - 承句の2字目「有」上声二十五有（仄。読みは一つ）、転句の2字目「潮」下平二蕭（平。読みは一つ）
+-  - 転句・結句には、定型との不一致と反法・粘法のほかに違反がない（data/reports/golden.md）
+-  - 本文の版の違い：唐詩三百首のファイル・御定全唐詩とも違いなし
+-- 確認したいこと：この詩を不粘（拗体）として規則外と認めてよいか。
+-
+-### q42 回鄉偶書·其一（賀知章）
+-
+-```
+-少小離家老大回  ●●◎○●●◎
+-鄉音難改鬢毛衰  ◎○◎●●○○
+-兒童相見不相識  ◎○◎●◎◎●
+-笑問客從何處來  ●●●◎○●○
+-```
+-
+-- 仮の分類：規則外の候補（通韻）、または平仄データの不足
+-- 理由：押韻字は起句「回」・承句「衰」・結句「來」。平仄データでは「回」「來」は上平十灰、「衰」は上平四支だけで、承句だけが別の韻目になる（エンジンは結句を承句と比べて違反を出している）。手元のもう一つの資料（ウィキソース「平水韻」2006年版、2008年に差し替えられる前の別の一覧）でも「衰」は上平四支だけに載っている。手元の資料からは、データの誤りとは言えない。
+-  - 押韻字の平仄データの読み：「回」上平十灰・去声十一隊、「衰」上平四支、「來」上平十灰
+-  - ウィキソース「平水韻」版96365（2006年）：「衰」は「上平,四支」の一覧にだけある
+-  - 本文の版の違い：唐詩三百首のファイルとは承句3字目（難／無）、御定全唐詩とは起句4字目（家／鄉）。押韻字ではない
+-- 確認したいこと：「衰」に上平十灰の読みがあるとする信頼できる韻書があれば、出典つきで平仄データに加える（data/corrections.json）。なければ、この詩を通韻として規則外と認めてよいか。
++（なし）
+ 
+ ## そのほかの判断事項
+ 
+-### 1. 本文の取得元（全唐诗 poet.tang）でよいか
+-
+-唐詩三百首のファイルの本文は簡体字からの機械変換の誤りを含むため、chinese-poetry の繁体字の全唐詩から照合して本文を取った。2種類の全唐詩を比べると、御定全唐詩には変換の誤りに見える字が5か所あり（乾→幹、闌干→闌幹 ×2、御柳→禦柳、鬚→須）、全唐诗/poet.tang ではすべて正しい字だった。そこで本文は全唐诗/poet.tang から取った（詳しくは DATA_SOURCES.md の 6、data/reports/golden-input.md）。
+-
+-- このままでよい
+-- 別の資料を使う（資料を指定してください）
+-
+-### 2. 唐詩三百首の「樂府」の4句×7字の詩をゴールデンに含めるか
+-
+-唐詩三百首のファイルの分類「樂府」に、4句×7字の詩が8首ある（王之渙「涼州詞」、王昌齡「出塞」、王維「渭城曲」「秋夜曲」、李白「清平調」三首、無名氏「金縷衣」）。今は分類「七言絕句」の51首だけをゴールデンにしている。8首のうち2首は照合先が決まらない（王維「秋夜曲」は全唐詩では王涯の作、李白「清平調 其三」は本文の違う候補が同点）。また王維「渭城曲」は全唐诗/poet.tang の本文に「謂城」の誤字がある。
+-
+-- 含めない（今のまま）
+-- 照合先が決まった6首を含める（渭城曲の誤字の扱いも決める）
+-
+-### 3. 平仄データにない字を、Unihan の異体字でさらに補うか
+-
+-ゴールデンの51首で、平仄データにない字が10種類あった（data/reports/golden.md）。このうち6字（壻→婿、爲→為、猨→猿、鏁→鎖、掃→埽、牀→床）は、Unihan の kSemanticVariant（意味が同じで置き換えられる字）をたどると平仄データの字につながる。M1 の判断 (c) では、Unihan で補うのは OpenCC の対応表に載っている字に限ったため、これらは補われていない。残りの4字（啼・遍・葡・迴）は、どうたどっても平仄データにない。補うと、q08（朱慶餘「近試上張水部」）の転句末「壻」が仄（婿：去声八霽）として判定でき、挟み平が確定する。
+-
+-- 補わない（今のまま。データにない字は要確認）
+-- OpenCC の表にない字にも、Unihan の同じ3つの欄で補う（M4 の前に小さなタスクとして行う）
++（なし）
+diff --git a/golden/questions.json b/golden/questions.json
+index 4b950ac..b29be8e 100644
+--- a/golden/questions.json
++++ b/golden/questions.json
+@@ -1,29 +1,4 @@
+ {
+-  "description": "M3 で、詩の分類のほかに人間の判断を求める事項。golden/needs-review.md に載る。",
+-  "questions": [
+-    {
+-      "title": "1. 本文の取得元（全唐诗 poet.tang）でよいか",
+-      "detail": "唐詩三百首のファイルの本文は簡体字からの機械変換の誤りを含むため、chinese-poetry の繁体字の全唐詩から照合して本文を取った。2種類の全唐詩を比べると、御定全唐詩には変換の誤りに見える字が5か所あり（乾→幹、闌干→闌幹 ×2、御柳→禦柳、鬚→須）、全唐诗/poet.tang ではすべて正しい字だった。そこで本文は全唐诗/poet.tang から取った（詳しくは DATA_SOURCES.md の 6、data/reports/golden-input.md）。",
+-      "options": [
+-        "このままでよい",
+-        "別の資料を使う（資料を指定してください）"
+-      ]
+-    },
+-    {
+-      "title": "2. 唐詩三百首の「樂府」の4句×7字の詩をゴールデンに含めるか",
+-      "detail": "唐詩三百首のファイルの分類「樂府」に、4句×7字の詩が8首ある（王之渙「涼州詞」、王昌齡「出塞」、王維「渭城曲」「秋夜曲」、李白「清平調」三首、無名氏「金縷衣」）。今は分類「七言絕句」の51首だけをゴールデンにしている。8首のうち2首は照合先が決まらない（王維「秋夜曲」は全唐詩では王涯の作、李白「清平調 其三」は本文の違う候補が同点）。また王維「渭城曲」は全唐诗/poet.tang の本文に「謂城」の誤字がある。",
+-      "options": [
+-        "含めない（今のまま）",
+-        "照合先が決まった6首を含める（渭城曲の誤字の扱いも決める）"
+-      ]
+-    },
+-    {
+-      "title": "3. 平仄データにない字を、Unihan の異体字でさらに補うか",
+-      "detail": "ゴールデンの51首で、平仄データにない字が10種類あった（data/reports/golden.md）。このうち6字（壻→婿、爲→為、猨→猿、鏁→鎖、掃→埽、牀→床）は、Unihan の kSemanticVariant（意味が同じで置き換えられる字）をたどると平仄データの字につながる。M1 の判断 (c) では、Unihan で補うのは OpenCC の対応表に載っている字に限ったため、これらは補われていない。残りの4字（啼・遍・葡・迴）は、どうたどっても平仄データにない。補うと、q08（朱慶餘「近試上張水部」）の転句末「壻」が仄（婿：去声八霽）として判定でき、挟み平が確定する。",
+-      "options": [
+-        "補わない（今のまま。データにない字は要確認）",
+-        "OpenCC の表にない字にも、Unihan の同じ3つの欄で補う（M4 の前に小さなタスクとして行う）"
+-      ]
+-    }
+-  ]
++  "description": "M3 で、詩の分類のほかに人間の判断を求める事項。golden/needs-review.md に載る。 M3 終了時の3件は 2026-11-02 に判断済み（DECISIONS.md）。",
++  "questions": []
+ }
+diff --git a/scripts/build_data.py b/scripts/build_data.py
+index 5c2ffd2..291249f 100644
+--- a/scripts/build_data.py
++++ b/scripts/build_data.py
+@@ -241,6 +241,7 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]], un
+     候補は「その字自身（データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に並べる。
+     OpenCC の候補がどれも平仄データにないときだけ、入力字と OpenCC の候補から Unihan の異体字を
+     1段たどり、平仄データにある字を候補に足す（DECISIONS.md (c)）。
++    OpenCC の表にない字も、平仄データになければ、Unihan の異体字を1段たどって補う（DECISIONS.md 2026-11-02 M3）。
+     順序に優先の意味はない。どれを採るかはエンジンも決めない（§4.3）。
+ 
+     戻り値: (variants, ambiguous, unmapped, supplemented)
+@@ -287,6 +288,26 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]], un
+         if known == [key]:
+             continue  # データ上で自分自身にしか対応しない字は variants.json に載せない
+         variants[key] = known
++    # OpenCC の表にない字も、平仄データにも対応にもなければ、Unihan の異体字を1段たどって補う
++    # （DECISIONS.md 2026-11-02 M3。たどる欄は OpenCC の表にある字と同じ3つ）
++    opencc_keys = {k for k in set(jp) | set(st) if len(k) == 1}
++    for key in sorted((k for k in unihan if k not in chars and k not in opencc_keys), key=ord):
++        labels: dict[str, list[str]] = {}
++        for field, target in unihan[key]:
++            if target in chars:
++                label = f"{field}（{key}から）"
++                if label not in labels.setdefault(target, []):
++                    labels[target].append(label)
++        if not labels:
++            continue
++        variants[key] = list(labels)
++        for target, target_labels in labels.items():
++            supplemented.append(f"{key}\t{target}\t{'・'.join(target_labels)}")
++        if len(labels) > 1:
++            detail = "／".join(
++                f"{t}（Unihan {'・'.join(lbs)}: {format_readings(chars[t])}）" for t, lbs in labels.items()
++            )
++            ambiguous.append(f"{key}\t{len(labels)}/{len(labels)}\t{detail}")
+     # 日本語入力で出会いやすい新字体由来の字を先に並べる
+     return variants, ambiguous, [row for _, _, row in sorted(unmapped)], supplemented
+ 
+@@ -434,7 +455,7 @@ def build() -> dict[Path, str]:
+         REPORTS / "unihan-supplemented.txt": report(
+             "Unihan で補った対応",
+             [
+-                "OpenCC の対応では平仄データにつながらず、Unihan の異体字情報で候補を足した字（DECISIONS.md (c)）。",
++                "OpenCC の対応では平仄データにつながらない字と、OpenCC の表になく平仄データにもない字に、Unihan の異体字情報で候補を足した（DECISIONS.md (c)・2026-11-02 M3）。",
+                 "使った欄: kZVariant（字形違い）・kSemanticVariant（意味が同じ）・kJapaneseOldVariant（旧字体）。1段だけたどる。",
+                 "書式: 入力字<TAB>足した候補<TAB>欄（どの字からたどったか）",
+             ],
+diff --git a/scripts/test_build_data.py b/scripts/test_build_data.py
+index 1f04d3e..79743c4 100644
+--- a/scripts/test_build_data.py
++++ b/scripts/test_build_data.py
+@@ -223,8 +223,11 @@ class UnihanSupplementTest(unittest.TestCase):
+         variants, _, _, supplemented = self.run_variants(
+             ["丙"], jp={"甲": ["乙"]}, unihan={"乙": [("kZVariant", "丙")]}
+         )
+-        self.assertEqual(variants, {"甲": ["丙"]})
+-        self.assertEqual(supplemented, ["甲\t丙\tkZVariant（乙から）"])
++        self.assertEqual(variants["甲"], ["丙"])
++        self.assertEqual(supplemented[0], "甲\t丙\tkZVariant（乙から）")
++        # 途中の 乙 は OpenCC の表にも平仄データにもないので、乙 自身も Unihan で補われる（DECISIONS.md 2026-11-02 M3）
++        self.assertEqual(variants, {"甲": ["丙"], "乙": ["丙"]})
++        self.assertEqual(supplemented[1:], ["乙\t丙\tkZVariant（乙から）"])
+ 
+     def test_unihan_is_not_used_when_opencc_already_maps(self):
+         variants, _, _, supplemented = self.run_variants(
+@@ -248,9 +251,12 @@ class UnihanSupplementTest(unittest.TestCase):
+             jp={"甲": ["乙"]},
+             unihan={"乙": [("kZVariant", "丙")], "丙": [("kSemanticVariant", "丁")]},
+         )
+-        self.assertEqual(variants, {})
+-        self.assertEqual(supplemented, [])
++        # 甲 からは2段目の 丁 に届かない
++        self.assertNotIn("甲", variants)
+         self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
++        # 丙 は OpenCC の表にも平仄データにもないので、丙 自身は1段で 丁 に補われる（DECISIONS.md 2026-11-02 M3）
++        self.assertEqual(variants, {"丙": ["丁"]})
++        self.assertEqual(supplemented, ["丙\t丁\tkSemanticVariant（丙から）"])
+ 
+     def test_one_target_reached_by_several_paths_is_one_row(self):
+         # 甲 からも、OpenCC の候補 乙 からも 丙 にたどり着く。甲 は簡体字→繁体字で自分自身にも対応する
+@@ -260,8 +266,10 @@ class UnihanSupplementTest(unittest.TestCase):
+             st={"甲": ["甲"]},
+             unihan={"甲": [("kSemanticVariant", "丙")], "乙": [("kZVariant", "丙")]},
+         )
+-        self.assertEqual(variants, {"甲": ["丙"]})
+-        self.assertEqual(supplemented, ["甲\t丙\tkSemanticVariant（甲から）・kZVariant（乙から）"])
++        self.assertEqual(variants["甲"], ["丙"])
++        self.assertEqual(supplemented[0], "甲\t丙\tkSemanticVariant（甲から）・kZVariant（乙から）")
++        # 途中の 乙 自身も補われる（DECISIONS.md 2026-11-02 M3）
++        self.assertEqual(variants, {"甲": ["丙"], "乙": ["丙"]})
+ 
+     def test_several_unihan_candidates_are_all_kept(self):
+         variants, ambiguous, _, supplemented = self.run_variants(
+@@ -274,5 +282,52 @@ class UnihanSupplementTest(unittest.TestCase):
+         self.assertEqual(len(supplemented), 2)
+ 
+ 
++class UnihanOutsideOpenCCTest(unittest.TestCase):
++    """OpenCC の表にない字も Unihan で補う（DECISIONS.md 2026-11-02 M3）。"""
++
++    def run_variants(self, chars, jp=None, st=None, unihan=None):
++        return build_variants({c: [R] for c in chars}, jp or {}, st or {}, unihan or {})
++
++    def test_key_outside_opencc_gets_unihan_candidates(self):
++        variants, ambiguous, unmapped, supplemented = self.run_variants(["乙"], unihan={"甲": [("kSemanticVariant", "乙")]})
++        self.assertEqual(variants, {"甲": ["乙"]})
++        self.assertEqual(supplemented, ["甲\t乙\tkSemanticVariant（甲から）"])
++        self.assertEqual((ambiguous, unmapped), ([], []))
++
++    def test_key_already_in_data_is_not_supplemented(self):
++        variants, _, _, supplemented = self.run_variants(["甲", "乙"], unihan={"甲": [("kZVariant", "乙")]})
++        self.assertEqual((variants, supplemented), ({}, []))
++
++    def test_key_handled_by_opencc_is_not_supplemented_twice(self):
++        # 甲 は OpenCC で 丙（データにある）につながる。Unihan の 乙 は足さない（OpenCC でつながる字には使わない）
++        variants, _, _, supplemented = self.run_variants(
++            ["乙", "丙"], jp={"甲": ["丙"]}, unihan={"甲": [("kSemanticVariant", "乙")]}
++        )
++        self.assertEqual((variants, supplemented), ({"甲": ["丙"]}, []))
++
++    def test_targets_missing_from_data_are_not_added(self):
++        variants, _, _, supplemented = self.run_variants([], unihan={"甲": [("kSemanticVariant", "乙")]})
++        self.assertEqual((variants, supplemented), ({}, []))
++
++    def test_unused_fields_are_not_read(self):
++        # parse_unihan_variants が読まない欄は表に入らないので、補われない
++        table = parse_unihan_variants("U+7532\tkSpoofingVariant\tU+4E59\n")
++        variants, _, _, _ = self.run_variants(["乙"], unihan=table)
++        self.assertEqual(variants, {})
++
++    def test_several_targets_are_all_kept_and_reported_as_ambiguous(self):
++        variants, ambiguous, _, supplemented = self.run_variants(
++            ["乙", "丙"], unihan={"甲": [("kSemanticVariant", "乙"), ("kZVariant", "丙")]}
++        )
++        self.assertEqual(variants, {"甲": ["乙", "丙"]})
++        self.assertEqual(len(supplemented), 2)
++        self.assertTrue(ambiguous[0].startswith("甲\t2/2\t"))
++
++    def test_only_one_step(self):
++        # 甲 → 乙 → 丙 の2段目には届かない。乙 は1段で 丙 に補われる
++        variants, _, _, _ = self.run_variants(["丙"], unihan={"甲": [("kZVariant", "乙")], "乙": [("kZVariant", "丙")]})
++        self.assertEqual(variants, {"乙": ["丙"]})
++
++
+ if __name__ == "__main__":
+     unittest.main()

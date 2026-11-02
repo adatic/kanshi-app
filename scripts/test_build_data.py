@@ -223,8 +223,11 @@ class UnihanSupplementTest(unittest.TestCase):
         variants, _, _, supplemented = self.run_variants(
             ["丙"], jp={"甲": ["乙"]}, unihan={"乙": [("kZVariant", "丙")]}
         )
-        self.assertEqual(variants, {"甲": ["丙"]})
-        self.assertEqual(supplemented, ["甲\t丙\tkZVariant（乙から）"])
+        self.assertEqual(variants["甲"], ["丙"])
+        self.assertEqual(supplemented[0], "甲\t丙\tkZVariant（乙から）")
+        # 途中の 乙 は OpenCC の表にも平仄データにもないので、乙 自身も Unihan で補われる（DECISIONS.md 2026-11-02 M3）
+        self.assertEqual(variants, {"甲": ["丙"], "乙": ["丙"]})
+        self.assertEqual(supplemented[1:], ["乙\t丙\tkZVariant（乙から）"])
 
     def test_unihan_is_not_used_when_opencc_already_maps(self):
         variants, _, _, supplemented = self.run_variants(
@@ -248,9 +251,12 @@ class UnihanSupplementTest(unittest.TestCase):
             jp={"甲": ["乙"]},
             unihan={"乙": [("kZVariant", "丙")], "丙": [("kSemanticVariant", "丁")]},
         )
-        self.assertEqual(variants, {})
-        self.assertEqual(supplemented, [])
+        # 甲 からは2段目の 丁 に届かない
+        self.assertNotIn("甲", variants)
         self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
+        # 丙 は OpenCC の表にも平仄データにもないので、丙 自身は1段で 丁 に補われる（DECISIONS.md 2026-11-02 M3）
+        self.assertEqual(variants, {"丙": ["丁"]})
+        self.assertEqual(supplemented, ["丙\t丁\tkSemanticVariant（丙から）"])
 
     def test_one_target_reached_by_several_paths_is_one_row(self):
         # 甲 からも、OpenCC の候補 乙 からも 丙 にたどり着く。甲 は簡体字→繁体字で自分自身にも対応する
@@ -260,8 +266,10 @@ class UnihanSupplementTest(unittest.TestCase):
             st={"甲": ["甲"]},
             unihan={"甲": [("kSemanticVariant", "丙")], "乙": [("kZVariant", "丙")]},
         )
-        self.assertEqual(variants, {"甲": ["丙"]})
-        self.assertEqual(supplemented, ["甲\t丙\tkSemanticVariant（甲から）・kZVariant（乙から）"])
+        self.assertEqual(variants["甲"], ["丙"])
+        self.assertEqual(supplemented[0], "甲\t丙\tkSemanticVariant（甲から）・kZVariant（乙から）")
+        # 途中の 乙 自身も補われる（DECISIONS.md 2026-11-02 M3）
+        self.assertEqual(variants, {"甲": ["丙"], "乙": ["丙"]})
 
     def test_several_unihan_candidates_are_all_kept(self):
         variants, ambiguous, _, supplemented = self.run_variants(
@@ -272,6 +280,53 @@ class UnihanSupplementTest(unittest.TestCase):
         self.assertEqual(variants, {"甲": ["丙", "丁"]})
         self.assertTrue(ambiguous[0].startswith("甲\t2/3\t"))
         self.assertEqual(len(supplemented), 2)
+
+
+class UnihanOutsideOpenCCTest(unittest.TestCase):
+    """OpenCC の表にない字も Unihan で補う（DECISIONS.md 2026-11-02 M3）。"""
+
+    def run_variants(self, chars, jp=None, st=None, unihan=None):
+        return build_variants({c: [R] for c in chars}, jp or {}, st or {}, unihan or {})
+
+    def test_key_outside_opencc_gets_unihan_candidates(self):
+        variants, ambiguous, unmapped, supplemented = self.run_variants(["乙"], unihan={"甲": [("kSemanticVariant", "乙")]})
+        self.assertEqual(variants, {"甲": ["乙"]})
+        self.assertEqual(supplemented, ["甲\t乙\tkSemanticVariant（甲から）"])
+        self.assertEqual((ambiguous, unmapped), ([], []))
+
+    def test_key_already_in_data_is_not_supplemented(self):
+        variants, _, _, supplemented = self.run_variants(["甲", "乙"], unihan={"甲": [("kZVariant", "乙")]})
+        self.assertEqual((variants, supplemented), ({}, []))
+
+    def test_key_handled_by_opencc_is_not_supplemented_twice(self):
+        # 甲 は OpenCC で 丙（データにある）につながる。Unihan の 乙 は足さない（OpenCC でつながる字には使わない）
+        variants, _, _, supplemented = self.run_variants(
+            ["乙", "丙"], jp={"甲": ["丙"]}, unihan={"甲": [("kSemanticVariant", "乙")]}
+        )
+        self.assertEqual((variants, supplemented), ({"甲": ["丙"]}, []))
+
+    def test_targets_missing_from_data_are_not_added(self):
+        variants, _, _, supplemented = self.run_variants([], unihan={"甲": [("kSemanticVariant", "乙")]})
+        self.assertEqual((variants, supplemented), ({}, []))
+
+    def test_unused_fields_are_not_read(self):
+        # parse_unihan_variants が読まない欄は表に入らないので、補われない
+        table = parse_unihan_variants("U+7532\tkSpoofingVariant\tU+4E59\n")
+        variants, _, _, _ = self.run_variants(["乙"], unihan=table)
+        self.assertEqual(variants, {})
+
+    def test_several_targets_are_all_kept_and_reported_as_ambiguous(self):
+        variants, ambiguous, _, supplemented = self.run_variants(
+            ["乙", "丙"], unihan={"甲": [("kSemanticVariant", "乙"), ("kZVariant", "丙")]}
+        )
+        self.assertEqual(variants, {"甲": ["乙", "丙"]})
+        self.assertEqual(len(supplemented), 2)
+        self.assertTrue(ambiguous[0].startswith("甲\t2/2\t"))
+
+    def test_only_one_step(self):
+        # 甲 → 乙 → 丙 の2段目には届かない。乙 は1段で 丙 に補われる
+        variants, _, _, _ = self.run_variants(["丙"], unihan={"甲": [("kZVariant", "乙")], "乙": [("kZVariant", "丙")]})
+        self.assertEqual(variants, {"乙": ["丙"]})
 
 
 if __name__ == "__main__":
