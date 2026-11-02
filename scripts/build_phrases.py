@@ -11,6 +11,9 @@
   出現回数、位置ごとの出現回数、用例（全集の並び順で最初の3句。同じ句は重ねない）を付ける
 - 平仄・韻目は平仄データから引く。エンジンと同じく、データにない字は異体字の対応（variants.json）の候補の読みを使う
 - 先頭の字ごとのファイル（data/phrases/<先頭の字の符号位置>.json）に分け、索引 data/phrases/index.json を作る
+- 平仄パターンで探すための索引 data/phrases/search/<字数>-<パターン>.json も作る（平→h 仄→z データにない字→q）。
+  用例は持たず、語・出現回数・末字の韻目（data/rhymes.json の並びの番号）・位置ごとの出現回数だけ。
+  画面はパターンに合うファイルだけを読み、用例は先頭の字ごとのファイルから必要なときに読む
 
 使い方:
   python3 scripts/build_phrases.py           # 生成して書き出す
@@ -151,6 +154,26 @@ def _group_phrases(counted: dict, readings, rhyme_order: dict[str, int]) -> dict
     return by_first
 
 
+SEARCH = OUT / "search"
+PATTERN_CODE = {"平": "h", "仄": "z", UNKNOWN: "q"}
+
+
+def search_files(by_first: dict[str, dict[str, list]], rhyme_order: dict[str, int]) -> dict[str, list]:
+    """字数×平仄パターンごとの探索用の一覧。名前（"2-hz" など）→ [[語, 出現回数, [韻目の番号], [位置ごとの出現回数]], ...]。
+    読みが複数あってパターンが複数ある語は、それぞれのファイルに入る。出現回数の多い順、同じなら語の順。"""
+    files: dict[str, list] = defaultdict(list)
+    slot_names = [name for _, _, name in SLOTS]
+    for groups in by_first.values():
+        for length, entries in groups.items():
+            for e in entries:
+                row = [e["w"], e["n"], [rhyme_order[r] for r in e["r"]], [e["at"].get(name, 0) for name in slot_names]]
+                for pattern in e["p"]:
+                    files[f"{length}-{''.join(PATTERN_CODE[c] for c in pattern)}"].append(row)
+    for rows in files.values():
+        rows.sort(key=lambda r: (-r[1], r[0]))
+    return dict(files)
+
+
 def build() -> dict[Path, str]:
     chars = json.loads((ROOT / "data" / "chars.json").read_text(encoding="utf-8"))
     variants = json.loads((ROOT / "data" / "variants.json").read_text(encoding="utf-8"))
@@ -177,6 +200,16 @@ def build() -> dict[Path, str]:
         "chars": index,
     }
     outputs[OUT / "index.json"] = json.dumps(index_doc, ensure_ascii=False, indent=1) + "\n"
+
+    search = search_files(by_first, rhyme_order)
+    for name, rows in sorted(search.items()):
+        outputs[SEARCH / f"{name}.json"] = json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n"
+    search_doc = {
+        "description": "平仄パターンで詩語を探すための索引（scripts/build_phrases.py が生成。手で編集しない）。ファイル名は <字数>-<パターン>（平→h 仄→z データにない字→q）。各ファイルは [語, 出現回数, [末字の韻目の data/rhymes.json での番号], [位置ごとの出現回数]] の一覧で、出現回数の多い順。用例は先頭の字ごとのファイル（../index.json）にある。",
+        "slots": [name for _, _, name in SLOTS],
+        "files": {name: len(rows) for name, rows in sorted(search.items())},
+    }
+    outputs[SEARCH / "index.json"] = json.dumps(search_doc, ensure_ascii=False, indent=1) + "\n"
     return outputs
 
 
@@ -185,7 +218,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="書き出さずに、コミット済みのファイルと一致するか確かめる")
     args = parser.parse_args()
     outputs = build()
-    existing = {p for p in OUT.glob("*.json")} if OUT.exists() else set()
+    existing = {p for p in OUT.rglob("*.json")} if OUT.exists() else set()
     if args.check:
         stale = [p for p, c in outputs.items() if not p.exists() or p.read_text(encoding="utf-8") != c]
         extra = sorted(existing - set(outputs))
@@ -198,7 +231,7 @@ def main() -> int:
         return 0
     if OUT.exists():
         shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    SEARCH.mkdir(parents=True)
     for p, c in outputs.items():
         p.write_text(c, encoding="utf-8")
     print(f"書き出し {OUT.relative_to(ROOT)}/（{len(outputs)}ファイル）")
