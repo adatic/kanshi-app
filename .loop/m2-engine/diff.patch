@@ -25,10 +25,10 @@ index c3ed22d..42ca32c 100644
  
 diff --git a/packages/engine/src/analyze.ts b/packages/engine/src/analyze.ts
 new file mode 100644
-index 0000000..8f8c2bb
+index 0000000..42b5645
 --- /dev/null
 +++ b/packages/engine/src/analyze.ts
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,124 @@
 +// 詩全体の判定（CLAUDE.md §4.1）。読みが複数ある字は、読みの組み合わせ（解釈）ごとに判定する。
 +import { charInfo, pzOf, symbolOf } from "./chars";
 +import { detectForm } from "./form";
@@ -46,6 +46,7 @@ index 0000000..8f8c2bb
 +/**
 + * マスの読みを、判定に効く違いごとにまとめる（一つのまとまりが、解釈の一つの選択肢になる）。
 + * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる
++ * - 異体字の対応で別の字として引いた読みは、候補の字ごとに分ける（どの候補で判定したかを残す）
 + * - まとまりの代表には、本体の読み（【詞】【辭】欄でない読み）を優先する
 + */
 +function choicesOf(info: CharInfo, line: number, pos: number, options: Options): CellState[] {
@@ -55,7 +56,7 @@ index 0000000..8f8c2bb
 +  if (info.readings.length === 0) return [{ pz: null, reading: null, supplementOnly: false }];
 +  const groups = new Map<string, Reading[]>();
 +  for (const r of info.readings) {
-+    const key = isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone);
++    const key = `${r.via ?? ""}|${isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone)}`;
 +    groups.set(key, [...(groups.get(key) ?? []), r]);
 +  }
 +  return [...groups.values()].map((rs) => {
@@ -77,10 +78,11 @@ index 0000000..8f8c2bb
 +  const chars = lines.map((row) => row.map((cell) => charInfo(cell, data, kokuji)));
 +  const symbols = chars.map((row) => row.map(symbolOf).join(""));
 +
-+  // マスごとの選択肢と、選択肢が2つ以上あるマス
++  // マスごとの選択肢と、選択肢が2つ以上あるマス。読みを組み合わせるのは、判定の対象になる4句×7字の中だけ
++  // （それより外のマスは字数・句数の違反として扱い、最初の選択肢で埋める）
 +  const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options)));
 +  const open: [number, number][] = [];
-+  choices.forEach((row, l) => row.forEach((cs, p) => cs.length > 1 && open.push([l, p])));
++  choices.forEach((row, l) => row.forEach((cs, p) => l < 4 && p < 7 && cs.length > 1 && open.push([l, p])));
 +  const total = open.reduce((n, [l, p]) => n * choices[l]![p]!.length, 1);
 +  const independent = total > MAX_COMBINATIONS;
 +
@@ -280,10 +282,10 @@ index fda16f7..c0f851c 100644
 +export type * from "./types";
 diff --git a/packages/engine/src/input.ts b/packages/engine/src/input.ts
 new file mode 100644
-index 0000000..82b4ca4
+index 0000000..46eb54c
 --- /dev/null
 +++ b/packages/engine/src/input.ts
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,67 @@
 +// 入力の解析（CLAUDE.md §4.1「入力」）。
 +import type { InputError } from "./types";
 +import { lineName, positionName } from "./messages";
@@ -300,41 +302,42 @@ index 0000000..82b4ca4
 +
 +/**
 + * 1句1行のテキスト、または28マスの配列を、句ごとのマスに分ける。
-+ * - 行の前後の空白と、テキストの前後の空行は無視する（貼り付けのゆれ）
++ * - テキストの前後の空行（字のない行）は無視する。行の中の空白は、前後も含めて漢字以外の文字として扱う
 + * - 「＿」は未入力のマス
-+ * - 「々」は直前の漢字として扱う
-+ * - それ以外の漢字でない文字（句の途中の空白・記号・かな）はエラーとして位置を返す。字数には数える
++ * - 「々」は同じ句の直前のマスの字として扱う。直前が未入力なら「々」も未入力。句頭や、直前が漢字以外ならエラー
++ * - それ以外の漢字でない文字（空白・記号・かな）はエラーとして位置を返す。字数には数える（CLAUDE.md §4.1）
 + */
 +export function parseInput(input: string | readonly string[]): { lines: Cell[][]; errors: InputError[] } {
 +  const rows: string[][] =
 +    typeof input === "string"
-+      ? trimEmptyEnds(input.split(/\r?\n/).map((l) => l.replace(/^\s+|\s+$/gu, ""))).map((l) => [...l])
++      ? trimEmptyEnds(input.split(/\r?\n/)).map((l) => [...l])
 +      : chunk([...input], 7);
 +
 +  const errors: InputError[] = [];
-+  let previous: string | null = null;
-+  const lines = rows.map((row, line) =>
-+    row.map((input, position): Cell => {
-+      if (input === BLANK) return { kind: "blank", input };
-+      if (input === REPEAT) {
-+        if (previous !== null) return { kind: "han", char: previous, input };
-+        errors.push({ line, position, char: input, message: `${lineName(line)}の${positionName(position)}の「々」は、前に繰り返す字がありません。` });
-+        return { kind: "invalid", input };
-+      }
-+      if (isHan(input)) {
-+        previous = input;
-+        return { kind: "han", char: input, input };
-+      }
-+      errors.push({
-+        line,
-+        position,
-+        char: input,
-+        message: `${lineName(line)}の${positionName(position)}「${input}」は漢字ではありません。詩の本文には漢字だけを入れてください。`,
-+      });
-+      return { kind: "invalid", input };
-+    }),
-+  );
++  const lines = rows.map((row, line) => {
++    const cells: Cell[] = [];
++    row.forEach((input, position) => cells.push(toCell(input, line, position, cells[position - 1])));
++    return cells;
++  });
 +  return { lines, errors };
++
++  function toCell(input: string, line: number, position: number, before: Cell | undefined): Cell {
++    if (input === BLANK) return { kind: "blank", input };
++    if (input === REPEAT) {
++      if (before?.kind === "han") return { kind: "han", char: before.char, input };
++      if (before?.kind === "blank") return { kind: "blank", input };
++      errors.push({ line, position, char: input, message: `${lineName(line)}の${positionName(position)}の「々」は、直前に繰り返す漢字がありません。` });
++      return { kind: "invalid", input };
++    }
++    if (isHan(input)) return { kind: "han", char: input, input };
++    errors.push({
++      line,
++      position,
++      char: input,
++      message: `${lineName(line)}の${positionName(position)}「${input}」は漢字ではありません。詩の本文には漢字だけを入れてください。`,
++    });
++    return { kind: "invalid", input };
++  }
 +}
 +
 +function trimEmptyEnds(lines: string[]): string[] {
@@ -371,10 +374,10 @@ index 0000000..4dd9c88
 +
 diff --git a/packages/engine/src/rules.ts b/packages/engine/src/rules.ts
 new file mode 100644
-index 0000000..9f2ed34
+index 0000000..faacdf5
 --- /dev/null
 +++ b/packages/engine/src/rules.ts
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,233 @@
 +// 規則（CLAUDE.md §4.1「検査する規則」）。重みは data/rules.json から読み、オプションで上書きできる。
 +import { pzOf } from "./chars";
 +import { lineName, positionName, positionsName } from "./messages";
@@ -530,12 +533,14 @@ index 0000000..9f2ed34
 +    out.push(finding(ctx, "rhyme-group", 3, [6], `結句の押韻字「${charAt(3, 6)}」（${r3}）が、承句の押韻字（${r1}）と同じ韻目ではありません。`));
 +  }
 +  const ref = r1 ?? r3;
++  const refLine = r1 !== null ? 1 : 3;
 +  const r0 = rhymeLines.includes(0) ? rhymeOf(0) : null;
 +  if (r0 !== null && ref !== null && r0 !== ref) {
-+    if (r1 !== null && r3 !== null && r1 !== r3) {
-+      out.push(finding(ctx, "rhyme-group", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）が、承句の押韻字（${r1}）と同じ韻目ではありません。`));
-+    } else {
++    // 孤雁入群格は、承句・結句の韻目が両方決まって一致しているときだけ（DECISIONS.md）
++    if (r1 !== null && r3 !== null && r1 === r3) {
 +      out.push(finding(ctx, "kogan-nyugun", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）だけが、承句・結句の韻目（${ref}）と違います。孤雁入群格として意図したものかどうか、作者が判断してください。`));
++    } else {
++      out.push(finding(ctx, "rhyme-group", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）が、${lineName(refLine)}の押韻字（${ref}）と同じ韻目ではありません。`));
 +    }
 +  }
 +
@@ -714,10 +719,10 @@ index 0000000..6c2e5c9
 +};
 diff --git a/packages/engine/test/fixture.ts b/packages/engine/test/fixture.ts
 new file mode 100644
-index 0000000..b7e89d5
+index 0000000..ba73fd4
 --- /dev/null
 +++ b/packages/engine/test/fixture.ts
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,105 @@
 +// テスト用の架空データと、詩を組み立てる道具。
 +//
 +// CLAUDE.md §0 により、テストの期待値に実在の字の平仄を記憶で使わない。
@@ -759,6 +764,8 @@ index 0000000..b7e89d5
 +export const VAR_ONE = String.fromCodePoint(0x6500);
 +/** 異体字の対応で、平の字 P[31] と仄の字 Z[31] の両方につながる字（自身はデータにない） */
 +export const VAR_TWO = String.fromCodePoint(0x6501);
++/** 異体字の対応で、平の字 P[29] と P[30] の両方につながる字（同じ平仄の候補が2つ。自身はデータにない） */
++export const VAR_SAME = String.fromCodePoint(0x6502);
 +/** データにない字 */
 +export const UNKNOWN = String.fromCodePoint(0x6600);
 +/** 国字（テストデータで国字として登録する字） */
@@ -779,7 +786,7 @@ index 0000000..b7e89d5
 +
 +export const fixtureData: EngineData = {
 +  chars,
-+  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!] },
++  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!], [VAR_SAME]: [P[29]!, P[30]!] },
 +  kokuji: { chars: [{ char: KOKUJI }] },
 +  forms: realForms,
 +  rules: realRules,
@@ -823,10 +830,10 @@ index 0000000..b7e89d5
 +});
 diff --git a/packages/engine/test/interpretations.test.ts b/packages/engine/test/interpretations.test.ts
 new file mode 100644
-index 0000000..cdb0007
+index 0000000..2ca4aa0
 --- /dev/null
 +++ b/packages/engine/test/interpretations.test.ts
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,168 @@
 +// 両韻字・異体字の候補ごとの判定（CLAUDE.md §4.1「多音字・両韻字」）と、字の情報・記号列。
 +import { describe, expect, it } from "vitest";
 +import { analyze } from "../src/index";
@@ -841,6 +848,7 @@ index 0000000..cdb0007
 +  RYO,
 +  UNKNOWN,
 +  VAR_ONE,
++  VAR_SAME,
 +  VAR_TWO,
 +  Z,
 +  baseLines,
@@ -926,6 +934,30 @@ index 0000000..cdb0007
 +    expect(info.readings.map((r) => r.via)).toEqual([P[31], Z[31]]);
 +    const byVia = Object.fromEntries(a.interpretations.map((i) => [i.readings[3]!.via, nonOk(i.findings).length > 0]));
 +    expect(byVia).toEqual({ [P[31]!]: true, [Z[31]!]: false });
++  });
++});
++
++describe("異体字の候補が同じ平仄のとき", () => {
++  it("候補の字ごとに解釈を分け、どの候補で判定したかを残す", () => {
++    const a = run(replaceAt(HN, 2, 2, VAR_SAME)); // 転句3字目（平）
++    expect(a.chars[2]![2]!.status).toBe("undetermined");
++    expect(a.interpretations.map((i) => i.readings[16]!.via)).toEqual([P[29], P[30]]);
++    expect(nonOk(a.findings)).toEqual([]);
++  });
++});
++
++describe("8字目以降のマス", () => {
++  it("字数が多い句に両韻字があっても止まらず、字数の違反を返す（読みは4句×7字の中だけで組み合わせる）", () => {
++    const lines = [...HN];
++    lines[0] = lines[0] + RYO[0]!;
++    const a = run(lines);
++    expect(nonOk(a.findings)).toContain("violation:length:0:");
++    expect(a.interpretations).toHaveLength(1);
++  });
++
++  it("未入力の句の8字目に両韻字があっても止まらない", () => {
++    const a = analyze("＿＿＿＿＿＿＿" + RYO[0]!, fixtureData);
++    expect(nonOk(a.findings)).toContain("violation:length:0:");
 +  });
 +});
 +
@@ -1044,10 +1076,10 @@ index 0000000..a7b8735
 +});
 diff --git a/packages/engine/test/rules.test.ts b/packages/engine/test/rules.test.ts
 new file mode 100644
-index 0000000..14fd587
+index 0000000..8105f06
 --- /dev/null
 +++ b/packages/engine/test/rules.test.ts
-@@ -0,0 +1,269 @@
+@@ -0,0 +1,309 @@
 +// 規則ごとの適合例と違反例（CLAUDE.md §6.1）。
 +// 違反例は、律句どおりの基準の詩（forms.json の base）から意図的に1か所だけ崩したもの。
 +// 1か所崩すと連鎖して反応する規則もあるので、出る指摘を過不足なく突き合わせる。
@@ -1192,6 +1224,16 @@ index 0000000..14fd587
 +  it("首句の押韻字だけ別の韻目なら孤雁入群格の可能性（要確認）", () => {
 +    expect(issues(run(replaceAt(HN, 0, 6, R2[0]!)))).toEqual(["check:kogan-nyugun:0:6"]);
 +  });
++
++  it("結句の押韻字が未入力なら、承句・結句の一致を確かめられないので孤雁入群格にはせず、韻目の違反", () => {
++    const lines = replaceAt(replaceAt(HN, 0, 6, R2[0]!), 3, 6, "＿");
++    expect(issues(run(lines))).toEqual(["violation:rhyme-group:0:6"]);
++  });
++
++  it("承句の押韻字がデータにない字でも、孤雁入群格にはしない", () => {
++    const lines = replaceAt(replaceAt(HN, 0, 6, R2[0]!), 1, 6, UNKNOWN);
++    expect(issues(run(lines))).toEqual(["check:unknown-char:1:6", "violation:rhyme-group:0:6"]);
++  });
 +});
 +
 +describe("bou-in（冒韻）", () => {
@@ -1208,6 +1250,27 @@ index 0000000..14fd587
 +    text[3] = first + [...text[3]!].slice(1).join("");
 +    const a = analyze(text.join("\n"), fixtureData);
 +    expect(issues(a)).toEqual(["check:douji:0:0", "check:douji:3:0"]);
++  });
++
++  it("「々」の直前が未入力なら、「々」も未入力として扱う（離れた字は繰り返さない）", () => {
++    const text = build(...HN).split("\n");
++    text[0] = [...text[0]!].map((c, i) => (i === 1 ? "＿" : i === 2 ? "々" : c)).join("");
++    const a = analyze(text.join("\n"), fixtureData);
++    expect(a.chars[0]![2]!.status).toBe("blank");
++    expect(a.errors).toEqual([]);
++    expect(issues(a)).toEqual([]);
++  });
++
++  it("句頭の「々」と、漢字以外の直後の「々」はエラー", () => {
++    const text = build(...HN).split("\n");
++    text[1] = "々" + [...text[1]!].slice(1).join("");
++    text[2] = [...text[2]!].map((c, i) => (i === 1 ? "・" : i === 2 ? "々" : c)).join("");
++    const a = analyze(text.join("\n"), fixtureData);
++    expect(a.errors.map((e) => [e.line, e.position, e.char])).toEqual([
++      [1, 0, "々"],
++      [2, 1, "・"],
++      [2, 2, "々"],
++    ]);
 +  });
 +
 +  it("「々」は直前の字として扱い、同字重出として出す", () => {
@@ -1274,9 +1337,18 @@ index 0000000..14fd587
 +    expect(a.symbols[0]!.at(-1)).toBe("×");
 +  });
 +
-+  it("行の前後の空白と、前後の空行は無視する", () => {
-+    const text = "\n  " + build(...HN).replaceAll("\n", "  \n") + "\n\n";
-+    expect(issues(analyze(text, fixtureData))).toEqual([]);
++  it("行の前後の空白も、漢字以外の文字として位置つきのエラーにする", () => {
++    const text = build(...HN).split("\n");
++    text[1] = " " + text[1]!;
++    const a = analyze(text.join("\n"), fixtureData);
++    expect(a.errors.map((e) => [e.line, e.position, e.char])).toEqual([[1, 0, " "]]);
++  });
++
++  it("テキストの前後の空行（字のない行）は無視する", () => {
++    const text = "\n" + build(...HN) + "\n\n";
++    const a = analyze(text, fixtureData);
++    expect(issues(a)).toEqual([]);
++    expect(a.errors).toEqual([]);
 +  });
 +
 +  it("28マスの配列でも入力できる", () => {
