@@ -1,0 +1,953 @@
+diff --git a/TASKS.md b/TASKS.md
+index 61741bf..274bde5 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,17 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m4-queries — 詩語の検索と、制約・配置の問い合わせ（M4）
++
++ブランチ: `task/m4-queries`
++
++完了条件:
++- [ ] `searchPhrases(語の一覧, 条件)`：平仄パターン（必須。◐は平仄を問わない）、含む字、末字の韻目で絞り込み、出現回数の多い順に返す（CLAUDE.md §4.4）。読みが複数ある語は、ありうるパターンのどれかが合えば合うとする
++- [ ] `constraintsAt(詩, 句, 位置)`：そのマスに平・仄を置いたときに新しく出る違反を返し、置ける平仄と、押韻の位置なら必要な韻目を示す（§4.1）
++- [ ] `placementsFor(語, 詩)`：2字語は各句の1-2・3-4・5-6・6-7字目、3字語は5-7字目に置いてみて、置ける／読みによる／置けない／すでにある字と食い違う、を理由つきで返す（§4.1）
++- [ ] どれも純関数で、判定は analyze を使う（判定の基準を二重に持たない）。入出力はしない（頻度表の読み込みはエンジンの外）
++- [ ] 架空のデータで境界をテストする。実在の字の平仄を記憶で使わない（§0）
++- [ ] 「雲雀」「薰風」など数語の配置結果を `data/reports/placements.md` に出し、目で確かめられる。`npm test` で最新であることを確かめる
+ 
+ ## 完了
+ 
+diff --git a/data/reports/placements.md b/data/reports/placements.md
+new file mode 100644
+index 0000000..f8ed5df
+--- /dev/null
++++ b/data/reports/placements.md
+@@ -0,0 +1,291 @@
++# 詩語の配置結果
++
++`scripts/placements-report.test.ts` が生成する（`npm run placements:update`）。手で編集しない。
++
++CLAUDE.md §8 M4 の完了条件「『雲雀』『薰風』など数語で配置結果を目視確認できる」のためのレポート。判定はすべて規則エンジン（analyze）による。
++
++## 語の情報
++
++### 雲雀
++
++- 平仄データ：雲：平・上平十二文　雀：入・入声十藥
++- 頻度表：唐詩の用例なし（CLAUDE.md §4.4：表示するだけで、拒否しない）
++
++### 薰風
++
++- 平仄データ：薰：平・上平十二文　風：平・上平一東
++- 頻度表：出現13回（1-2字目 2回、3-4字目 5回、5-6字目 4回、6-7字目 2回）、平仄パターン 平平、末字の韻目 上平一東
++  - 用例：唯應率舞樂薰風（崔湜「奉和春日幸望春宮」）
++  - 用例：衣冠南面薰風動（楊巨源「元日含元殿下立仗丹鳳樓門下宣赦相公稱賀二首 一」）
++  - 用例：薰風宿在翠花旗（楊巨源「同太常尉遲博士闕下待漏」）
++
++### 熏風
++
++- 平仄データ：熏：平・上平十二文／去・去声十三問【詞】／平・上平十二文（薰として）　風：平・上平一東
++- 頻度表：出現7回（1-2字目 3回、3-4字目 2回、5-6字目 2回）、平仄パターン 仄平・平平、末字の韻目 上平一東
++  - 用例：來賀熏風一萬年（陳陶「朝元引四首 一」）
++  - 用例：熏風似舞諸女郎（陳陶「蜀葵詠」）
++  - 用例：晴日熏風笑越姝（陳陶「泉州刺桐花詠兼呈趙使君 四」）
++
++### 春風
++
++- 平仄データ：春：平・上平十一真　風：平・上平一東
++- 頻度表：出現696回（1-2字目 229回、3-4字目 269回、5-6字目 73回、6-7字目 125回）、平仄パターン 平平、末字の韻目 上平一東
++  - 用例：莫待春風總吹卻（鮑氏君徽「惜花吟」）
++  - 用例：箏柱春風吹曉月（徐彥伯「鼓吹曲辭 芳樹」）
++  - 用例：春風不度玉門關（王之渙「橫吹曲辭 出塞」）
++
++### 明月
++
++- 平仄データ：明：平・下平八庚　月：入・入声六月
++- 頻度表：出現424回（1-2字目 112回、3-4字目 144回、5-6字目 98回、6-7字目 70回）、平仄パターン 平仄、末字の韻目 入声六月
++  - 用例：簾開明月獨窺人（後蜀嗣主孟昶「避暑摩訶池上作」）
++  - 用例：隴頭明月迥臨關（王維「橫吹曲辭 隴頭吟」）
++  - 用例：秦時明月漢時關（王昌齡「橫吹曲辭 出塞 一」）
++
++### 寒山寺
++
++- 平仄データ：寒：平・上平十四寒　山：平・上平十五刪　寺：去・去声四寘
++- 頻度表：出現3回（5-7字目 3回）、平仄パターン 平平仄、末字の韻目 去声四寘
++  - 用例：姑蘇城外寒山寺（張繼「楓橋夜泊」）
++  - 用例：夜行獨自寒山寺（劉言史「送僧歸山」）
++  - 用例：白雲曉濕寒山寺（方干「途中言事寄居遠上人」）
++
++## (A) 何も入っていない詩（平起式・首句入韻に固定）
++
++定型 `◐○◐●●○◎／◐●◐○◐●◎／◐●◐○○●●／◐○◐●●○◎`（data/forms.json）に、語だけを置いたときの結果。
++
++**雲雀**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++| 承句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 転句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 結句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++
++- 起句の1-2字目：起句の2字目は、定型（平起式・首句入韻）では平です。
++- 起句の5-6字目：起句の5字目は、定型（平起式・首句入韻）では仄です。 起句の6字目は、定型（平起式・首句入韻）では平です。
++- 起句の6-7字目：起句の押韻字「雀」が仄声です。押韻字は平声にします。
++- 承句の3-4字目：承句の4字目は、定型（平起式・首句入韻）では平です。
++- 承句の6-7字目：承句の6字目は、定型（平起式・首句入韻）では仄です。 承句の押韻字「雀」が仄声です。押韻字は平声にします。
++- 転句の3-4字目：転句の4字目は、定型（平起式・首句入韻）では平です。
++- 転句の6-7字目：転句の6字目は、定型（平起式・首句入韻）では仄です。
++- 結句の1-2字目：結句の2字目は、定型（平起式・首句入韻）では平です。
++- 結句の5-6字目：結句の5字目は、定型（平起式・首句入韻）では仄です。 結句の6字目は、定型（平起式・首句入韻）では平です。
++- 結句の6-7字目：結句の押韻字「雀」が仄声です。押韻字は平声にします。
++
++**薰風**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | ○ 置ける | × 置けない | × 置けない | ○ 置ける |
++| 承句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++| 転句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++| 結句 | ○ 置ける | × 置けない | × 置けない | ○ 置ける |
++
++- 起句の3-4字目：起句の4字目は、定型（平起式・首句入韻）では仄です。
++- 起句の5-6字目：起句の5字目は、定型（平起式・首句入韻）では仄です。
++- 承句の1-2字目：承句の2字目は、定型（平起式・首句入韻）では仄です。
++- 承句の5-6字目：承句の6字目は、定型（平起式・首句入韻）では仄です。
++- 承句の6-7字目：承句の6字目は、定型（平起式・首句入韻）では仄です。
++- 転句の1-2字目：転句の2字目は、定型（平起式・首句入韻）では仄です。
++- 転句の5-6字目：転句の6字目は、定型（平起式・首句入韻）では仄です。
++- 転句の6-7字目：転句の6字目は、定型（平起式・首句入韻）では仄です。 転句の7字目は、定型（平起式・首句入韻）では仄です。
++- 結句の3-4字目：結句の4字目は、定型（平起式・首句入韻）では仄です。
++- 結句の5-6字目：結句の5字目は、定型（平起式・首句入韻）では仄です。
++
++**熏風**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | ○ 置ける | × 置けない | △ 読みによる | △ 読みによる |
++| 承句 | × 置けない | ○ 置ける | × 置けない | △ 読みによる |
++| 転句 | × 置けない | ○ 置ける | △ 読みによる | × 置けない |
++| 結句 | ○ 置ける | × 置けない | △ 読みによる | △ 読みによる |
++
++- 起句の3-4字目：起句の4字目は、定型（平起式・首句入韻）では仄です。
++- 起句の5-6字目：起句の5字目は、定型（平起式・首句入韻）では仄です。（一部の読みでだけ）
++- 起句の6-7字目：起句の6字目は、定型（平起式・首句入韻）では平です。（一部の読みでだけ）
++- 承句の1-2字目：承句の2字目は、定型（平起式・首句入韻）では仄です。
++- 承句の5-6字目：承句の6字目は、定型（平起式・首句入韻）では仄です。
++- 承句の6-7字目：承句の6字目は、定型（平起式・首句入韻）では仄です。（一部の読みでだけ）
++- 転句の1-2字目：転句の2字目は、定型（平起式・首句入韻）では仄です。
++- 転句の5-6字目：転句の6字目は、定型（平起式・首句入韻）では仄です。（一部の読みでだけ）
++- 転句の6-7字目：転句の7字目は、定型（平起式・首句入韻）では仄です。
++- 結句の3-4字目：結句の4字目は、定型（平起式・首句入韻）では仄です。
++- 結句の5-6字目：結句の5字目は、定型（平起式・首句入韻）では仄です。（一部の読みでだけ）
++- 結句の6-7字目：結句の6字目は、定型（平起式・首句入韻）では平です。（一部の読みでだけ）
++
++**春風**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | ○ 置ける | × 置けない | × 置けない | ○ 置ける |
++| 承句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++| 転句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++| 結句 | ○ 置ける | × 置けない | × 置けない | ○ 置ける |
++
++- 起句の3-4字目：起句の4字目は、定型（平起式・首句入韻）では仄です。
++- 起句の5-6字目：起句の5字目は、定型（平起式・首句入韻）では仄です。
++- 承句の1-2字目：承句の2字目は、定型（平起式・首句入韻）では仄です。
++- 承句の5-6字目：承句の6字目は、定型（平起式・首句入韻）では仄です。
++- 承句の6-7字目：承句の6字目は、定型（平起式・首句入韻）では仄です。
++- 転句の1-2字目：転句の2字目は、定型（平起式・首句入韻）では仄です。
++- 転句の5-6字目：転句の6字目は、定型（平起式・首句入韻）では仄です。
++- 転句の6-7字目：転句の6字目は、定型（平起式・首句入韻）では仄です。 転句の7字目は、定型（平起式・首句入韻）では仄です。
++- 結句の3-4字目：結句の4字目は、定型（平起式・首句入韻）では仄です。
++- 結句の5-6字目：結句の5字目は、定型（平起式・首句入韻）では仄です。
++
++**明月**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++| 承句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 転句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 結句 | × 置けない | ○ 置ける | × 置けない | × 置けない |
++
++- 起句の1-2字目：起句の2字目は、定型（平起式・首句入韻）では平です。
++- 起句の5-6字目：起句の5字目は、定型（平起式・首句入韻）では仄です。 起句の6字目は、定型（平起式・首句入韻）では平です。
++- 起句の6-7字目：起句の押韻字「月」が仄声です。押韻字は平声にします。
++- 承句の3-4字目：承句の4字目は、定型（平起式・首句入韻）では平です。
++- 承句の6-7字目：承句の6字目は、定型（平起式・首句入韻）では仄です。 承句の押韻字「月」が仄声です。押韻字は平声にします。
++- 転句の3-4字目：転句の4字目は、定型（平起式・首句入韻）では平です。
++- 転句の6-7字目：転句の6字目は、定型（平起式・首句入韻）では仄です。
++- 結句の1-2字目：結句の2字目は、定型（平起式・首句入韻）では平です。
++- 結句の5-6字目：結句の5字目は、定型（平起式・首句入韻）では仄です。 結句の6字目は、定型（平起式・首句入韻）では平です。
++- 結句の6-7字目：結句の押韻字「月」が仄声です。押韻字は平声にします。
++
++**寒山寺**
++
++| 句 | 5-7字目 |
++|---|---|
++| 起句 | × 置けない |
++| 承句 | × 置けない |
++| 転句 | × 置けない |
++| 結句 | × 置けない |
++
++- 起句の5-7字目：起句の5字目は、定型（平起式・首句入韻）では仄です。 起句の押韻字「寺」が仄声です。押韻字は平声にします。
++- 承句の5-7字目：承句の6字目は、定型（平起式・首句入韻）では仄です。 承句の押韻字「寺」が仄声です。押韻字は平声にします。
++- 転句の5-7字目：転句の6字目は、定型（平起式・首句入韻）では仄です。
++- 結句の5-7字目：結句の5字目は、定型（平起式・首句入韻）では仄です。 結句の押韻字「寺」が仄声です。押韻字は平声にします。
++
++## (B) 途中まで入っている詩
++
++王昌齡「春宮曲」（golden/input.json の q03）の転句と、結句の5〜7字目を空けたもの。詩格は自動判定。
++
++```
++昨夜風開露井桃  ●●○○●●○
++未央前殿月輪高  ●○○●●○○
++＿＿＿＿＿＿＿  ＿＿＿＿＿＿＿
++簾外春寒＿＿＿  ○●○○＿＿＿
++```
++
++- 詩格：sokki-nyuin
++
++### 空いているマスの制約（constraintsAt）
++
++| マス | 置ける平仄 | 押韻 | 置けない平仄の理由 |
++|---|---|---|---|
++| 転句の1字目 | どちらでも |  |  |
++| 転句の2字目 | 平 |  | 仄だと「転句の2字目は、定型（仄起式・首句入韻）では平です。 承句（平）と転句（仄）の2字目の平仄が違います。粘法ではそろえます。 転句と結句の2字目がどちらも仄です。反法では平仄を逆にします。」 |
++| 転句の3字目 | どちらでも |  |  |
++| 転句の4字目 | 仄 |  | 平だと「転句の4字目は、定型（仄起式・首句入韻）では仄です。」 |
++| 転句の5字目 | どちらでも |  |  |
++| 転句の6字目 | 平 |  | 仄だと「転句の6字目は、定型（仄起式・首句入韻）では平です。」 |
++| 転句の7字目 | 仄 |  | 平だと「転句の7字目は、定型（仄起式・首句入韻）では仄です。」 |
++| 結句の5字目 | どちらでも |  |  |
++| 結句の6字目 | 仄 |  | 平だと「結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。」 |
++| 結句の7字目 | 平 | 押韻の位置（韻目：下平四豪） | 仄だと「結句の押韻字「（置く字）」が仄声です。押韻字は平声にします。」 |
++
++### 語を置ける位置（placementsFor）
++
++**雲雀**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 承句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 転句 | × 置けない | ○ 置ける | × 置けない | ○ 置ける |
++| 結句 | — 字がある | — 字がある | ○ 置ける | × 置けない |
++
++- 転句の1-2字目：転句の2字目は、定型（仄起式・首句入韻）では平です。 承句（平）と転句（仄）の2字目の平仄が違います。粘法ではそろえます。 転句と結句の2字目がどちらも仄です。反法では平仄を逆にします。
++- 転句の5-6字目：転句の6字目は、定型（仄起式・首句入韻）では平です。
++- 結句の6-7字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。 結句の押韻字「雀」が仄声です。押韻字は平声にします。
++
++**薰風**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 承句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 転句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 結句 | — 字がある | — 字がある | × 置けない | × 置けない |
++
++- 転句の3-4字目：転句の4字目は、定型（仄起式・首句入韻）では仄です。
++- 転句の6-7字目：転句の7字目は、定型（仄起式・首句入韻）では仄です。
++- 結句の5-6字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。
++- 結句の6-7字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。 結句の押韻字「風」（上平一東）が、承句の押韻字（下平四豪）と同じ韻目ではありません。
++
++**熏風**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 承句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 転句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 結句 | — 字がある | — 字がある | × 置けない | × 置けない |
++
++- 転句の3-4字目：転句の4字目は、定型（仄起式・首句入韻）では仄です。
++- 転句の6-7字目：転句の7字目は、定型（仄起式・首句入韻）では仄です。
++- 結句の5-6字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。
++- 結句の6-7字目：結句の押韻字「風」（上平一東）が、承句の押韻字（下平四豪）と同じ韻目ではありません。
++
++**春風**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 承句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 転句 | ○ 置ける | × 置けない | ○ 置ける | × 置けない |
++| 結句 | — 字がある | — 字がある | × 置けない | × 置けない |
++
++- 転句の3-4字目：転句の4字目は、定型（仄起式・首句入韻）では仄です。
++- 転句の6-7字目：転句の7字目は、定型（仄起式・首句入韻）では仄です。
++- 結句の5-6字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。
++- 結句の6-7字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。 結句の押韻字「風」（上平一東）が、承句の押韻字（下平四豪）と同じ韻目ではありません。
++
++**明月**
++
++| 句 | 1-2字目 | 3-4字目 | 5-6字目 | 6-7字目 |
++|---|---|---|---|---|
++| 起句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 承句 | — 字がある | — 字がある | — 字がある | — 字がある |
++| 転句 | × 置けない | ○ 置ける | × 置けない | ○ 置ける |
++| 結句 | — 字がある | — 字がある | ○ 置ける | × 置けない |
++
++- 転句の1-2字目：転句の2字目は、定型（仄起式・首句入韻）では平です。 承句（平）と転句（仄）の2字目の平仄が違います。粘法ではそろえます。 転句と結句の2字目がどちらも仄です。反法では平仄を逆にします。
++- 転句の5-6字目：転句の6字目は、定型（仄起式・首句入韻）では平です。
++- 結句の6-7字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。 結句の押韻字「月」が仄声です。押韻字は平声にします。
++
++**寒山寺**
++
++| 句 | 5-7字目 |
++|---|---|
++| 起句 | — 字がある |
++| 承句 | — 字がある |
++| 転句 | ○ 置ける |
++| 結句 | × 置けない |
++
++- 結句の5-7字目：結句の6字目は、定型（仄起式・首句入韻）では仄です。 結句の2字目（仄）と6字目（平）の平仄が違います。二六対では平仄をそろえます。 結句の押韻字「寺」が仄声です。押韻字は平声にします。
++
++### 空いているマスに合う詩語の例（searchPhrases）
++
++結句の5〜7字目：平仄パターン「◐仄平」、末字の韻目「下平四豪」で検索した上位5件（出現回数の多い順）。
++
++- 詠離騷（5回。用例：時時合眼詠離騷／白居易「湖上閑望」）
++- 利如刀（4回。用例：左右六翮利如刀／柳宗元「跂烏詞」）
++- 八月濤（3回。用例：曾見錢塘八月濤／李珣「雜歌謠辭 漁父歌 三」）
++- 好羽毛（3回。用例：腸斷金籠好羽毛／趙嘏「旅館聞雁別友人」）
++- 意氣豪（3回。用例：下視鷹鸇意氣豪／吳武陵「題路左佛堂」）
+diff --git a/package.json b/package.json
+index abfd54e..cdb9cf8 100644
+--- a/package.json
++++ b/package.json
+@@ -23,7 +23,8 @@
+     "golden:input": "python3 scripts/build_golden_input.py",
+     "golden:update": "GOLDEN_UPDATE=1 vitest run golden",
+     "corpus:fetch": "python3 scripts/fetch_corpus.py",
+-    "phrases:build": "python3 scripts/build_phrases.py"
++    "phrases:build": "python3 scripts/build_phrases.py",
++    "placements:update": "PLACEMENTS_UPDATE=1 vitest run scripts/placements-report.test.ts"
+   },
+   "devDependencies": {
+     "@types/node": "^26.6.6",
+diff --git a/packages/engine/src/index.ts b/packages/engine/src/index.ts
+index c0f851c..99e3965 100644
+--- a/packages/engine/src/index.ts
++++ b/packages/engine/src/index.ts
+@@ -1,4 +1,5 @@
+ // 七言絶句の規則エンジン（CLAUDE.md §4.1）。
+ // 純関数のみで構成し、外部依存を持たない。データ（data/ の JSON）は引数で受け取る。
+ export { analyze, MAX_COMBINATIONS } from "./analyze";
++export { constraintsAt, placementsFor, searchPhrases } from "./queries";
+ export type * from "./types";
+diff --git a/packages/engine/src/queries.ts b/packages/engine/src/queries.ts
+new file mode 100644
+index 0000000..7b42448
+--- /dev/null
++++ b/packages/engine/src/queries.ts
+@@ -0,0 +1,213 @@
++// 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。
++// 判定の基準を二重に持たないよう、制約と配置は analyze に仮の字を置いて判定した結果から求める。
++import { analyze } from "./analyze";
++import { BLANK, parseInput } from "./input";
++import type {
++  Analysis,
++  CellConstraint,
++  EngineData,
++  Finding,
++  InputError,
++  Options,
++  PhraseEntry,
++  PhraseQuery,
++  Placement,
++  PZ,
++} from "./types";
++
++// ---------------------------------------------------------------------------
++// 詩語の検索（§4.4）
++
++const matchesPattern = (pattern: string, p: string) =>
++  [...pattern].length === [...p].length && [...pattern].every((s, i) => s === "◐" || s === [...p][i]);
++
++/**
++ * 頻度表の語を絞り込む。読み込みはエンジンの外で行い、語の一覧を渡す。
++ * - pattern（必須）：平・仄・◐（平仄を問わない）の並び。読みが複数ある語は、ありうるパターンのどれかが合えば合う。
++ *   データにない字（「？」）は◐の位置にだけ合う
++ * - contains：含む字（すべて含む語だけ）
++ * - rhyme：末字の韻目（その韻目の読みを持つ語だけ）
++ * 出現回数の多い順、同じなら語の順に返す。
++ */
++export function searchPhrases(entries: readonly PhraseEntry[], query: PhraseQuery): PhraseEntry[] {
++  const needed = [...(query.contains ?? "")];
++  return entries
++    .filter((e) => e.p.some((p) => matchesPattern(query.pattern, p)))
++    .filter((e) => needed.every((c) => e.w.includes(c)))
++    .filter((e) => query.rhyme === undefined || e.r.includes(query.rhyme))
++    .sort((a, b) => b.n - a.n || (a.w < b.w ? -1 : a.w > b.w ? 1 : 0));
++}
++
++// ---------------------------------------------------------------------------
++// 仮の字（制約・配置の判定に使う）
++
++/** どの字とも重ならない仮の韻目（冒韻の判定に紛れ込まないようにする） */
++const PROBE_RHYME = "（仮）";
++/** 文言の中で仮の字の代わりに見せる言葉 */
++const PROBE_LABEL = "（置く字）";
++
++/** 平仄データ・異体字の対応・国字のどれにもなく、詩の本文にもない漢字を、拡張B領域から決まった順に選ぶ */
++function probeChar(data: EngineData, used: ReadonlySet<string>): string {
++  const kokuji = new Set(data.kokuji.chars.map((k) => k.char));
++  for (let cp = 0x20000; ; cp++) {
++    const c = String.fromCodePoint(cp);
++    if (data.chars[c] === undefined && data.variants[c] === undefined && !kokuji.has(c) && !used.has(c)) return c;
++  }
++}
++
++/** 仮の字を足したデータ。平の字は rhyme の韻目、仄の字は仮の韻目で読む。本文にある字（used）とは重ならない */
++function withProbe(data: EngineData, pz: PZ, rhyme: string, used: ReadonlySet<string>): { data: EngineData; char: string } {
++  const char = probeChar(data, used);
++  const reading = pz === "平" ? { tone: "平" as const, rhyme } : { tone: "去" as const, rhyme: PROBE_RHYME };
++  return { data: { ...data, chars: { ...data.chars, [char]: [reading] } }, char };
++}
++
++// ---------------------------------------------------------------------------
++// 詩の格子（4句×7字）
++
++/** 入力を4句×7字の格子にする。足りないマスは未入力で埋める（それより外のマスは問い合わせでは使わない） */
++function toGrid(input: string | readonly string[]): string[][] {
++  const { lines } = parseInput(input);
++  return Array.from({ length: 4 }, (_, l) => Array.from({ length: 7 }, (_, p) => lines[l]?.[p]?.input ?? BLANK));
++}
++
++/** analyze に渡す28マスの配列。文字列に戻さないので、マスの中の改行が句の区切りとして読まれない */
++const toCells = (grid: string[][]) => grid.flat();
++const keyOf = (f: Finding) => `${f.rule}|${f.severity}|${f.line}|${f.positions.join(",")}`;
++const violations = (a: Analysis) => a.findings.filter((f) => f.severity === "violation");
++const checks = (a: Analysis) => a.findings.filter((f) => f.severity === "check");
++/** どれかの解釈に出る違反（全体に共通するものも含む） */
++const anyViolations = (a: Analysis) => {
++  const seen = new Map<string, Finding>();
++  for (const i of a.interpretations) for (const f of i.findings) if (f.severity === "violation") seen.set(keyOf(f), f);
++  return [...seen.values()];
++};
++const newOnes = (after: Finding[], before: Finding[]) => {
++  const old = new Set(before.map(keyOf));
++  return after.filter((f) => !old.has(keyOf(f)));
++};
++
++/** 押韻しうる位置の字の韻目（解釈のどれかで選ばれたもの） */
++function rhymeGroups(a: Analysis, exceptLine: number): string[] {
++  const groups = new Set<string>();
++  for (const i of a.interpretations) {
++    const lines = i.form.id === null ? [1, 3] : i.form.id.endsWith("-nyuin") ? [0, 1, 3] : [1, 3];
++    for (const l of lines) {
++      if (l === exceptLine) continue;
++      const r = i.readings[l * 7 + 6] ?? a.chars[l]?.[6]?.readings[0];
++      if (r !== undefined && r.tone === "平") groups.add(r.rhyme);
++    }
++  }
++  return [...groups].sort();
++}
++
++/** その位置が押韻の位置になる詩格の解釈があるか */
++const isRhymePosition = (a: Analysis, line: number, pos: number) =>
++  pos === 6 && (line === 1 || line === 3 || (line === 0 && a.interpretations.some((i) => i.form.id?.endsWith("-nyuin"))));
++
++// ---------------------------------------------------------------------------
++// 制約の問い合わせ（§4.1）
++
++/**
++ * その位置に必要な平仄と、押韻の位置なら韻目。
++ * その位置を空けた詩を基準に、平の字・仄の字を仮に置いて判定し、新しく出る違反（全解釈に共通するもの）を比べる。
++ * 今その位置に入っている字には左右されない。押韻の位置では、平の字をほかの押韻字の韻目で読む。
++ */
++export function constraintsAt(
++  input: string | readonly string[],
++  data: EngineData,
++  line: number,
++  pos: number,
++  options: Options = {},
++): CellConstraint {
++  const grid = toGrid(input);
++  grid[line]![pos] = BLANK;
++  const base = analyze(toCells(grid), data, options);
++  const rhymePosition = isRhymePosition(base, line, pos);
++  const groups = rhymePosition ? rhymeGroups(base, line) : [];
++
++  const tryPz = (pz: PZ) => {
++    // 押韻の位置では、ほかの押韻字のどれかの韻目で違反がなければ置ける（韻目がまだなければ仮の韻目）
++    const rhymes = pz === "平" && groups.length > 0 ? groups : [PROBE_RHYME];
++    const results = rhymes.map((rhyme) => {
++      const probe = withProbe(data, pz, rhyme, new Set(grid.flat()));
++      const g = grid.map((row) => [...row]);
++      g[line]![pos] = probe.char;
++      const a = analyze(toCells(g), probe.data, options);
++      // 文言の中の仮の字は、利用者には意味がないので「（置く字）」に置き換える
++      const plain = (fs: Finding[]) => fs.map((f) => ({ ...f, message: f.message.replaceAll(probe.char, PROBE_LABEL) }));
++      return { violations: plain(newOnes(violations(a), violations(base))), checks: plain(newOnes(checks(a), checks(base))) };
++    });
++    const best = results.find((r) => r.violations.length === 0) ?? results[0]!;
++    return { pz, ok: best.violations.length === 0, violations: best.violations, checks: best.checks };
++  };
++
++  const opts = [tryPz("平"), tryPz("仄")];
++  const okOnes = opts.filter((o) => o.ok);
++  return {
++    line,
++    pos,
++    options: opts,
++    required: okOnes.length === 1 ? okOnes[0]!.pz : null,
++    rhyme: { position: rhymePosition, groups },
++  };
++}
++
++// ---------------------------------------------------------------------------
++// 配置の問い合わせ（§4.1）
++
++const SLOTS: Record<number, { start: number; slot: Placement["slot"] }[]> = {
++  2: [
++    { start: 0, slot: "1-2" },
++    { start: 2, slot: "3-4" },
++    { start: 4, slot: "5-6" },
++    { start: 5, slot: "6-7" },
++  ],
++  3: [{ start: 4, slot: "5-7" }],
++};
++
++/**
++ * 2字・3字の語を置ける句と位置の一覧（2字語は各句の1-2・3-4・5-6・6-7字目、3字語は5-7字目）。
++ * - すでにある別の字と重なる位置は conflict（置いて判定はしない。同じ字が入っている位置は重ならない扱い）
++ * - 置いたマスに入力エラー（漢字以外など）が出る語や、「＿」を含む語は invalid（位置と理由を errors に返す）
++ * - 置いて判定し、新しい違反が全解釈に共通して出れば ng、一部の解釈（読み）でだけ出れば depends、出なければ ok
++ */
++export function placementsFor(
++  phrase: string,
++  input: string | readonly string[],
++  data: EngineData,
++  options: Options = {},
++): Placement[] {
++  const chars = [...phrase];
++  const slots = SLOTS[chars.length];
++  if (slots === undefined) return [];
++  const grid = toGrid(input);
++  const base = analyze(toCells(grid), data, options);
++  const baseAny = anyViolations(base);
++
++  return [0, 1, 2, 3].flatMap((line) =>
++    slots.map(({ start, slot }): Placement => {
++      const conflicts = chars.flatMap((c, i) => {
++        const existing = grid[line]![start + i]!;
++        return existing !== BLANK && existing !== c ? [start + i] : [];
++      });
++      if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts, errors: [] };
++      const g = grid.map((row) => [...row]);
++      chars.forEach((c, i) => (g[line]![start + i] = c));
++      const a = analyze(toCells(g), data, options);
++      // 置いたマスの入力エラー（漢字以外・繰り返す字のない「々」）と、語の中の「＿」は invalid（CLAUDE.md §4.1）
++      const placed = (e: InputError) => e.line === line && e.position >= start && e.position < start + chars.length;
++      const errors: InputError[] = [
++        ...a.errors.filter(placed),
++        ...chars.flatMap((c, i) =>
++          c === BLANK ? [{ line, position: start + i, char: c, message: "語に「＿」（未入力のマス）は使えません。" }] : [],
++        ),
++      ].sort((x, y) => x.position - y.position);
++      if (errors.length > 0) return { line, start, slot, status: "invalid", violations: [], dependent: [], conflicts, errors };
++      const common = newOnes(violations(a), violations(base));
++      const dependent = newOnes(anyViolations(a), baseAny).filter((f) => !common.some((c) => keyOf(c) === keyOf(f)));
++      const status = common.length > 0 ? "ng" : dependent.length > 0 ? "depends" : "ok";
++      return { line, start, slot, status, violations: common, dependent, conflicts, errors };
++    }),
++  );
++}
+diff --git a/packages/engine/src/types.ts b/packages/engine/src/types.ts
+index 6c2e5c9..94e2938 100644
+--- a/packages/engine/src/types.ts
++++ b/packages/engine/src/types.ts
+@@ -98,3 +98,58 @@ export type Options = {
+   /** 規則ごとの重みの上書き（流派差に合わせる） */
+   severities?: Partial<Record<string, Severity>>;
+ };
++
++// ---- 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1・§4.4） ----
++
++/** 詩語頻度表（data/phrases/）の1語 */
++export type PhraseEntry = {
++  /** 語 */
++  w: string;
++  /** 出現回数 */
++  n: number;
++  /** 位置ごとの出現回数（"1-2" など） */
++  at: Record<string, number>;
++  /** ありうる平仄パターン（「？」はデータにない字） */
++  p: string[];
++  /** 末字の韻目 */
++  r: string[];
++  /** 用例 [作者, 題, 句] */
++  e: [string, string, string][];
++};
++
++export type PhraseQuery = {
++  /** 平・仄・◐（平仄を問わない）の並び。必須 */
++  pattern: string;
++  /** 含む字 */
++  contains?: string;
++  /** 末字の韻目 */
++  rhyme?: string;
++};
++
++export type CellConstraint = {
++  line: number;
++  pos: number;
++  /** 平・仄それぞれを置いたときに新しく出る違反と要確認 */
++  options: { pz: PZ; ok: boolean; violations: Finding[]; checks: Finding[] }[];
++  /** 置ける平仄が一つだけならそれ。両方置ける、またはどちらも置けないときは null */
++  required: PZ | null;
++  /** 押韻の位置か、そうならほかの押韻字の韻目（まだなければ空） */
++  rhyme: { position: boolean; groups: string[] };
++};
++
++export type Placement = {
++  line: number;
++  /** 0始まりの開始位置 */
++  start: number;
++  slot: "1-2" | "3-4" | "5-6" | "6-7" | "5-7";
++  /** ok 置ける／depends 読みによって違反が出る／ng 置けない／conflict すでにある別の字と重なる／invalid 語に漢字以外などがある */
++  status: "ok" | "depends" | "ng" | "conflict" | "invalid";
++  /** 置くと全解釈に共通して新しく出る違反 */
++  violations: Finding[];
++  /** 置くと一部の解釈（読み）でだけ新しく出る違反 */
++  dependent: Finding[];
++  /** すでにある別の字と重なる位置（0始まり） */
++  conflicts: number[];
++  /** 置いたマスの入力エラー（status が invalid のとき） */
++  errors: InputError[];
++};
+diff --git a/packages/engine/test/queries.test.ts b/packages/engine/test/queries.test.ts
+new file mode 100644
+index 0000000..b3c3912
+--- /dev/null
++++ b/packages/engine/test/queries.test.ts
+@@ -0,0 +1,189 @@
++// 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。
++// 平仄は架空のデータ（fixture.ts）で与え、実在の字の平仄を記憶で使わない（CLAUDE.md §0）。
++import { describe, expect, it } from "vitest";
++import { constraintsAt, placementsFor, searchPhrases } from "../src/index";
++import type { PhraseEntry } from "../src/types";
++import { KOKUJI, P, R, RHYME_A, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "./fixture";
++
++const HN = baseLines("heiki-nyuin");
++// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
++const BLANK = "＿＿＿＿＿＿＿";
++
++const entry = (w: string, n: number, p: string[], r: string[] = []): PhraseEntry => ({ w, n, at: {}, p, r, e: [] });
++
++describe("searchPhrases（詩語の検索）", () => {
++  // 入力の並びは、出現回数・語の順と違えておく（並べ替えを確かめるため）
++  const entries = [
++    entry("甲乙", 5, ["平仄"], ["上平一東"]),
++    entry("戊己", 9, ["平？"], []),
++    entry("丙丁", 9, ["仄平", "平平"], ["下平一先"]),
++    entry("庚辛壬", 3, ["平平仄"], ["去声一送"]),
++  ];
++
++  it("平仄パターンが合う語を、出現回数の多い順（同じなら語の順）に返す", () => {
++    expect(searchPhrases(entries, { pattern: "平仄" }).map((e) => e.w)).toEqual(["甲乙"]);
++  });
++
++  it("読みが複数ある語は、ありうるパターンのどれかが合えば合う", () => {
++    expect(searchPhrases(entries, { pattern: "平平" }).map((e) => e.w)).toEqual(["丙丁"]);
++    expect(searchPhrases(entries, { pattern: "仄平" }).map((e) => e.w)).toEqual(["丙丁"]);
++  });
++
++  it("◐は平仄を問わない（データにない字の「？」にも合う）", () => {
++    expect(searchPhrases(entries, { pattern: "平◐" }).map((e) => e.w)).toEqual(["丙丁", "戊己", "甲乙"]);
++  });
++
++  it("データにない字の「？」は、平や仄を指定した位置には合わない", () => {
++    expect(searchPhrases(entries, { pattern: "平平" }).map((e) => e.w)).not.toContain("戊己");
++  });
++
++  it("字数がパターンと違う語は返さない", () => {
++    expect(searchPhrases(entries, { pattern: "◐◐◐" }).map((e) => e.w)).toEqual(["庚辛壬"]);
++  });
++
++  it("含む字と末字の韻目で絞り込める", () => {
++    expect(searchPhrases(entries, { pattern: "◐◐", contains: "丁" }).map((e) => e.w)).toEqual(["丙丁"]);
++    expect(searchPhrases(entries, { pattern: "◐◐", rhyme: "上平一東" }).map((e) => e.w)).toEqual(["甲乙"]);
++  });
++});
++
++describe("constraintsAt（その位置の制約）", () => {
++  it("定型で仄の位置は、仄だけが置ける。平を置くと出る違反を返す", () => {
++    const c = constraintsAt(build(...replaceAt(HN, 0, 3, "＿")), fixtureData, 0, 3);
++    expect(c.required).toBe("仄");
++    const byPz = Object.fromEntries(c.options.map((o) => [o.pz, o.violations.map((f) => f.rule).sort()]));
++    expect(byPz).toEqual({ 平: ["kohei", "nishi-fudo", "pattern"], 仄: [] });
++  });
++
++  it("◐の位置は、平も仄も置ける", () => {
++    const c = constraintsAt(build(...replaceAt(HN, 0, 0, "＿")), fixtureData, 0, 0);
++    expect(c.required).toBeNull();
++    expect(c.options.map((o) => [o.pz, o.ok])).toEqual([
++      ["平", true],
++      ["仄", true],
++    ]);
++  });
++
++  it("押韻の位置は、ほかの押韻字の韻目を返し、仄は置けない", () => {
++    const c = constraintsAt(build(...replaceAt(HN, 3, 6, "＿")), fixtureData, 3, 6);
++    expect(c.required).toBe("平");
++    expect(c.rhyme).toEqual({ position: true, groups: [RHYME_A] });
++    const zi = c.options.find((o) => o.pz === "仄")!.violations;
++    expect(zi.map((f) => f.rule)).toEqual(["rhyme-tone"]);
++    // 判定に使った仮の字は文言に出さない
++    expect(zi[0]!.message).toContain("「（置く字）」");
++  });
++
++  it("押韻の位置でない所は rhyme.position が false", () => {
++    const c = constraintsAt(build(...replaceAt(HN, 2, 6, "＿")), fixtureData, 2, 6);
++    expect(c.rhyme).toEqual({ position: false, groups: [] });
++  });
++
++  it("本文にデータにない字があっても、仮の字と取り違えない（離れたマスの判定が変わらない）", () => {
++    // 起句4字目に、仮の字として選ばれうる最初の候補（拡張B領域の先頭）を置く
++    const first = String.fromCodePoint(0x20000);
++    expect(fixtureData.chars[first]).toBeUndefined();
++    const withUnknown = build(...replaceAt(replaceAt(HN, 0, 3, first), 2, 0, "＿"));
++    const c = constraintsAt(withUnknown, fixtureData, 2, 0); // 転句1字目は◐
++    expect(c.required).toBeNull();
++    expect(c.options.map((o) => [o.pz, o.ok])).toEqual([
++      ["平", true],
++      ["仄", true],
++    ]);
++  });
++
++  it("今その位置に入っている字には左右されない", () => {
++    const blank = constraintsAt(build(...replaceAt(HN, 0, 3, "＿")), fixtureData, 0, 3);
++    const filled = constraintsAt(build(...replaceAt(HN, 0, 3, "○")), fixtureData, 0, 3);
++    expect(filled).toEqual(blank);
++  });
++});
++
++describe("placementsFor（語を置ける位置）", () => {
++  const twoP = P[28]! + P[27]!; // 平平（架空）
++  const poem = build(HN[0]!, HN[1]!, BLANK, HN[3]!); // 転句が未入力。転句の定型は ◐●◐○○●●
++
++  it("2字語は各句の1-2・3-4・5-6・6-7字目、3字語は5-7字目だけを候補にする", () => {
++    expect(placementsFor(twoP, poem, fixtureData).map((p) => `${p.line}:${p.slot}`)).toEqual(
++      [0, 1, 2, 3].flatMap((l) => ["1-2", "3-4", "5-6", "6-7"].map((s) => `${l}:${s}`)),
++    );
++    const three = P[28]! + P[27]! + Z[30]!;
++    expect(placementsFor(three, poem, fixtureData).map((p) => `${p.line}:${p.slot}`)).toEqual(["0:5-7", "1:5-7", "2:5-7", "3:5-7"]);
++  });
++
++  it("未入力の句で、定型に合う位置は置ける、合わない位置は理由つきで置けない", () => {
++    const at = Object.fromEntries(placementsFor(twoP, poem, fixtureData).filter((p) => p.line === 2).map((p) => [p.slot, p]));
++    expect(at["3-4"]!.status).toBe("ok"); // ◐○ に 平平
++    expect(at["1-2"]!.status).toBe("ng"); // ◐● に 平平：2字目が定型と違う
++    expect(at["1-2"]!.violations.map((f) => f.rule)).toContain("pattern");
++    expect(at["6-7"]!.status).toBe("ng"); // ●● に 平平
++  });
++
++  it("すでにある別の字と重なる位置は conflict（置いて判定はしない）", () => {
++    const p = placementsFor(twoP, poem, fixtureData).find((x) => x.line === 0 && x.slot === "1-2")!;
++    expect(p.status).toBe("conflict");
++    expect(p.conflicts).toEqual([0, 1]);
++  });
++
++  it("すでに同じ字が入っている位置は、食い違いにしない", () => {
++    const text = build(...HN).split("\n");
++    const word = [...text[0]!].slice(0, 2).join(""); // 起句の1-2字目そのもの
++    const p = placementsFor(word, text.join("\n"), fixtureData).find((x) => x.line === 0 && x.slot === "1-2")!;
++    expect(p.status).toBe("ok");
++    expect(p.conflicts).toEqual([]);
++  });
++
++  it("読みによって違反が出る語は depends", () => {
++    // 転句4字目（定型○）に両韻字が来る置き方：3-4字目に「平の字＋両韻字」
++    const word = P[28]! + RYO[5]!;
++    const p = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(p.status).toBe("depends");
++    expect(p.violations).toEqual([]);
++    expect(p.dependent.length).toBeGreaterThan(0);
++  });
++
++  it("データにない字を含む語は、その字の平仄を問わずに判定する", () => {
++    const p = placementsFor(P[28]! + UNKNOWN, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(p.status).toBe("ok");
++  });
++
++  it("漢字以外を含む語は invalid で、置いたマスの位置と理由を返す", () => {
++    for (const word of ["ab", P[28]! + " ", P[28]! + "、"]) {
++      const p = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++      expect(p.status, word).toBe("invalid");
++      expect(p.errors.length, word).toBeGreaterThan(0);
++      expect(p.errors.every((e) => e.line === 2 && (e.position === 2 || e.position === 3)), word).toBe(true);
++    }
++  });
++
++  it("改行を含む語も invalid で、句の区切りとしては扱わない", () => {
++    const empty = Array(4).fill(BLANK).join("\n");
++    const p = placementsFor(P[28]! + "\n", empty, fixtureData, { form: "heiki-nyuin" }).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(p.status).toBe("invalid");
++    expect(p.errors.map((e) => [e.line, e.position])).toEqual([[2, 3]]);
++  });
++
++  it("「＿」を含む語も invalid", () => {
++    const p = placementsFor(P[28]! + "＿", poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(p.status).toBe("invalid");
++    expect(p.errors.map((e) => e.position)).toEqual([3]);
++  });
++
++  it("国字を含む語は既定では置けず、国字で続行するオプションでは置ける", () => {
++    const word = P[28]! + KOKUJI;
++    const ng = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(ng.status).toBe("ng");
++    expect(ng.violations.map((f) => f.rule)).toEqual(["koku-ji"]);
++    const ok = placementsFor(word, poem, fixtureData, { allowKokuji: true }).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(ok.status).toBe("ok");
++  });
++
++  it("押韻の位置に置く3字語は、韻目も確かめる", () => {
++    const poem2 = build(HN[0]!, HN[1]!, HN[2]!, HN[3]!.slice(0, 4) + "＿＿＿");
++    const ok = placementsFor(Z[30]! + P[28]! + R[7]!, poem2, fixtureData).find((x) => x.line === 3)!;
++    expect(ok.status).toBe("ok");
++    const ng = placementsFor(Z[30]! + P[28]! + P[27]!, poem2, fixtureData).find((x) => x.line === 3)!;
++    expect(ng.status).toBe("ng");
++    expect(ng.violations.map((f) => f.rule)).toContain("rhyme-group");
++  });
++});
+diff --git a/scripts/placements-report.test.ts b/scripts/placements-report.test.ts
+new file mode 100644
+index 0000000..cf4f16c
+--- /dev/null
++++ b/scripts/placements-report.test.ts
+@@ -0,0 +1,126 @@
++// 詩語の配置結果を目で確かめるレポート（CLAUDE.md §8 M4 の完了条件）。
++// PLACEMENTS_UPDATE=1 のときだけ data/reports/placements.md を書き出す（`npm run placements:update`）。`npm test` では最新であることを確かめる。
++import { existsSync, readFileSync, writeFileSync } from "node:fs";
++import { expect, it } from "vitest";
++import { analyze, constraintsAt, placementsFor, searchPhrases } from "../packages/engine/src/index";
++import type { EngineData, Options, PhraseEntry, Placement } from "../packages/engine/src/types";
++import { loadEngineData } from "../golden/golden";
++
++const root = new URL("../", import.meta.url);
++const data: EngineData = loadEngineData();
++const index: { chars: Record<string, { file: string }> } = JSON.parse(readFileSync(new URL("data/phrases/index.json", root), "utf-8"));
++
++/** 頻度表から語を引く（先頭の字のファイルだけを読む） */
++function lookup(word: string): PhraseEntry | undefined {
++  const info = index.chars[[...word][0]!];
++  if (info === undefined) return undefined;
++  const groups: Record<string, PhraseEntry[]> = JSON.parse(readFileSync(new URL(`data/phrases/${info.file}`, root), "utf-8"));
++  return groups[String([...word].length)]?.find((e) => e.w === word);
++}
++
++const WORDS = ["雲雀", "薰風", "熏風", "春風", "明月", "寒山寺"];
++const LINE_NAMES = ["起句", "承句", "転句", "結句"];
++const MARK: Record<Placement["status"], string> = { ok: "○ 置ける", depends: "△ 読みによる", ng: "× 置けない", conflict: "— 字がある", invalid: "！ 入力エラー" };
++
++const EMPTY = Array(4).fill("＿＿＿＿＿＿＿").join("\n");
++const PARTIAL = ["昨夜風開露井桃", "未央前殿月輪高", "＿＿＿＿＿＿＿", "簾外春寒＿＿＿"].join("\n");
++
++function wordSection(word: string): string[] {
++  const e = lookup(word);
++  const a = analyze(word, data);
++  const readings = a.chars[0]!.map((c) => `${c.char}：${c.readings.length > 0 ? c.readings.map((r) => `${r.tone}・${r.rhyme}${r.note ?? ""}${r.via ? `（${r.via}として）` : ""}`).join("／") : "平仄データにない"}`);
++  const out = [`### ${word}`, "", `- 平仄データ：${readings.join("　")}`];
++  if (e === undefined) {
++    out.push("- 頻度表：唐詩の用例なし（CLAUDE.md §4.4：表示するだけで、拒否しない）");
++  } else {
++    out.push(
++      `- 頻度表：出現${e.n}回（${Object.entries(e.at).map(([s, n]) => `${s}字目 ${n}回`).join("、")}）、平仄パターン ${e.p.join("・")}、末字の韻目 ${e.r.join("・") || "なし"}`,
++      ...e.e.map(([author, title, line]) => `  - 用例：${line}（${author}「${title}」）`),
++    );
++  }
++  return [...out, ""];
++}
++
++function placementTable(word: string, poem: string, options: Options = {}): string[] {
++  const ps = placementsFor(word, poem, data, options);
++  const slots = [...new Set(ps.map((p) => p.slot))];
++  const rows = [0, 1, 2, 3].map((l) => `| ${LINE_NAMES[l]} | ${slots.map((s) => MARK[ps.find((p) => p.line === l && p.slot === s)!.status]).join(" | ")} |`);
++  const reasons = ps
++    .filter((p) => p.status === "ng" || p.status === "depends")
++    .map((p) => `- ${LINE_NAMES[p.line]}の${p.slot}字目：${(p.status === "ng" ? p.violations : p.dependent).map((f) => f.message).join(" ")}${p.status === "depends" ? "（一部の読みでだけ）" : ""}`);
++  return [`**${word}**`, "", `| 句 | ${slots.map((s) => `${s}字目`).join(" | ")} |`, `|---|${slots.map(() => "---").join("|")}|`, ...rows, "", ...reasons, ""];
++}
++
++function render(): string {
++  const partial = analyze(PARTIAL, data);
++  const blanks: [number, number][] = [];
++  partial.chars.forEach((row, l) => row.forEach((c, p) => c.status === "blank" && blanks.push([l, p])));
++  const constraints = blanks.map(([l, p]) => {
++    const c = constraintsAt(PARTIAL, data, l, p);
++    const rhyme = c.rhyme.position ? `押韻の位置（韻目：${c.rhyme.groups.join("・") || "未定"}）` : "";
++    const why = c.options.filter((o) => !o.ok).map((o) => `${o.pz}だと「${o.violations.map((f) => f.message).join(" ")}」`).join("。");
++    return `| ${LINE_NAMES[l]}の${p + 1}字目 | ${c.required ?? "どちらでも"} | ${rhyme} | ${why} |`;
++  });
++
++  return [
++    "# 詩語の配置結果",
++    "",
++    "`scripts/placements-report.test.ts` が生成する（`npm run placements:update`）。手で編集しない。",
++    "",
++    "CLAUDE.md §8 M4 の完了条件「『雲雀』『薰風』など数語で配置結果を目視確認できる」のためのレポート。判定はすべて規則エンジン（analyze）による。",
++    "",
++    "## 語の情報",
++    "",
++    ...WORDS.flatMap(wordSection),
++    "## (A) 何も入っていない詩（平起式・首句入韻に固定）",
++    "",
++    "定型 `◐○◐●●○◎／◐●◐○◐●◎／◐●◐○○●●／◐○◐●●○◎`（data/forms.json）に、語だけを置いたときの結果。",
++    "",
++    ...WORDS.flatMap((w) => placementTable(w, EMPTY, { form: "heiki-nyuin" })),
++    "## (B) 途中まで入っている詩",
++    "",
++    "王昌齡「春宮曲」（golden/input.json の q03）の転句と、結句の5〜7字目を空けたもの。詩格は自動判定。",
++    "",
++    "```",
++    ...PARTIAL.split("\n").map((l, i) => `${l}  ${partial.symbols[i]}`),
++    "```",
++    "",
++    `- 詩格：${partial.form.id ?? "未定"}${partial.form.note ? `（${partial.form.note}）` : ""}`,
++    "",
++    "### 空いているマスの制約（constraintsAt）",
++    "",
++    "| マス | 置ける平仄 | 押韻 | 置けない平仄の理由 |",
++    "|---|---|---|---|",
++    ...constraints,
++    "",
++    "### 語を置ける位置（placementsFor）",
++    "",
++    ...WORDS.flatMap((w) => placementTable(w, PARTIAL)),
++    "### 空いているマスに合う詩語の例（searchPhrases）",
++    "",
++    ...searchExamples(),
++  ].join("\n");
++}
++
++/** (B) の結句5〜7字目に合う3字語（制約の平仄パターンと押韻の韻目で検索）の上位5件 */
++function searchExamples(): string[] {
++  const cs = [4, 5, 6].map((p) => constraintsAt(PARTIAL, data, 3, p));
++  const pattern = cs.map((c) => c.required ?? "◐").join("");
++  const rhyme = cs[2]!.rhyme.groups[0];
++  const all = Object.values(index.chars).flatMap(({ file }) => (JSON.parse(readFileSync(new URL(`data/phrases/${file}`, root), "utf-8")) as Record<string, PhraseEntry[]>)["3"] ?? []);
++  const hits = searchPhrases(all, rhyme === undefined ? { pattern } : { pattern, rhyme }).slice(0, 5);
++  return [
++    `結句の5〜7字目：平仄パターン「${pattern}」${rhyme ? `、末字の韻目「${rhyme}」` : ""}で検索した上位5件（出現回数の多い順）。`,
++    "",
++    ...hits.map((e) => `- ${e.w}（${e.n}回。用例：${e.e[0]![2]}／${e.e[0]![0]}「${e.e[0]![1]}」）`),
++    "",
++  ];
++}
++
++it("data/reports/placements.md が最新の結果と一致する", () => {
++  const url = new URL("data/reports/placements.md", root);
++  const content = render();
++  if (process.env.PLACEMENTS_UPDATE === "1") writeFileSync(url, content);
++  expect(existsSync(url), "data/reports/placements.md がない。npm run placements:update で作る").toBe(true);
++  expect(readFileSync(url, "utf-8")).toBe(content);
++}, 60_000);
