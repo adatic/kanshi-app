@@ -51,6 +51,13 @@ export type ReadingChoiceView = {
   options: ReadingOptionView[];
 };
 
+/** 詩格が一つに決まらない（起句の末字が未入力など）ときの、詩格の候補ごとに出る指摘 */
+export type FormChoiceView = {
+  formName: string;
+  /** その詩格の解釈に出て、全体の一覧（どの解釈にも出る指摘）にはない指摘 */
+  findings: ReadingFindingView[];
+};
+
 export type PoemView = {
   form: { name: string | null; auto: boolean; note?: string };
   lines: LineView[];
@@ -60,6 +67,8 @@ export type PoemView = {
   judgements: FindingView[];
   /** 読みが複数ある字の、読みごとの結果（読みが一つに決まる詩では空） */
   readingChoices: ReadingChoiceView[];
+  /** 詩格の候補ごとの結果（詩格が一つに決まる詩では空） */
+  formChoices: FormChoiceView[];
   /** 組み合わせが多すぎて、位置ごとに独立して評価した */
   independent: boolean;
   /** 入力エラー（漢字以外の文字など） */
@@ -121,6 +130,22 @@ function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
   });
 }
 
+/** 詩格の候補ごとに、その詩格の解釈に出て、どの解釈にも出るわけではない指摘を集める */
+function formChoices(a: Analysis, data: EngineData): FormChoiceView[] {
+  const ids = [...new Set(a.interpretations.map((i) => i.form.id))];
+  if (ids.length < 2) return [];
+  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
+  const common = new Set(a.findings.map(key));
+  return ids.map((id) => {
+    const found = new Map<string, ReadingFindingView>();
+    for (const i of a.interpretations.filter((x) => x.form.id === id))
+      for (const f of i.findings)
+        if ((f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
+          found.set(key(f), { severity: f.severity, ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message });
+    return { formName: data.forms.forms.find((f) => f.id === id)?.name ?? "未定", findings: [...found.values()] };
+  });
+}
+
 export function buildView(a: Analysis, data: EngineData): PoemView {
   const form = a.form.id === null ? null : (data.forms.forms.find((f) => f.id === a.form.id) ?? null);
   const severityAt = (l: number, p: number): Severity | null => {
@@ -145,6 +170,7 @@ export function buildView(a: Analysis, data: EngineData): PoemView {
     variants: by("variant"),
     judgements: by("check"),
     readingChoices: readingChoices(a, data),
+    formChoices: formChoices(a, data),
     independent: a.independent,
     errors: a.errors.map((e) => e.message),
   };

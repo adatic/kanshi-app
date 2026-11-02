@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { analyze } from "@kanshi/engine";
 import { buildView } from "../src/view";
-import { KOKUJI, RHY2, RYO, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
+import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
 
 const HN = baseLines("heiki-nyuin");
 // HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -44,6 +44,25 @@ describe("buildView", () => {
   it("国字の字はそのまま表示し、記号は■", () => {
     const v = view(replaceAt(HN, 2, 0, KOKUJI));
     expect(v.lines[2]!.cells[0]).toEqual({ char: KOKUJI, symbol: "■", status: "kokuji", severity: "violation" });
+  });
+
+  it("データにない字は記号□で、作者が判断することに入る", () => {
+    const v = view(replaceAt(HN, 2, 0, UNKNOWN));
+    expect(v.lines[2]!.cells[0]).toEqual({ char: UNKNOWN, symbol: "□", status: "unknown", severity: "check" });
+    expect(v.judgements.map((f) => [f.ruleName, f.where])).toEqual([["平仄データにない字", "転句の1字目"]]);
+  });
+
+  it("起句の末字が未入力で詩格が分かれるときは、詩格ごとに出る指摘を示す", () => {
+    // 起句5字目を平に、末字を未入力に。入韻型では5字目が●（定型と不一致）、不入韻型では◐
+    const v = view(replaceAt(replaceAt(HN, 0, 4, "○"), 0, 6, "＿"));
+    expect(v.readingChoices).toEqual([]);
+    const byForm = Object.fromEntries(v.formChoices.map((c) => [c.formName, c.findings.map((f) => f.ruleName)]));
+    expect(byForm["平起式・首句入韻"]).toContain("定型との不一致");
+    expect(byForm["平起式・首句不入韻"]).not.toContain("定型との不一致");
+  });
+
+  it("詩格が一つに決まる詩では、詩格ごとの欄は空", () => {
+    expect(view(HN).formChoices).toEqual([]);
   });
 
   it("「々」は入力どおりに表示する", () => {

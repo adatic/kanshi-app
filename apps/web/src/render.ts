@@ -135,12 +135,34 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
       ),
     );
   }
-  if (v.judgements.length === 0 && v.readingChoices.length === 0) judge.push(h("p", { class: "none" }, "ありません。"));
+  if (v.formChoices.length > 0) {
+    judge.push(
+      h("h4", {}, "詩格の候補ごとの指摘"),
+      h("p", { class: "explain" }, "未入力のマスなどのため詩格が一つに決まりません。候補ごとに、その詩格でだけ出る指摘を示します。"),
+      ...v.formChoices.map((c) =>
+        h(
+          "div",
+          { class: "choice" },
+          h("p", { class: "cell" }, c.formName),
+          c.findings.length === 0
+            ? h("p", { class: "result" }, "この詩格で加わる指摘はありません")
+            : h(
+                "ul",
+                { class: "always" },
+                ...c.findings.map((f) =>
+                  h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`),
+                ),
+              ),
+        ),
+      ),
+    );
+  }
+  if (v.judgements.length === 0 && v.readingChoices.length === 0 && v.formChoices.length === 0) judge.push(h("p", { class: "none" }, "ありません。"));
   sections.push(
     h(
       "section",
       {},
-      h("h3", {}, `${SEVERITY_MARK.check} 作者が判断すること`, h("span", { class: "count" }, `${v.judgements.length + v.readingChoices.length}件`)),
+      h("h3", {}, `${SEVERITY_MARK.check} 作者が判断すること`, h("span", { class: "count" }, `${v.judgements.length + v.readingChoices.length + v.formChoices.length}件`)),
       ...judge.filter((x): x is HTMLElement => x !== null),
     ),
   );
