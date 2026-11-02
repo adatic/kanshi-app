@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { constraintsAt, placementsFor, searchPhrases } from "../src/index";
 import type { PhraseEntry } from "../src/types";
-import { P, R, RHYME_A, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "./fixture";
+import { KOKUJI, P, R, RHYME_A, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "./fixture";
 
 const HN = baseLines("heiki-nyuin");
 // HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -79,6 +79,19 @@ describe("constraintsAt（その位置の制約）", () => {
     expect(c.rhyme).toEqual({ position: false, groups: [] });
   });
 
+  it("本文にデータにない字があっても、仮の字と取り違えない（離れたマスの判定が変わらない）", () => {
+    // 起句4字目に、仮の字として選ばれうる最初の候補（拡張B領域の先頭）を置く
+    const first = String.fromCodePoint(0x20000);
+    expect(fixtureData.chars[first]).toBeUndefined();
+    const withUnknown = build(...replaceAt(replaceAt(HN, 0, 3, first), 2, 0, "＿"));
+    const c = constraintsAt(withUnknown, fixtureData, 2, 0); // 転句1字目は◐
+    expect(c.required).toBeNull();
+    expect(c.options.map((o) => [o.pz, o.ok])).toEqual([
+      ["平", true],
+      ["仄", true],
+    ]);
+  });
+
   it("今その位置に入っている字には左右されない", () => {
     const blank = constraintsAt(build(...replaceAt(HN, 0, 3, "＿")), fixtureData, 0, 3);
     const filled = constraintsAt(build(...replaceAt(HN, 0, 3, "○")), fixtureData, 0, 3);
@@ -132,6 +145,30 @@ describe("placementsFor（語を置ける位置）", () => {
   it("データにない字を含む語は、その字の平仄を問わずに判定する", () => {
     const p = placementsFor(P[28]! + UNKNOWN, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
     expect(p.status).toBe("ok");
+  });
+
+  it("漢字以外を含む語は invalid で、置いたマスの位置と理由を返す", () => {
+    for (const word of ["ab", P[28]! + " ", P[28]! + "、"]) {
+      const p = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
+      expect(p.status, word).toBe("invalid");
+      expect(p.errors.length, word).toBeGreaterThan(0);
+      expect(p.errors.every((e) => e.line === 2 && (e.position === 2 || e.position === 3)), word).toBe(true);
+    }
+  });
+
+  it("「＿」を含む語も invalid", () => {
+    const p = placementsFor(P[28]! + "＿", poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
+    expect(p.status).toBe("invalid");
+    expect(p.errors.map((e) => e.position)).toEqual([3]);
+  });
+
+  it("国字を含む語は既定では置けず、国字で続行するオプションでは置ける", () => {
+    const word = P[28]! + KOKUJI;
+    const ng = placementsFor(word, poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
+    expect(ng.status).toBe("ng");
+    expect(ng.violations.map((f) => f.rule)).toEqual(["koku-ji"]);
+    const ok = placementsFor(word, poem, fixtureData, { allowKokuji: true }).find((x) => x.line === 2 && x.slot === "3-4")!;
+    expect(ok.status).toBe("ok");
   });
 
   it("押韻の位置に置く3字語は、韻目も確かめる", () => {

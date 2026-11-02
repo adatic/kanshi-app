@@ -142,12 +142,14 @@ export type Placement = {
   /** 0始まりの開始位置 */
   start: number;
   slot: "1-2" | "3-4" | "5-6" | "6-7" | "5-7";
-  /** ok 置ける／depends 読みによって違反が出る／ng 置けない／conflict すでにある別の字と重なる */
-  status: "ok" | "depends" | "ng" | "conflict";
+  /** ok 置ける／depends 読みによって違反が出る／ng 置けない／conflict すでにある別の字と重なる／invalid 語に漢字以外などがある */
+  status: "ok" | "depends" | "ng" | "conflict" | "invalid";
   /** 置くと全解釈に共通して新しく出る違反 */
   violations: Finding[];
   /** 置くと一部の解釈（読み）でだけ新しく出る違反 */
   dependent: Finding[];
   /** すでにある別の字と重なる位置（0始まり） */
   conflicts: number[];
+  /** 置いたマスの入力エラー（status が invalid のとき） */
+  errors: InputError[];
 };

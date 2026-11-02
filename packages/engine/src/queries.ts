@@ -7,6 +7,7 @@ import type {
   CellConstraint,
   EngineData,
   Finding,
+  InputError,
   Options,
   PhraseEntry,
   PhraseQuery,
@@ -45,20 +46,18 @@ const PROBE_RHYME = "（仮）";
 /** 文言の中で仮の字の代わりに見せる言葉 */
 const PROBE_LABEL = "（置く字）";
 
-/** 平仄データ・異体字の対応・国字のどれにもない漢字を、拡張B領域から決まった順に選ぶ */
-function probeChars(data: EngineData, count: number): string[] {
+/** 平仄データ・異体字の対応・国字のどれにもなく、詩の本文にもない漢字を、拡張B領域から決まった順に選ぶ */
+function probeChar(data: EngineData, used: ReadonlySet<string>): string {
   const kokuji = new Set(data.kokuji.chars.map((k) => k.char));
-  const out: string[] = [];
-  for (let cp = 0x20000; out.length < count; cp++) {
+  for (let cp = 0x20000; ; cp++) {
     const c = String.fromCodePoint(cp);
-    if (data.chars[c] === undefined && data.variants[c] === undefined && !kokuji.has(c)) out.push(c);
+    if (data.chars[c] === undefined && data.variants[c] === undefined && !kokuji.has(c) && !used.has(c)) return c;
   }
-  return out;
 }
 
-/** 仮の字を足したデータ。平の字は rhyme の韻目、仄の字は仮の韻目で読む */
-function withProbe(data: EngineData, pz: PZ, rhyme: string): { data: EngineData; char: string } {
-  const [char] = probeChars(data, 1) as [string];
+/** 仮の字を足したデータ。平の字は rhyme の韻目、仄の字は仮の韻目で読む。本文にある字（used）とは重ならない */
+function withProbe(data: EngineData, pz: PZ, rhyme: string, used: ReadonlySet<string>): { data: EngineData; char: string } {
+  const char = probeChar(data, used);
   const reading = pz === "平" ? { tone: "平" as const, rhyme } : { tone: "去" as const, rhyme: PROBE_RHYME };
   return { data: { ...data, chars: { ...data.chars, [char]: [reading] } }, char };
 }
@@ -130,7 +129,7 @@ export function constraintsAt(
     // 押韻の位置では、ほかの押韻字のどれかの韻目で違反がなければ置ける（韻目がまだなければ仮の韻目）
     const rhymes = pz === "平" && groups.length > 0 ? groups : [PROBE_RHYME];
     const results = rhymes.map((rhyme) => {
-      const probe = withProbe(data, pz, rhyme);
+      const probe = withProbe(data, pz, rhyme, new Set(grid.flat()));
       const g = grid.map((row) => [...row]);
       g[line]![pos] = probe.char;
       const a = analyze(toText(g), probe.data, options);
@@ -169,6 +168,7 @@ const SLOTS: Record<number, { start: number; slot: Placement["slot"] }[]> = {
 /**
  * 2字・3字の語を置ける句と位置の一覧（2字語は各句の1-2・3-4・5-6・6-7字目、3字語は5-7字目）。
  * - すでにある別の字と重なる位置は conflict（置いて判定はしない。同じ字が入っている位置は重ならない扱い）
+ * - 置いたマスに入力エラー（漢字以外など）が出る語や、「＿」を含む語は invalid（位置と理由を errors に返す）
  * - 置いて判定し、新しい違反が全解釈に共通して出れば ng、一部の解釈（読み）でだけ出れば depends、出なければ ok
  */
 export function placementsFor(
@@ -190,14 +190,23 @@ export function placementsFor(
         const existing = grid[line]![start + i]!;
         return existing !== BLANK && existing !== c ? [start + i] : [];
       });
-      if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts };
+      if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts, errors: [] };
       const g = grid.map((row) => [...row]);
       chars.forEach((c, i) => (g[line]![start + i] = c));
       const a = analyze(toText(g), data, options);
+      // 置いたマスの入力エラー（漢字以外・繰り返す字のない「々」）と、語の中の「＿」は invalid（CLAUDE.md §4.1）
+      const placed = (e: InputError) => e.line === line && e.position >= start && e.position < start + chars.length;
+      const errors: InputError[] = [
+        ...a.errors.filter(placed),
+        ...chars.flatMap((c, i) =>
+          c === BLANK ? [{ line, position: start + i, char: c, message: "語に「＿」（未入力のマス）は使えません。" }] : [],
+        ),
+      ].sort((x, y) => x.position - y.position);
+      if (errors.length > 0) return { line, start, slot, status: "invalid", violations: [], dependent: [], conflicts, errors };
       const common = newOnes(violations(a), violations(base));
       const dependent = newOnes(anyViolations(a), baseAny).filter((f) => !common.some((c) => keyOf(c) === keyOf(f)));
       const status = common.length > 0 ? "ng" : dependent.length > 0 ? "depends" : "ok";
-      return { line, start, slot, status, violations: common, dependent, conflicts };
+      return { line, start, slot, status, violations: common, dependent, conflicts, errors };
     }),
   );
 }

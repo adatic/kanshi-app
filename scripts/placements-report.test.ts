@@ -20,7 +20,7 @@ function lookup(word: string): PhraseEntry | undefined {
 
 const WORDS = ["雲雀", "薰風", "熏風", "春風", "明月", "寒山寺"];
 const LINE_NAMES = ["起句", "承句", "転句", "結句"];
-const MARK: Record<Placement["status"], string> = { ok: "○ 置ける", depends: "△ 読みによる", ng: "× 置けない", conflict: "— 字がある" };
+const MARK: Record<Placement["status"], string> = { ok: "○ 置ける", depends: "△ 読みによる", ng: "× 置けない", conflict: "— 字がある", invalid: "！ 入力エラー" };
 
 const EMPTY = Array(4).fill("＿＿＿＿＿＿＿").join("\n");
 const PARTIAL = ["昨夜風開露井桃", "未央前殿月輪高", "＿＿＿＿＿＿＿", "簾外春寒＿＿＿"].join("\n");
