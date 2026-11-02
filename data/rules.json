@@ -1,0 +1,106 @@
+{
+  "description": "規則ごとの既定の重みと根拠（CLAUDE.md §4.1）。severity は ok（問題なし）・variant（許容される変格）・check（要確認）・violation（明確な違反）。値を変えれば流派差に対応できる。規則IDは CLAUDE.md §4.1 の表のもの。",
+  "references": {
+    "spec": "CLAUDE.md §4.1",
+    "ja-kintaishi": "ウィキペディア日本語版「近体詩」版96547510 https://ja.wikipedia.org/w/index.php?oldid=96547510",
+    "zh-kintaishi": "ウィキペディア中国語版「近体诗」版92701000 https://zh.wikipedia.org/w/index.php?oldid=92701000",
+    "decisions": "DECISIONS.md"
+  },
+  "rules": {
+    "length": {
+      "name": "句数・字数",
+      "severity": "violation",
+      "basis": "七言絶句は4句・各7字（CLAUDE.md §3・§4.1）。"
+    },
+    "pattern": {
+      "name": "定型との不一致",
+      "severity": "violation",
+      "basis": "定型（data/forms.json）の○●◎と平仄が違う。◐は問わない。定型の照合元は data/forms.json の source。"
+    },
+    "ichisango-furon": {
+      "name": "一三五不論の範囲の揺れ",
+      "severity": "variant",
+      "basis": "定型で◐の位置（1・3・5字目）が律句（data/forms.json の base）と違う。ja-kintaishi「一三五不論」：禁忌に抵触しない限り、1・3・5字目は原則として問題とされない。禁忌（下三連・孤平）は別の規則で検出する。"
+    },
+    "nishi-fudo": {
+      "name": "二四不同",
+      "severity": "violation",
+      "basis": "ja-kintaishi「二四不同二六対」：各句において、2字目と4字目の平仄は異なる。"
+    },
+    "niroku-tsui": {
+      "name": "二六対",
+      "severity": "violation",
+      "basis": "ja-kintaishi「二四不同二六対」：各句において、2字目と6字目の平仄は同じ。挟み平（hasami-hei）の句では違反にしない。"
+    },
+    "hanpo-nenpo": {
+      "name": "反法・粘法",
+      "severity": "violation",
+      "basis": "ja-kintaishi「粘法と反法」：聯の2句は2字目の平仄を違える（反法）。前の聯の下の句と次の聯の上の句は2字目の平仄が一致する（粘法）。七言絶句では、起承は逆、承転は同じ、転結は逆。"
+    },
+    "ka-sanren-hei": {
+      "name": "下三連（三平）",
+      "severity": "violation",
+      "basis": "ja-kintaishi「平三連、仄三連の禁」：各句末の3字に平が3つ連続してはいけない。"
+    },
+    "ka-sanren-soku": {
+      "name": "下三連（三仄）",
+      "severity": "check",
+      "basis": "ja-kintaishi「平三連、仄三連の禁」：仄三連は平三連ほど厳しくは問われない。"
+    },
+    "kohei": {
+      "name": "孤平",
+      "severity": "violation",
+      "basis": "ja-kintaishi「孤平の禁」：七言句においては4字目の平が、仄に挟まれて孤立してはいけない。misima と同じく七言は4字目だけを検査する（CLAUDE.md §4.1）。"
+    },
+    "rhyme-tone": {
+      "name": "押韻字の声調",
+      "severity": "violation",
+      "basis": "平韻の定型では押韻字は平声（CLAUDE.md §3）。zh-kintaishi「押韻」：近體詩押韻時，大體以押平聲韻為原則。"
+    },
+    "rhyme-group": {
+      "name": "押韻字の韻目",
+      "severity": "violation",
+      "basis": "zh-kintaishi「押韻」：一篇之中，必須一韻到底，不可換韻，也不可通韻。首句だけの不一致は kogan-nyugun。"
+    },
+    "kogan-nyugun": {
+      "name": "孤雁入群格の可能性",
+      "severity": "check",
+      "basis": "zh-kintaishi「押韻」：首句だけ近い韻部を通用する作品は「襯韻」「孤雁入群格」と呼ばれる（正体ではない変体）。どの韻目どうしが近いかは判定しない。人間の判断（DECISIONS.md 2026-11-02）により要確認とする。"
+    },
+    "hasami-hei": {
+      "name": "挟み平",
+      "severity": "variant",
+      "basis": "ja-kintaishi「挟み平（挟平格）」：押韻をしない句における句末の○●●は、●○●をもって換えることができる。このとき、二四不同二六対は破られても構わない。人間の判断（DECISIONS.md 2026-11-02）により許容される変格とする。"
+    },
+    "bou-in": {
+      "name": "冒韻",
+      "severity": "check",
+      "basis": "押韻位置以外に、押韻と同じ韻目の字がある（CLAUDE.md §4.1・§10）。"
+    },
+    "douji": {
+      "name": "同字重出",
+      "severity": "check",
+      "basis": "同じ字が2回以上使われている。畳語・虚字も含めて検出し、判断は利用者に任せる（CLAUDE.md §4.1）。"
+    },
+    "koku-ji": {
+      "name": "国字",
+      "severity": "violation",
+      "basis": "国字には平仄がない（ja-kintaishi「平仄」：すべての漢字（国字を除く）は平声又は仄声に属する）。オプションで要確認に下げて続行できる（CLAUDE.md §4.1）。"
+    },
+    "unknown-char": {
+      "name": "平仄データにない字",
+      "severity": "check",
+      "basis": "平仄データ（data/chars.json）にも異体字の対応（data/variants.json）にもない字。オプションで平または仄として扱える（CLAUDE.md §4.1）。"
+    },
+    "supplement-reading": {
+      "name": "【詞】【辭】欄にだけある読み",
+      "severity": "check",
+      "basis": "平仄データの元資料で【詞】【辭】の印を付けて別に並ぶ字の読み。意味も出典も不明なため、読みとしては使うが要確認とする（DECISIONS.md 2026-11-02 (a)）。"
+    },
+    "youtai": {
+      "name": "拗体・不粘の可能性",
+      "severity": "check",
+      "basis": "反法・粘法が守られていない作りは、拗体（不粘）として意図されている可能性がある。判定はせず、作者の判断に任せる（CLAUDE.md §2・§4.1）。"
+    }
+  }
+}

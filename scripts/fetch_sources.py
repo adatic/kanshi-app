@@ -65,6 +65,20 @@ SOURCES = [
         "sha256": "c8701426f6a5bd74b96337ef037851a6d613a16a5c47812cd1b77fc8950cfe1c",
     },
     {
+        # 定型（data/forms.json）の照合元。律句・一三五不論・下三連・孤平・反法粘法・挟み平
+        "path": "wikipedia-ja-kintaishi-96547510.wiki",
+        "kind": "mediawiki",
+        "url": mediawiki_revision("https://ja.wikipedia.org/w/api.php", 96547510),
+        "sha256": "c3a73f2b499138d8113e7d89cc78e406f10e80eedcaa67d47bb91b610d10198d",
+    },
+    {
+        # 定型（data/forms.json）の照合元。七言の4基本句式・相対相黏・七絶仄起首句入韻の例・孤雁入群格
+        "path": "wikipedia-zh-kintaishi-92701000.wiki",
+        "kind": "mediawiki",
+        "url": mediawiki_revision("https://zh.wikipedia.org/w/api.php", 92701000),
+        "sha256": "e59a50cfe955864e950d62e26a56d48b2e8d0fd5afbea2cf71e04772046b3247",
+    },
+    {
         "path": f"opencc-{OPENCC_TAG}/STCharacters.txt",
         "kind": "file",
         "url": f"{OPENCC_BASE}/data/dictionary/STCharacters.txt",
