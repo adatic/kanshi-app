@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>七言絶句の作業台</title>
+    <meta name="description" content="七言絶句の平仄・押韻・禁則を、平水韻のデータで機械的に判定する作詩の作業台。" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="site">
+      <h1>七言絶句の作業台</h1>
+      <p class="lede">平仄・押韻・禁則を、平水韻のデータで機械的に判定します。詩の良し悪しは作者が決めます。</p>
+    </header>
+    <main id="app" aria-live="polite">
+      <p class="loading">データを読み込んでいます…</p>
+    </main>
+    <footer class="site">
+      <p>判定の根拠：平水韻（ウィキソース）、定型と規則（ウィキペディア「近体詩」）。出典とライセンスはリポジトリの DATA_SOURCES.md にあります。この画面は、最初にデータを読み込んだあとはどこにも通信しません。</p>
+    </footer>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
