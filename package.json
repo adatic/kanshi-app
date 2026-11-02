@@ -23,7 +23,8 @@
     "golden:input": "python3 scripts/build_golden_input.py",
     "golden:update": "GOLDEN_UPDATE=1 vitest run golden",
     "corpus:fetch": "python3 scripts/fetch_corpus.py",
-    "phrases:build": "python3 scripts/build_phrases.py"
+    "phrases:build": "python3 scripts/build_phrases.py",
+    "placements:update": "PLACEMENTS_UPDATE=1 vitest run scripts/placements-report.test.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
