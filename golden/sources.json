@@ -1,0 +1,2626 @@
+{
+  "description": "ゴールデンテストの詩ごとの本文の照合先（scripts/find_golden_sources.py が生成）。本文は text（全唐诗 poet.tang）から取り、crosscheck（御定全唐詩）とは比較にだけ使う。",
+  "upstream": {
+    "repo": "https://github.com/chinese-poetry/chinese-poetry",
+    "commit": "b8594f81a89752241442f2ce267d6f66f96704ee",
+    "license": "MIT"
+  },
+  "selection": {
+    "file": "蒙学/tangshisanbaishou.json",
+    "types": {
+      "七言絕句": "七言絕句",
+      "樂府": "樂府（4句×7字）"
+    }
+  },
+  "files": {
+    "全唐诗/poet.tang.0.json": "4f88f429938082523cdc72a1612bd7a7c3e3f7a33f8192c61ae51340efc3c92d",
+    "全唐诗/poet.tang.11000.json": "9adf1835246053c821d99af39ce9092e14a94e1baf91740098bd9fc6f6f1cd27",
+    "全唐诗/poet.tang.12000.json": "ec43d055a219d52ecdb58cd30a8a444189392f0d68b92a41495df1c72c5fd095",
+    "全唐诗/poet.tang.13000.json": "eb9c85072d7913bb972e07c72f0123e9d7addca22cfd833cb79a5d74b1c76ebf",
+    "全唐诗/poet.tang.15000.json": "0386e58f46517daa3af0e0f385e0223f1efc0dac53afbe8fea64f99074d870b7",
+    "全唐诗/poet.tang.19000.json": "dea74b41bc807ce2527bb119862a251e3a92b6f69bdf9f98b1434a8336830542",
+    "全唐诗/poet.tang.2000.json": "ec28efa7e2ae9cdbbba09f0ed186e32ccae47a325ad1e5816b7ad56071c1665a",
+    "全唐诗/poet.tang.23000.json": "220a535a762349ec1beed00f1dc11293ccefc70bda15c5258bbcab208b14337f",
+    "全唐诗/poet.tang.27000.json": "11626fcc310bbbcc601f7c8c4d8a664cef4907076cd7ec4f16268ee5b921ba44",
+    "全唐诗/poet.tang.28000.json": "86a15affa95859046f869ffd4850886250d1a181e5151b1f096f728fb2d67502",
+    "全唐诗/poet.tang.29000.json": "e1a0cffe17b4f109399db38f2b23f9b6668b8ca1c3c24e36d5cbe4f40a925862",
+    "全唐诗/poet.tang.30000.json": "e71996f771d15476bae48751081b473b381774b5d335f6163b183f70a2eaed01",
+    "全唐诗/poet.tang.32000.json": "fcb2096245719199249ad23e75eac6997b5a4341564dd1cf73ce8008975b3d74",
+    "全唐诗/poet.tang.38000.json": "08b2ce85e59eac59fe621921b62c15528e9dfb6a102994297703ad67e14aa83f",
+    "全唐诗/poet.tang.39000.json": "791d0171fe1dc88cee8424ae0281f495ed0dcdf042f97f2a3fc9b37e05e9426c",
+    "全唐诗/poet.tang.41000.json": "3c12f59a5103e582eed9fe6ae13affddc030a31e9956efb13cb7768296ba7396",
+    "全唐诗/poet.tang.43000.json": "de5e658dccbcf0d2b38312b39a2423459b88ef893830bc145d453d82887a5753",
+    "全唐诗/poet.tang.5000.json": "a0306e6962cff01639ad9a00b042a201b8dec1f30fa5d768a7b112589887861e",
+    "全唐诗/poet.tang.6000.json": "982a21d2b15922b406911f1c825785054314c686da86b2155d7aebb362d22771",
+    "全唐诗/poet.tang.7000.json": "a6fb69d7b4343c904dc56ae5aae34facc2478d196b51c37ceba9d1e2f171b342",
+    "全唐诗/poet.tang.8000.json": "ac3848e95b02736168003863795de4474838c2d6a71a24ca2a4a280ea5177773",
+    "全唐诗/poet.tang.9000.json": "b99d6596e3a1fe1a661652383083f92d196b8baf4e461d087081d5e1e1b7a51f",
+    "御定全唐詩/json/018.json": "5625085bf68d3648a7cbc4d2f2b623622c6aba68db4fd13f63787839b0a67601",
+    "御定全唐詩/json/027.json": "ad455460e07f6d9ac574e25200b864ada5a5f1a2091f77ca8c7df591c9979dcd",
+    "御定全唐詩/json/028.json": "058e86b3293ad2c9f3d392caa1e896b4b4f4ab31a05fdda55456f168ea1bba13",
+    "御定全唐詩/json/112.json": "2586b17669bf9973fe5265d1bbcaffcbf23c9e20e3b65b02dfd5be0ca0ca776d",
+    "御定全唐詩/json/117.json": "0e89076545ee7b8b63cdf2a6c6659f34763c0806bd4a5d3c03289da8c1441d2e",
+    "御定全唐詩/json/128.json": "b93d22af4e9107e1ffaf8ad296a6b5f7629898638a2bae060fd589279f3aae38",
+    "御定全唐詩/json/143.json": "0baba0782d8ec21155f2700f21598ec7f67bf29d2d7b252bbfd4b07a825ac132",
+    "御定全唐詩/json/156.json": "e2270fafbfeec02aa9add01834008cd5dd0b902891094bd3c0a59f26275f4d52",
+    "御定全唐詩/json/174.json": "d7d74db760090d1009452cef76e5ee48e8a7c9601228f1b0ae7d4df1a3de4f02",
+    "御定全唐詩/json/181.json": "d3dd70a9cf6d9de85376e67d9399f5e33ca8214faf87c27714ef11cd9b793ddf",
+    "御定全唐詩/json/193.json": "e1d484b3f0546aedbaa58b34ac527d61e4c4d1cee95606249dafaabc64f46c26",
+    "御定全唐詩/json/201.json": "39919b0d5c462e351b93e53ebd3cd48e21f9b976b93c0833e172a80a9b9fb486",
+    "御定全唐詩/json/232.json": "b97036841fc9213a0da8904326764b2495a6c1387926f07467ac98c25130b684",
+    "御定全唐詩/json/242.json": "f5efd5efb90a0e2f547dcbab69619f02482687631a6699bac0b541793f07cb89",
+    "御定全唐詩/json/245.json": "ed213d431ac769e08a1bfc46f25b40f5735987a1dbc3bcbed3fbf1ba34873747",
+    "御定全唐詩/json/251.json": "ae12a3d5db0f13f48b2cbc84fe0921b187dba8aa61bfc231f79e8c9812b5e795",
+    "御定全唐詩/json/253.json": "b423d54df12197ded30aff559f233f894c39cd23186d02af53f10d192833ce54",
+    "御定全唐詩/json/257.json": "dd3eae143cf973f11121988cc38d10d8919fa19b804f9caa3d6da1ef1d3d61c0",
+    "御定全唐詩/json/267.json": "2cc46c7dc4139e6f2fb03393817d7afc3890cc3fb021de4ae7c72e827c5e696a",
+    "御定全唐詩/json/283.json": "48e6f4324874d8ff4c8e2b17bdd79e1d337e2a17707281e7c440082339750f6f",
+    "御定全唐詩/json/365.json": "b466b5419b8829777967da4388e9445ae4915ec3f6a1d15d5ba1633b775af4ee",
+    "御定全唐詩/json/441.json": "dcd688b2223d73368b3a3d4103a55e9a216398336a4a6a088e3ad892d08d8988",
+    "御定全唐詩/json/511.json": "0ff9e1a79eaa0d2d6e6f6b58a4c2415372cc18167dd75973d13a6fc6e11da104",
+    "御定全唐詩/json/514.json": "14ee8ff0f7721337da5ecc2a4a3a8b8b5d11b669fb2ddc32583da3167da22b62",
+    "御定全唐詩/json/515.json": "a2a2c034cf97ac4228d0424c870bb05b064802bfdf075c23a58a2e8121a9aae0",
+    "御定全唐詩/json/521.json": "d8aeae44d7968c8d6724ec2d2f908062e5309e9f5839e7bb063a7d878d3612b1",
+    "御定全唐詩/json/523.json": "1dbeab5e612dcb029f197b7137e6276fde261c2e8ca21066b3be500b3b9c6c6c",
+    "御定全唐詩/json/524.json": "e4c707a8d76af65000a1c1f3ee856610c63ec6c8b9c12236c3ed9f910cbbb59c",
+    "御定全唐詩/json/525.json": "d0743557a799cbeb00cb01601c76b879fd1cffa9e5de33b52b791892a250f5d2",
+    "御定全唐詩/json/539.json": "e15ba17815373595c2ea71117db3a16f34bc5c092afca6c0ca48441f37dce7cc",
+    "御定全唐詩/json/540.json": "d6a3743d261ed65c8c2b692cf0fe214b8fcbf0177fd0bd724cac4a8e0d179bbd",
+    "御定全唐詩/json/557.json": "49f9f34dc00f12ddc9993e3bcd9ab86c4cbad92b24cf12ac2f528b52a71e07a5",
+    "御定全唐詩/json/579.json": "dfff9567e305aa369c1c5e3d16fc46d77a9ec60f56760cf11b0dac2c5a770c35",
+    "御定全唐詩/json/683.json": "196c3865ab61e1a1061722889e414aa5abda3a48c1e79c0d2e0029fa83dc9675",
+    "御定全唐詩/json/697.json": "5450299f771f2125fb9cb5dd7baaed8657203e965d44ef841dd0574f2c56739d",
+    "御定全唐詩/json/742.json": "8e54f4109914aa8385600fc0c67c93061dae39354406f3475a2a1fffc090ef64",
+    "御定全唐詩/json/746.json": "536f3868bc3ffe92d7a47e099c0d0676efc6ec34ae66b4836a1963373df75705",
+    "御定全唐詩/json/785.json": "7c57dca1373a69f2bc2f24435ac3df27c962d75637c381dc9cdf7c3768448f92",
+    "蒙学/tangshisanbaishou.json": "8423b65d938d0327e369972e790549b42609fa7ac4a2a72df59f4cb5a49c08f8"
+  },
+  "poems": [
+    {
+      "id": "q01",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 0,
+        "type": "七言絕句",
+        "chapter": "芙蓉樓送辛漸",
+        "author": "王昌齡",
+        "text": "寒雨連江夜入吳平明送客楚山孤洛陽親友如相問一片冰心在玉壺"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.6000.json",
+        "index": 868,
+        "title": "芙蓉樓送辛漸二首 一",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/143.json",
+        "index": 42,
+        "title": "芙蓉樓送辛漸二首",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 868,
+          "title": "芙蓉樓送辛漸二首 一",
+          "author": "王昌齡",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q02",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 1,
+        "type": "七言絕句",
+        "chapter": "閨怨",
+        "author": "王昌齡",
+        "text": "閨中少婦不知愁春日凝妝上翠樓忽見陌頭楊柳色悔教夫婿覓封侯"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.6000.json",
+        "index": 850,
+        "title": "閨怨",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/143.json",
+        "index": 24,
+        "title": "閨怨",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 850,
+          "title": "閨怨",
+          "author": "王昌齡",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q03",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 2,
+        "type": "七言絕句",
+        "chapter": "春宮曲",
+        "author": "王昌齡",
+        "text": "昨夜風開露井桃未央前殿月輪高平陽歌舞新承寵簾外春寒賜錦袍"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.6000.json",
+        "index": 838,
+        "title": "春宮曲",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/143.json",
+        "index": 17,
+        "title": "春宮曲",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 838,
+          "title": "春宮曲",
+          "author": "王昌齡",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q04",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 3,
+        "type": "七言絕句",
+        "chapter": "九月九日憶山東兄弟",
+        "author": "王維",
+        "text": "獨在異鄉爲異客每逢佳節倍思親遙知兄弟登高處遍插茱萸少一人"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.6000.json",
+        "index": 182,
+        "title": "九月九日憶山東兄弟",
+        "author": "王維",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/128.json",
+        "index": 69,
+        "title": "九月九日憶山東兄弟",
+        "author": "王維",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 182,
+          "title": "九月九日憶山東兄弟",
+          "author": "王維",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q05",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 4,
+        "type": "七言絕句",
+        "chapter": "涼州詞",
+        "author": "王翰",
+        "text": "葡萄美酒夜光杯欲飲琵琶馬上催醉臥沙場君莫笑古來征戰幾人回"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.7000.json",
+        "index": 625,
+        "title": "涼州詞二首 一",
+        "author": "王翰",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/156.json",
+        "index": 10,
+        "title": "涼州詞二首",
+        "author": "王翰",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.7000.json",
+          "index": 625,
+          "title": "涼州詞二首 一",
+          "author": "王翰",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q06",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 5,
+        "type": "七言絕句",
+        "chapter": "後宮詞",
+        "author": "白居易",
+        "text": "淚溼羅巾夢不成夜深前殿按歌聲紅顏未老恩先斷斜倚薰籠坐到明"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.23000.json",
+        "index": 107,
+        "title": "後宮詞",
+        "author": "白居易",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/441.json",
+        "index": 84,
+        "title": "後宮詞",
+        "author": "白居易",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.23000.json",
+          "index": 107,
+          "title": "後宮詞",
+          "author": "白居易",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q07",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 6,
+        "type": "七言絕句",
+        "chapter": "宮中詞",
+        "author": "朱慶餘",
+        "text": "寂寂花時閉院門美人相並立瓊軒含情欲說宮中事鸚鵡前頭不敢言"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.27000.json",
+        "index": 852,
+        "title": "宮詞",
+        "author": "朱慶餘",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/514.json",
+        "index": 8,
+        "title": "宮詞",
+        "author": "朱慶餘",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.27000.json",
+          "index": 852,
+          "title": "宮詞",
+          "author": "朱慶餘",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q08",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 7,
+        "type": "七言絕句",
+        "chapter": "近試上張水部",
+        "author": "朱慶餘",
+        "text": "洞房昨夜停紅燭待曉堂前拜舅姑妝罷低聲問夫婿畫眉深淺入時無"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 1,
+        "title": "近試上張籍水部",
+        "author": "朱慶餘",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/515.json",
+        "index": 69,
+        "title": "近試上張籍水部",
+        "author": "朱慶餘",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 1,
+          "title": "近試上張籍水部",
+          "author": "朱慶餘",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q09",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 8,
+        "type": "七言絕句",
+        "chapter": "逢入京使",
+        "author": "岑參",
+        "text": "故園東望路漫漫雙袖龍鍾淚不幹馬上相逢無紙筆憑君傳語報平安"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.9000.json",
+        "index": 946,
+        "title": "逢入京使",
+        "author": "岑參",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/201.json",
+        "index": 61,
+        "title": "逢入京使",
+        "author": "岑參",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.9000.json",
+          "index": 946,
+          "title": "逢入京使",
+          "author": "岑參",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 9,
+        "type": "七言絕句",
+        "chapter": "黃鶴樓送孟浩然之廣陵",
+        "author": "李白",
+        "text": "故人西辭黃鶴樓煙花三月下揚州孤帆遠影碧空盡唯見長江天際流"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.8000.json",
+        "index": 420,
+        "title": "黃鶴樓送孟浩然之廣陵",
+        "author": "李白",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/174.json",
+        "index": 23,
+        "title": "黃鶴樓送孟浩然之廣陵",
+        "author": "李白",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.8000.json",
+          "index": 420,
+          "title": "黃鶴樓送孟浩然之廣陵",
+          "author": "李白",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q11",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 10,
+        "type": "七言絕句",
+        "chapter": "早發白帝城",
+        "author": "李白",
+        "text": "朝辭白帝彩雲間千里江陵一日還兩岸猿聲啼不住輕舟已過萬重山"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.8000.json",
+        "index": 673,
+        "title": "早發白帝城",
+        "author": "李白",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/181.json",
+        "index": 12,
+        "title": "早發白帝城",
+        "author": "李白",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.8000.json",
+          "index": 673,
+          "title": "早發白帝城",
+          "author": "李白",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q12",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 11,
+        "type": "七言絕句",
+        "chapter": "夜上受降城聞笛",
+        "author": "李益",
+        "text": "回樂烽前沙似雪受降城外月如霜不知何處吹蘆管一夜徵人盡望鄉"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.15000.json",
+        "index": 234,
+        "title": "夜上受降城聞笛",
+        "author": "李益",
+        "window": 0,
+        "score": 25
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/283.json",
+        "index": 96,
+        "title": "夜上受降城聞笛",
+        "author": "李益",
+        "window": 0,
+        "score": 25
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.15000.json",
+          "index": 234,
+          "title": "夜上受降城聞笛",
+          "author": "李益",
+          "window": 0,
+          "score": 25
+        },
+        {
+          "file": "全唐诗/poet.tang.2000.json",
+          "index": 45,
+          "title": "雜曲歌辭 婆羅門",
+          "author": "楊敬述進",
+          "window": 0,
+          "score": 25
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 12,
+        "type": "七言絕句",
+        "chapter": "賈生",
+        "author": "李商隱",
+        "text": "宣室求賢訪逐臣賈生才調更無倫可憐夜半虛前席不問蒼生問鬼神"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 690,
+        "title": "賈生",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/540.json",
+        "index": 148,
+        "title": "賈生",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 690,
+          "title": "賈生",
+          "author": "李商隱",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q14",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 13,
+        "type": "七言絕句",
+        "chapter": "隋宮",
+        "author": "李商隱",
+        "text": "乘興南遊不戒嚴九重誰省諫書函春風舉國裁宮錦半作障泥半作帆"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 419,
+        "title": "隋宮",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/539.json",
+        "index": 111,
+        "title": "隋宮",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 419,
+          "title": "隋宮",
+          "author": "李商隱",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q15",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 14,
+        "type": "七言絕句",
+        "chapter": "瑤池",
+        "author": "李商隱",
+        "text": "瑤池阿母綺窗開黃竹歌聲動地哀八駿日行三萬裏穆王何事不重來"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 532,
+        "title": "瑤池",
+        "author": "李商隱",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/539.json",
+        "index": 211,
+        "title": "瑤池",
+        "author": "李商隱",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 532,
+          "title": "瑤池",
+          "author": "李商隱",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q16",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 15,
+        "type": "七言絕句",
+        "chapter": "嫦娥",
+        "author": "李商隱",
+        "text": "雲母屏風燭影深長河漸落曉星沉嫦娥應悔偷靈藥碧海青天夜夜心"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 622,
+        "title": "常娥",
+        "author": "李商隱",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/540.json",
+        "index": 83,
+        "title": "常娥",
+        "author": "李商隱",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 622,
+          "title": "常娥",
+          "author": "李商隱",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q17",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 16,
+        "type": "七言絕句",
+        "chapter": "夜雨寄北",
+        "author": "李商隱",
+        "text": "君問歸期未有期巴山夜雨漲秋池何當共剪西窗燭卻話巴山夜雨時"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 334,
+        "title": "夜雨寄北",
+        "author": "李商隱",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/539.json",
+        "index": 38,
+        "title": "夜雨寄北",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 334,
+          "title": "夜雨寄北",
+          "author": "李商隱",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q18",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 17,
+        "type": "七言絕句",
+        "chapter": "寄令狐郎中",
+        "author": "李商隱",
+        "text": "嵩雲秦樹久離居雙鯉迢迢一紙書休問梁園舊賓客茂陵秋雨病相如"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 361,
+        "title": "寄令狐郎中",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/539.json",
+        "index": 64,
+        "title": "寄令狐郎中",
+        "author": "李商隱",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 361,
+          "title": "寄令狐郎中",
+          "author": "李商隱",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q19",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 18,
+        "type": "七言絕句",
+        "chapter": "爲有",
+        "author": "李商隱",
+        "text": "爲有云屏無限嬌鳳城寒盡怕春宵無端嫁得金龜婿辜負香衾事早朝"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.29000.json",
+        "index": 441,
+        "title": "爲有",
+        "author": "李商隱",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/539.json",
+        "index": 128,
+        "title": "為有",
+        "author": "李商隱",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 441,
+          "title": "爲有",
+          "author": "李商隱",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q20",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 19,
+        "type": "七言絕句",
+        "chapter": "江南逢李龜年",
+        "author": "杜甫",
+        "text": "岐王宅裏尋常見崔九堂前幾度聞正是江南好風景落花時節又逢君"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.11000.json",
+        "index": 900,
+        "title": "江南逢李龜年",
+        "author": "杜甫",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/232.json",
+        "index": 36,
+        "title": "江南逢李龜年",
+        "author": "杜甫",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.11000.json",
+          "index": 900,
+          "title": "江南逢李龜年",
+          "author": "杜甫",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q21",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 20,
+        "type": "七言絕句",
+        "chapter": "贈別·其一",
+        "author": "杜牧",
+        "text": "娉娉嫋嫋十三餘豆蔻梢頭二月初春風十裏揚州路卷上珠簾總不如"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 494,
+        "title": "贈別二首 一",
+        "author": "杜牧",
+        "window": 0,
+        "score": 25
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/523.json",
+        "index": 68,
+        "title": "贈別二首",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 494,
+          "title": "贈別二首 一",
+          "author": "杜牧",
+          "window": 0,
+          "score": 25
+        }
+      ]
+    },
+    {
+      "id": "q22",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 21,
+        "type": "七言絕句",
+        "chapter": "贈別·其二",
+        "author": "杜牧",
+        "text": "多情卻似總無情唯覺樽前笑不成蠟燭有心還惜別替人垂淚到天明"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 495,
+        "title": "贈別二首 二",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/523.json",
+        "index": 68,
+        "title": "贈別二首",
+        "author": "杜牧",
+        "window": 4,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 495,
+          "title": "贈別二首 二",
+          "author": "杜牧",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q23",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 22,
+        "type": "七言絕句",
+        "chapter": "金谷園",
+        "author": "杜牧",
+        "text": "繁華事散逐香塵流水無情草自春日暮東風怨啼鳥落花猶似墜樓人"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 653,
+        "title": "金谷園",
+        "author": "杜牧",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/525.json",
+        "index": 25,
+        "title": "金谷園",
+        "author": "杜牧",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 653,
+          "title": "金谷園",
+          "author": "杜牧",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q24",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 23,
+        "type": "七言絕句",
+        "chapter": "寄揚州韓綽判官",
+        "author": "杜牧",
+        "text": "青山隱隱水迢迢秋盡江南草未凋二十四橋明月夜玉人何處教吹簫"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 454,
+        "title": "寄揚州韓綽判官",
+        "author": "杜牧",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/523.json",
+        "index": 29,
+        "title": "寄揚州韓綽判官",
+        "author": "杜牧",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 454,
+          "title": "寄揚州韓綽判官",
+          "author": "杜牧",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q25",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 24,
+        "type": "七言絕句",
+        "chapter": "遣懷",
+        "author": "杜牧",
+        "text": "落魄江南載酒行楚腰纖細掌中輕十年一覺揚州夢贏得青樓薄倖名"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 554,
+        "title": "遣懷",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/524.json",
+        "index": 51,
+        "title": "遣懷",
+        "author": "杜牧",
+        "window": 0,
+        "score": 25
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 554,
+          "title": "遣懷",
+          "author": "杜牧",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q26",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 25,
+        "type": "七言絕句",
+        "chapter": "秋夕",
+        "author": "杜牧",
+        "text": "銀燭秋光冷畫屏輕羅小扇撲流螢天階夜色涼如水臥看牽牛織女星"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 580,
+        "title": "秋夕",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/524.json",
+        "index": 77,
+        "title": "秋夕",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 580,
+          "title": "秋夕",
+          "author": "杜牧",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q27",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 26,
+        "type": "七言絕句",
+        "chapter": "將赴吳興登樂遊原一絕",
+        "author": "杜牧",
+        "text": "清時有味是無能閒愛孤雲靜愛僧欲把一麾江海去樂遊原上望昭陵"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 331,
+        "title": "將赴吳興登樂遊原一絕",
+        "author": "杜牧",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/521.json",
+        "index": 53,
+        "title": "將赴吳興登樂游原一絕",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 331,
+          "title": "將赴吳興登樂遊原一絕",
+          "author": "杜牧",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q28",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 27,
+        "type": "七言絕句",
+        "chapter": "赤壁",
+        "author": "杜牧",
+        "text": "折戟沉沙鐵未銷自將磨洗認前朝東風不與周郎便銅雀春深鎖二喬"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 439,
+        "title": "赤壁",
+        "author": "杜牧",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/523.json",
+        "index": 14,
+        "title": "赤壁",
+        "author": "杜牧",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.29000.json",
+          "index": 885,
+          "title": "赤壁",
+          "author": "李商隱",
+          "window": 0,
+          "score": 27
+        },
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 439,
+          "title": "赤壁",
+          "author": "杜牧",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q29",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 28,
+        "type": "七言絕句",
+        "chapter": "泊秦淮",
+        "author": "杜牧",
+        "text": "煙籠寒水月籠沙夜泊秦淮近酒家商女不知亡國恨隔江猶唱後庭花"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.28000.json",
+        "index": 443,
+        "title": "泊秦淮",
+        "author": "杜牧",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/523.json",
+        "index": 18,
+        "title": "泊秦淮",
+        "author": "杜牧",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.28000.json",
+          "index": 443,
+          "title": "泊秦淮",
+          "author": "杜牧",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q30",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 29,
+        "type": "七言絕句",
+        "chapter": "徵人怨",
+        "author": "柳中庸",
+        "text": "歲歲金河復玉關朝朝馬策與刀環三春白雪歸青冢萬里黃河繞黑山"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.13000.json",
+        "index": 475,
+        "title": "征怨",
+        "author": "柳中庸",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/257.json",
+        "index": 13,
+        "title": "征怨",
+        "author": "柳中庸",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.13000.json",
+          "index": 475,
+          "title": "征怨",
+          "author": "柳中庸",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q31",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 30,
+        "type": "七言絕句",
+        "chapter": "金陵圖",
+        "author": "韋莊",
+        "text": "誰謂傷心畫不成畫人心逐世人情君看六幅南朝事老木寒雲滿故城"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.39000.json",
+        "index": 179,
+        "title": "金陵圖",
+        "author": "韋莊",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/697.json",
+        "index": 2,
+        "title": "金陵圖",
+        "author": "韋莊",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.39000.json",
+          "index": 179,
+          "title": "金陵圖",
+          "author": "韋莊",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q32",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 31,
+        "type": "七言絕句",
+        "chapter": "滁州西澗",
+        "author": "韋應物",
+        "text": "獨憐幽草澗邊生上有黃鸝深樹鳴春潮帶雨晚來急野渡無人舟自橫"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.9000.json",
+        "index": 437,
+        "title": "滁州西澗",
+        "author": "韋應物",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/193.json",
+        "index": 62,
+        "title": "滁州西澗",
+        "author": "韋應物",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.9000.json",
+          "index": 437,
+          "title": "滁州西澗",
+          "author": "韋應物",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q33",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 32,
+        "type": "七言絕句",
+        "chapter": "桃花溪",
+        "author": "張旭",
+        "text": "隱隱飛橋隔野煙石磯西畔問漁船桃花盡日隨流水洞在清溪何處邊"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.5000.json",
+        "index": 597,
+        "title": "桃花谿",
+        "author": "張旭",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/117.json",
+        "index": 1,
+        "title": "桃花溪",
+        "author": "張旭",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.5000.json",
+          "index": 597,
+          "title": "桃花谿",
+          "author": "張旭",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q34",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 33,
+        "type": "七言絕句",
+        "chapter": "寄人",
+        "author": "張泌",
+        "text": "別夢依依到謝家小廊回合曲闌斜多情只有春庭月猶爲離人照落花"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.41000.json",
+        "index": 527,
+        "title": "寄人 一",
+        "author": "張泌",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/742.json",
+        "index": 1,
+        "title": "寄人",
+        "author": "張泌",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.41000.json",
+          "index": 527,
+          "title": "寄人 一",
+          "author": "張泌",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q35",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 34,
+        "type": "七言絕句",
+        "chapter": "題金陵渡",
+        "author": "張祜",
+        "text": "金陵津渡小山樓一宿行人自可愁潮落夜江斜月裏兩三星火是瓜州"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.27000.json",
+        "index": 735,
+        "title": "題金陵渡",
+        "author": "張祜",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/511.json",
+        "index": 127,
+        "title": "題金陵渡",
+        "author": "張祜",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.27000.json",
+          "index": 735,
+          "title": "題金陵渡",
+          "author": "張祜",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q36",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 35,
+        "type": "七言絕句",
+        "chapter": "贈內人",
+        "author": "張祜",
+        "text": "禁門宮樹月痕過媚眼惟看宿鷺窠斜拔玉釵燈影畔剔開紅焰救飛蛾"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.27000.json",
+        "index": 691,
+        "title": "贈內人",
+        "author": "張祜",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/511.json",
+        "index": 89,
+        "title": "贈內人",
+        "author": "張祜",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.27000.json",
+          "index": 691,
+          "title": "贈內人",
+          "author": "張祜",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "q37",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 36,
+        "type": "七言絕句",
+        "chapter": "集靈臺·其一",
+        "author": "張祜",
+        "text": "日光斜照集靈臺紅樹花迎曉露開昨夜上皇新授籙太真含笑入簾來"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.27000.json",
+        "index": 711,
+        "title": "集靈臺二首 一",
+        "author": "張祜",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/511.json",
+        "index": 105,
+        "title": "集靈台二首",
+        "author": "張祜",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.27000.json",
+          "index": 711,
+          "title": "集靈臺二首 一",
+          "author": "張祜",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q38",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 37,
+        "type": "七言絕句",
+        "chapter": "集靈臺·其二",
+        "author": "張祜",
+        "text": "虢國夫人承主恩平明騎馬入宮門卻嫌脂粉污顏色淡掃蛾眉朝至尊"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.27000.json",
+        "index": 712,
+        "title": "集靈臺二首 二",
+        "author": "張祜",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/511.json",
+        "index": 105,
+        "title": "集靈台二首",
+        "author": "張祜",
+        "window": 4,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.27000.json",
+          "index": 712,
+          "title": "集靈臺二首 二",
+          "author": "張祜",
+          "window": 0,
+          "score": 26
+        },
+        {
+          "file": "全唐诗/poet.tang.11000.json",
+          "index": 975,
+          "title": "虢國夫人",
+          "author": "杜甫",
+          "window": 0,
+          "score": 23
+        }
+      ]
+    },
+    {
+      "id": "q39",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 38,
+        "type": "七言絕句",
+        "chapter": "楓橋夜泊",
+        "author": "張繼",
+        "text": "月落烏啼霜滿天江楓漁火對愁眠姑蘇城外寒山寺夜半鐘聲到客船"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.12000.json",
+        "index": 735,
+        "title": "楓橋夜泊",
+        "author": "張繼",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/242.json",
+        "index": 18,
+        "title": "楓橋夜泊",
+        "author": "張繼",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.12000.json",
+          "index": 735,
+          "title": "楓橋夜泊",
+          "author": "張繼",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q40",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 39,
+        "type": "七言絕句",
+        "chapter": "隴西行",
+        "author": "陳陶",
+        "text": "誓掃匈奴不顧身五千貂錦喪胡塵可憐無定河邊骨猶是春閨夢裏人"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.41000.json",
+        "index": 761,
+        "title": "隴西行四首 二",
+        "author": "陳陶",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/746.json",
+        "index": 53,
+        "title": "隴西行四首",
+        "author": "陳陶",
+        "window": 4,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.41000.json",
+          "index": 761,
+          "title": "隴西行四首 二",
+          "author": "陳陶",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q41",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 40,
+        "type": "七言絕句",
+        "chapter": "雜詩",
+        "author": "佚名",
+        "text": "近寒食雨草萋萋著麥苗風柳映堤等是有家歸未得杜鵑休向耳邊啼"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.43000.json",
+        "index": 411,
+        "title": "雜詩 十三",
+        "author": "無名氏",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/785.json",
+        "index": 24,
+        "title": "雜詩",
+        "author": "無名氏",
+        "window": 48,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.43000.json",
+          "index": 411,
+          "title": "雜詩 十三",
+          "author": "無名氏",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q42",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 41,
+        "type": "七言絕句",
+        "chapter": "回鄉偶書·其一",
+        "author": "賀知章",
+        "text": "少小離家老大回鄉音無改鬢毛衰兒童相見不相識笑問客從何處來"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.5000.json",
+        "index": 475,
+        "title": "回鄉偶書二首 一",
+        "author": "賀知章",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/112.json",
+        "index": 16,
+        "title": "回鄉偶書二首",
+        "author": "賀知章",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.5000.json",
+          "index": 475,
+          "title": "回鄉偶書二首 一",
+          "author": "賀知章",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q43",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 42,
+        "type": "七言絕句",
+        "chapter": "瑤瑟怨",
+        "author": "溫庭筠",
+        "text": "冰簟銀牀夢不成碧天如水夜雲輕雁聲遠過瀟湘去十二樓中月自明"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.32000.json",
+        "index": 263,
+        "title": "瑤瑟怨",
+        "author": "溫庭筠",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/579.json",
+        "index": 15,
+        "title": "瑤瑟怨",
+        "author": "溫庭筠",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.32000.json",
+          "index": 263,
+          "title": "瑤瑟怨",
+          "author": "溫庭筠",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q44",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 43,
+        "type": "七言絕句",
+        "chapter": "月夜",
+        "author": "劉方平",
+        "text": "更深月色半人家北斗闌干南鬥斜今夜偏知春氣暖蟲聲新透綠窗紗"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.13000.json",
+        "index": 342,
+        "title": "夜月",
+        "author": "劉方平",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/251.json",
+        "index": 21,
+        "title": "夜月",
+        "author": "劉方平",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.13000.json",
+          "index": 342,
+          "title": "夜月",
+          "author": "劉方平",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q45",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 44,
+        "type": "七言絕句",
+        "chapter": "春怨",
+        "author": "劉方平",
+        "text": "紗窗日落漸黃昏金屋無人見淚痕寂寞空庭春欲晚梨花滿地不開門"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.13000.json",
+        "index": 343,
+        "title": "春怨",
+        "author": "劉方平",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/251.json",
+        "index": 22,
+        "title": "春怨",
+        "author": "劉方平",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.13000.json",
+          "index": 343,
+          "title": "春怨",
+          "author": "劉方平",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q46",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 45,
+        "type": "七言絕句",
+        "chapter": "烏衣巷",
+        "author": "劉禹錫",
+        "text": "朱雀橋邊野草花烏衣巷口夕陽斜舊時王謝堂前燕飛入尋常百姓家"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.19000.json",
+        "index": 425,
+        "title": "金陵五題 烏衣巷",
+        "author": "劉禹錫",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/365.json",
+        "index": 33,
+        "title": "金陵五題：烏衣巷",
+        "author": "劉禹錫",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.19000.json",
+          "index": 425,
+          "title": "金陵五題 烏衣巷",
+          "author": "劉禹錫",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q47",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 46,
+        "type": "七言絕句",
+        "chapter": "春詞",
+        "author": "劉禹錫",
+        "text": "新妝宜面下朱樓深鎖春光一院愁行到中庭數花朵蜻蜓飛上玉搔頭"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.19000.json",
+        "index": 460,
+        "title": "和樂天春詞",
+        "author": "劉禹錫",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/365.json",
+        "index": 62,
+        "title": "和樂天春詞",
+        "author": "劉禹錫",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.19000.json",
+          "index": 460,
+          "title": "和樂天春詞",
+          "author": "劉禹錫",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "q48",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 47,
+        "type": "七言絕句",
+        "chapter": "馬嵬坡",
+        "author": "鄭畋",
+        "text": "玄宗回馬楊妃死雲雨雖亡日月新終是聖明天子事景陽宮井又何人"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.30000.json",
+        "index": 951,
+        "title": "馬嵬坡",
+        "author": "鄭畋",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/557.json",
+        "index": 36,
+        "title": "馬嵬坡",
+        "author": "鄭畋",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.30000.json",
+          "index": 951,
+          "title": "馬嵬坡",
+          "author": "鄭畋",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q49",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 48,
+        "type": "七言絕句",
+        "chapter": "寒食",
+        "author": "韓翃",
+        "text": "春城無處不飛花寒食東風御柳斜日暮漢宮傳蠟燭輕煙散入五侯家"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.12000.json",
+        "index": 910,
+        "title": "寒食",
+        "author": "韓翃",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/245.json",
+        "index": 43,
+        "title": "寒食",
+        "author": "韓翃",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.12000.json",
+          "index": 910,
+          "title": "寒食",
+          "author": "韓翃",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q50",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 49,
+        "type": "七言絕句",
+        "chapter": "已涼",
+        "author": "韓偓",
+        "text": "碧闌干外繡簾垂猩血屏風畫折枝八尺龍鬚方錦褥已涼天氣未寒時"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.38000.json",
+        "index": 202,
+        "title": "已涼",
+        "author": "韓偓",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/683.json",
+        "index": 12,
+        "title": "已涼",
+        "author": "韓偓",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.38000.json",
+          "index": 202,
+          "title": "已涼",
+          "author": "韓偓",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "q51",
+      "group": "七言絕句",
+      "selection": {
+        "section": 1,
+        "index": 50,
+        "type": "七言絕句",
+        "chapter": "宮詞",
+        "author": "顧況",
+        "text": "長樂宮連上苑春玉樓金殿豔歌新君門一入無由出唯有宮鶯得見人"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.13000.json",
+        "index": 907,
+        "title": "宮詞",
+        "author": "顧況",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/267.json",
+        "index": 93,
+        "title": "宮詞",
+        "author": "顧況",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.13000.json",
+          "index": 907,
+          "title": "宮詞",
+          "author": "顧況",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "y01",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 0,
+        "type": "樂府",
+        "chapter": "涼州詞",
+        "author": "王之渙",
+        "text": "黃河遠上白雲間一片孤城萬仞山羌笛何須怨楊柳春風不度玉門關"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.13000.json",
+        "index": 380,
+        "title": "涼州詞二首” 一",
+        "author": "王之渙",
+        "window": 0,
+        "score": 27
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/253.json",
+        "index": 2,
+        "title": "涼州詞二首",
+        "author": "王之渙",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.13000.json",
+          "index": 380,
+          "title": "涼州詞二首” 一",
+          "author": "王之渙",
+          "window": 0,
+          "score": 27
+        },
+        {
+          "file": "全唐诗/poet.tang.0.json",
+          "index": 951,
+          "title": "橫吹曲辭 出塞",
+          "author": "王之渙",
+          "window": 0,
+          "score": 26
+        }
+      ]
+    },
+    {
+      "id": "y02",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 1,
+        "type": "樂府",
+        "chapter": "出塞·秦時明月漢時關",
+        "author": "王昌齡",
+        "text": "秦時明月漢時關萬里長征人未還但使龍城飛將在不教胡馬度陰山"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.0.json",
+        "index": 933,
+        "title": "橫吹曲辭 出塞 一",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 832,
+          "title": "出塞二首 一",
+          "author": "王昌齡",
+          "window": 0,
+          "score": 28
+        }
+      ],
+      "crosscheck": {
+        "file": "御定全唐詩/json/018.json",
+        "index": 18,
+        "title": "橫吹曲辭：出塞",
+        "author": "王昌齡",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.0.json",
+          "index": 933,
+          "title": "橫吹曲辭 出塞 一",
+          "author": "王昌齡",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 832,
+          "title": "出塞二首 一",
+          "author": "王昌齡",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "y03",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 5,
+        "type": "樂府",
+        "chapter": "渭城曲",
+        "author": "王維",
+        "text": "渭城朝雨浥輕塵客舍青青柳色新勸君更盡一杯酒西出陽關無故人"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.2000.json",
+        "index": 90,
+        "title": "雜曲歌辭 渭城曲",
+        "author": "王維",
+        "window": 0,
+        "score": 26
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/027.json",
+        "index": 123,
+        "title": "雜曲歌辭：渭城曲",
+        "author": "王維",
+        "window": 0,
+        "score": 27
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.2000.json",
+          "index": 90,
+          "title": "雜曲歌辭 渭城曲",
+          "author": "王維",
+          "window": 0,
+          "score": 26
+        },
+        {
+          "file": "全唐诗/poet.tang.6000.json",
+          "index": 184,
+          "title": "渭城曲",
+          "author": "王維",
+          "window": 0,
+          "score": 25
+        }
+      ]
+    },
+    {
+      "id": "y04",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 6,
+        "type": "樂府",
+        "chapter": "秋夜曲",
+        "author": "王維",
+        "text": "桂魄初生秋露微輕羅已薄未更衣銀箏夜久殷勤弄心怯空房不忍歸"
+      },
+      "text": null,
+      "textReview": [
+        "作者が一致する候補がない"
+      ],
+      "textDuplicates": [],
+      "crosscheck": null,
+      "crosscheckReview": [
+        "作者が一致する候補がない"
+      ],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.1000.json",
+          "index": 908,
+          "title": "雜曲歌辭 秋夜曲",
+          "author": "王涯",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.18000.json",
+          "index": 340,
+          "title": "秋夜曲",
+          "author": "王涯",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "y05",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 10,
+        "type": "樂府",
+        "chapter": "清平調·雲想衣裳花想容",
+        "author": "李白",
+        "text": "雲想衣裳花想容春風拂檻露華濃若非羣玉山頭見會向瑤臺月下逢"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.2000.json",
+        "index": 69,
+        "title": "雜曲歌辭 清平調 一",
+        "author": "李白",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [
+        {
+          "file": "全唐诗/poet.tang.49000.json",
+          "index": 113,
+          "title": "清平調 一",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.8000.json",
+          "index": 86,
+          "title": "清平調詞三首 一",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        }
+      ],
+      "crosscheck": {
+        "file": "御定全唐詩/json/027.json",
+        "index": 108,
+        "title": "雜曲歌辭：清平調",
+        "author": "李白",
+        "window": 0,
+        "score": 26
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.2000.json",
+          "index": 69,
+          "title": "雜曲歌辭 清平調 一",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.49000.json",
+          "index": 113,
+          "title": "清平調 一",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.8000.json",
+          "index": 86,
+          "title": "清平調詞三首 一",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        }
+      ]
+    },
+    {
+      "id": "y06",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 11,
+        "type": "樂府",
+        "chapter": "清平調·一枝紅豔露凝香",
+        "author": "李白",
+        "text": "一枝紅豔露凝香雲雨巫山枉斷腸借問漢宮誰得似可憐飛燕倚新妝"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.2000.json",
+        "index": 70,
+        "title": "雜曲歌辭 清平調 二",
+        "author": "李白",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [
+        {
+          "file": "全唐诗/poet.tang.49000.json",
+          "index": 114,
+          "title": "清平調 二",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        }
+      ],
+      "crosscheck": {
+        "file": "御定全唐詩/json/027.json",
+        "index": 108,
+        "title": "雜曲歌辭：清平調",
+        "author": "李白",
+        "window": 4,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.2000.json",
+          "index": 70,
+          "title": "雜曲歌辭 清平調 二",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.49000.json",
+          "index": 114,
+          "title": "清平調 二",
+          "author": "李白",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.8000.json",
+          "index": 87,
+          "title": "清平調詞三首 二",
+          "author": "李白",
+          "window": 0,
+          "score": 27
+        }
+      ]
+    },
+    {
+      "id": "y07",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 12,
+        "type": "樂府",
+        "chapter": "清平調·名花傾國兩相歡",
+        "author": "李白",
+        "text": "名花傾國兩相歡常得君王帶笑看解釋春風無限恨沉香亭北倚欄杆"
+      },
+      "text": null,
+      "textReview": [
+        "一致24字で本文の違う候補が2件ある"
+      ],
+      "textDuplicates": [],
+      "crosscheck": null,
+      "crosscheckReview": [
+        "一致25字で本文の違う候補が2件ある"
+      ],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.2000.json",
+          "index": 71,
+          "title": "雜曲歌辭 清平調 三",
+          "author": "李白",
+          "window": 0,
+          "score": 24
+        },
+        {
+          "file": "全唐诗/poet.tang.49000.json",
+          "index": 115,
+          "title": "清平調 三",
+          "author": "李白",
+          "window": 0,
+          "score": 24
+        },
+        {
+          "file": "全唐诗/poet.tang.8000.json",
+          "index": 88,
+          "title": "清平調詞三首 三",
+          "author": "李白",
+          "window": 0,
+          "score": 23
+        }
+      ]
+    },
+    {
+      "id": "y08",
+      "group": "樂府（4句×7字）",
+      "selection": {
+        "section": 6,
+        "index": 33,
+        "type": "樂府",
+        "chapter": "金縷衣",
+        "author": "佚名",
+        "text": "勸君莫惜金縷衣勸君惜取少年時花開堪折直須折莫待無花空折枝"
+      },
+      "text": {
+        "file": "全唐诗/poet.tang.2000.json",
+        "index": 229,
+        "title": "雜曲歌辭 金縷衣",
+        "author": "不詳",
+        "window": 0,
+        "score": 28
+      },
+      "textReview": [],
+      "textDuplicates": [],
+      "crosscheck": {
+        "file": "御定全唐詩/json/028.json",
+        "index": 32,
+        "title": "雜曲歌辭：金縷衣",
+        "author": "不詳",
+        "window": 0,
+        "score": 28
+      },
+      "crosscheckReview": [],
+      "nearCandidates": [
+        {
+          "file": "全唐诗/poet.tang.2000.json",
+          "index": 229,
+          "title": "雜曲歌辭 金縷衣",
+          "author": "不詳",
+          "window": 0,
+          "score": 28
+        },
+        {
+          "file": "全唐诗/poet.tang.43000.json",
+          "index": 399,
+          "title": "雜詩 一",
+          "author": "無名氏",
+          "window": 0,
+          "score": 24
+        }
+      ]
+    }
+  ]
+}
