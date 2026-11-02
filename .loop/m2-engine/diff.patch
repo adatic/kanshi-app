@@ -25,13 +25,13 @@ index c3ed22d..42ca32c 100644
  
 diff --git a/packages/engine/src/analyze.ts b/packages/engine/src/analyze.ts
 new file mode 100644
-index 0000000..1f0a853
+index 0000000..6205cd4
 --- /dev/null
 +++ b/packages/engine/src/analyze.ts
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,134 @@
 +// 詩全体の判定（CLAUDE.md §4.1）。読みが複数ある字は、読みの組み合わせ（解釈）ごとに判定する。
 +import { charInfo, pzOf, symbolOf } from "./chars";
-+import { detectForm } from "./form";
++import { detectForms } from "./form";
 +import { parseInput } from "./input";
 +import type { CellState, RuleContext } from "./rules";
 +import { evaluate, evaluateGlobal } from "./rules";
@@ -97,7 +97,7 @@ index 0000000..1f0a853
 +    ? open.flatMap(([l, p], i) => choices[l]![p]!.map((_, c) => open.map((__, j) => (j === i ? c : -1))))
 +    : cartesian(open.map(([l, p]) => choices[l]![p]!.length));
 +
-+  const interpretations: Interpretation[] = picks.map((pick) => {
++  const interpretations: Interpretation[] = picks.flatMap((pick) => {
 +    // 句と位置の組で引く（8字目以降のマスと次の句のマスを取り違えないため）
 +    const chosen = new Map(open.map(([l, p], i) => [`${l}:${p}`, pick[i]!]));
 +    const grid: CellState[][] = choices.map((row, l) =>
@@ -113,10 +113,12 @@ index 0000000..1f0a853
 +      const r = grid[l]![p]!.reading;
 +      if (pick[i] !== -1 && r !== null) readings[l * 7 + p] = r;
 +    });
-+    const form = detectForm((l, p) => grid[l]?.[p]?.pz ?? null, options.form);
-+    const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
-+    const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));
-+    return { readings, form, findings };
++    // 詩格が一つに決まらない（起句の末字が未入力など）ときは、候補の詩格ごとに解釈を分ける
++    return detectForms((l, p) => grid[l]?.[p]?.pz ?? null, options.form).map((form) => {
++      const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
++      const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));
++      return { readings, form, findings };
++    });
 +  });
 +
 +  // すべての解釈に共通する指摘は全体の findings に入れる
@@ -153,7 +155,7 @@ index 0000000..1f0a853
 +  const first = interpretations[0]!.form;
 +  const ids = new Set(interpretations.map((i) => i.form.id));
 +  if (ids.size === 1) return first;
-+  const note = "読みによって詩格が変わります（解釈ごとの結果を見てください）。";
++  const note = "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。";
 +  return { ...first, note: first.note !== undefined ? `${first.note}${note}` : note };
 +}
 +
@@ -230,10 +232,10 @@ index 0000000..836fbc6
 +}
 diff --git a/packages/engine/src/form.ts b/packages/engine/src/form.ts
 new file mode 100644
-index 0000000..2f33667
+index 0000000..cec270d
 --- /dev/null
 +++ b/packages/engine/src/form.ts
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,51 @@
 +// 詩格の判定（CLAUDE.md §4.1「詩格（定型）」）。
 +import { lineName } from "./messages";
 +import type { FormId, FormResult, PZ } from "./types";
@@ -244,11 +246,12 @@ index 0000000..2f33667
 + * 第1句の2字目（平なら平起式、仄なら仄起式）と、第1句の末字（平なら首句入韻、仄なら不入韻）から詩格を決める。
 + * - 2字目が未入力などで決まらなければ、反法・粘法（起承は逆、承転は同じ、転結は逆）で他の句の2字目から推定する
 + * - どの句の2字目も決まらなければ、詩格は決めない（id: null）
-+ * - 末字が決まらなければ、入韻かどうかは決めず、不入韻として判定する（定型の制約が緩いほうを採る）
-+ * fixed があれば、それを使う。
++ * - 末字が決まらなければ、入韻かどうかは決めず、入韻・不入韻の両方を候補として返す
++ *   （どちらの定型が緩いかは起式によって違うので、両方で判定して共通する指摘だけを確定にする）
++ * fixed があれば、それだけを返す。
 + */
-+export function detectForm(pzAt: (line: number, pos: number) => PZ | null, fixed?: FormId): FormResult {
-+  if (fixed !== undefined) return { id: fixed, auto: false };
++export function detectForms(pzAt: (line: number, pos: number) => PZ | null, fixed?: FormId): FormResult[] {
++  if (fixed !== undefined) return [{ id: fixed, auto: false }];
 +
 +  const notes: string[] = [];
 +  let second = pzAt(0, 1);
@@ -269,13 +272,20 @@ index 0000000..2f33667
 +    }
 +  }
 +  if (second === null) {
-+    return { id: null, auto: true, note: "どの句の2字目も決まらないため、詩格を決めていません。定型に依存する検査はしていません。" };
++    return [{ id: null, auto: true, note: "どの句の2字目も決まらないため、詩格を決めていません。定型に依存する検査はしていません。" }];
 +  }
 +
++  const kishiki = second === "平" ? "heiki" : "sokki";
 +  const last = pzAt(0, 6);
-+  if (last === null) notes.push("起句の末字が決まらないため、入韻かどうかは決めず、不入韻として判定しました。");
-+  const id: FormId = `${second === "平" ? "heiki" : "sokki"}-${last === "平" ? "nyuin" : "funyuin"}`;
-+  return notes.length > 0 ? { id, auto: true, note: notes.join("") } : { id, auto: true };
++  const withNotes = (id: FormId, extra?: string): FormResult => {
++    const all = extra === undefined ? notes : [...notes, extra];
++    return all.length > 0 ? { id, auto: true, note: all.join("") } : { id, auto: true };
++  };
++  if (last === null) {
++    const note = "起句の末字が決まらないため、入韻・不入韻の両方で判定しました。";
++    return [withNotes(`${kishiki}-nyuin`, note), withNotes(`${kishiki}-funyuin`, note)];
++  }
++  return [withNotes(`${kishiki}-${last === "平" ? "nyuin" : "funyuin"}`)];
 +}
 diff --git a/packages/engine/src/index.ts b/packages/engine/src/index.ts
 index fda16f7..c0f851c 100644
@@ -1108,10 +1118,10 @@ index 0000000..a7b8735
 +});
 diff --git a/packages/engine/test/rules.test.ts b/packages/engine/test/rules.test.ts
 new file mode 100644
-index 0000000..8105f06
+index 0000000..7e920df
 --- /dev/null
 +++ b/packages/engine/test/rules.test.ts
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,316 @@
 +// 規則ごとの適合例と違反例（CLAUDE.md §6.1）。
 +// 違反例は、律句どおりの基準の詩（forms.json の base）から意図的に1か所だけ崩したもの。
 +// 1か所崩すと連鎖して反応する規則もあるので、出る指摘を過不足なく突き合わせる。
@@ -1407,11 +1417,18 @@ index 0000000..8105f06
 +    expect(issues(a)).toEqual([]);
 +  });
 +
-+  it("首句の末字が未入力なら、入韻かどうかは決めず不入韻として判定する", () => {
++  it("首句の末字が未入力なら、入韻・不入韻の両方の詩格で判定する", () => {
 +    const a = run(replaceAt(HN, 0, 6, "＿"));
-+    expect(a.form.id).toBe("heiki-funyuin");
++    expect(a.interpretations.map((i) => i.form.id).sort()).toEqual(["heiki-funyuin", "heiki-nyuin"]);
 +    expect(a.form.note).toMatch(/入韻/);
 +  });
++
++  for (const id of ["heiki-nyuin", "heiki-funyuin", "sokki-nyuin", "sokki-funyuin"] as FormId[]) {
++    it(`${id} の律句どおりの詩で首句の末字だけ未入力にしても、違反を断定しない`, () => {
++      const a = run(replaceAt(baseLines(id), 0, 6, "＿"));
++      expect(issues(a).filter((s) => s.startsWith("violation:"))).toEqual([]);
++    });
++  }
 +
 +  it("どの句の2字目も未入力なら詩格は決めず、定型に依存する規則は判定しない", () => {
 +    let lines = HN;
