@@ -44,6 +44,20 @@ describe("ゴールデンテスト", () => {
     }
   });
 
+  it("スナップショットは、読みと判定の対応が入れ替わると変わる", () => {
+    // 解釈ごとの指摘が違う詩で、2つの解釈の読みを入れ替える
+    const target = results.find((r) => {
+      const keys = new Set(r.analysis.interpretations.map((i) => JSON.stringify(i.findings.map((f) => f.rule).sort())));
+      return keys.size > 1;
+    })!;
+    const interps = target.analysis.interpretations;
+    const j = interps.findIndex((i) => JSON.stringify(i.findings) !== JSON.stringify(interps[0]!.findings));
+    const swapped = interps.map((i, k) => (k === 0 ? { ...i, readings: interps[j]!.readings } : k === j ? { ...i, readings: interps[0]!.readings } : i));
+    const before = toSnapshot([target]);
+    const after = toSnapshot([{ ...target, analysis: { ...target.analysis, interpretations: swapped } }]);
+    expect(after).not.toEqual(before);
+  });
+
   for (const [path, content] of Object.entries(outputs)) {
     it(`${path} が最新の判定結果と一致する`, () => {
       const url = new URL(path, root);

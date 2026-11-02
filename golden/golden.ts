@@ -1,8 +1,9 @@
 // ゴールデンテスト（CLAUDE.md §6.2）：唐詩三百首の七言絶句をエンジンに通し、
 // スナップショット・レポート・人間の確認を求める一覧を作る。
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { analyze } from "../packages/engine/src/index";
-import type { Analysis, EngineData, Finding } from "../packages/engine/src/types";
+import type { Analysis, EngineData, Finding, Reading } from "../packages/engine/src/types";
 
 export const root = new URL("../", import.meta.url);
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(new URL(path, root), "utf-8"));
@@ -59,25 +60,66 @@ export function runGolden(): GoldenResult[] {
 /** 全解釈に共通する「明確な違反」の鍵 */
 export const violationsOf = (a: Analysis) => a.findings.filter((f) => f.severity === "violation").map(keyOf).sort();
 
-/** スナップショット：判定の結果だけ（文言は入れない。文言の変更はレポートの差分で見る） */
+/** 読みを1つの文字列にする（「字=声調・韻目【詞】→異体字」） */
+const readingLabel = (c: string, r: Reading) => `${c}=${r.tone}${r.rhyme}${r.note ?? ""}${r.via ? `→${r.via}` : ""}`;
+
+/**
+ * スナップショット：判定の結果だけ（文言は入れない。文言の変更はレポートの差分で見る）。
+ * 読みと判定の対応を、小さくしたうえで漏れなく捉える：
+ * - choices：読みが分かれる位置（句×7＋位置）ごとの選択肢
+ * - byChoice：位置と選択肢ごとに、その読みを選んだ解釈に「必ず出る」違反・要確認（always）と「組み合わせによって出る」もの（sometimes）。
+ *   全解釈に共通する指摘（詩の findings）は除く。CLAUDE.md §4.1「この字を平で読めば適合、仄で読めば孤平」の形
+ * - interpretationsDigest：全解釈の（読みの選択・詩格・指摘）の一覧の SHA-256。対応が1か所でも変われば値が変わる
+ */
 export function toSnapshot(results: GoldenResult[]) {
   return {
     description:
       "ゴールデンテストの判定結果のスナップショット（golden/golden.test.ts が GOLDEN_UPDATE=1 のときだけ書き出す）。差分が出たら理由を説明する。一括更新は人間の承認が要る（CLAUDE.md §0）。",
     poems: results.map(({ poem, analysis: a }) => {
+      const charAt = (i: number) => a.chars[Math.floor(i / 7)]![i % 7]!.char;
+      const options = new Map<number, Set<string>>();
+      for (const i of a.interpretations)
+        for (const [index, r] of Object.entries(i.readings)) {
+          const n = Number(index);
+          options.set(n, (options.get(n) ?? new Set()).add(readingLabel(charAt(n), r)));
+        }
+      const positions = [...options.keys()].sort((x, y) => x - y);
+      const choices = Object.fromEntries(positions.map((n) => [n, [...options.get(n)!].sort()]));
+
       const common = new Set(a.findings.map(fullKey));
-      const someInterp = new Set(a.interpretations.flatMap((i) => i.findings.map(fullKey)));
+      const rows = a.interpretations.map((i) => ({
+        picks: Object.fromEntries(Object.entries(i.readings).map(([n, r]) => [n, readingLabel(charAt(Number(n)), r)])),
+        form: i.form.id,
+        findings: i.findings.filter((f) => f.severity !== "ok").map(fullKey).filter((k) => !common.has(k)).sort(),
+      }));
+
+      const byChoice: Record<string, Record<string, { always: string[]; sometimes: string[] }>> = {};
+      for (const n of positions) {
+        byChoice[n] = {};
+        for (const label of choices[n]!) {
+          const sets = rows.filter((r) => r.picks[n] === label).map((r) => r.findings.filter((k) => !k.startsWith("variant:")));
+          const always = sets.length === 0 ? [] : sets[0]!.filter((k) => sets.every((s) => s.includes(k)));
+          const sometimes = [...new Set(sets.flat())].filter((k) => !always.includes(k)).sort();
+          byChoice[n]![label] = { always, sometimes };
+        }
+      }
+      const canonical = rows
+        .map((r) => JSON.stringify([positions.map((n) => r.picks[n] ?? "-"), r.form, r.findings]))
+        .sort()
+        .join("\n");
+
       return {
         id: poem.id,
         title: poem.title,
         author: poem.author,
         form: a.form,
         symbols: a.symbols,
-        interpretations: a.interpretations.length,
         independent: a.independent,
         findings: a.findings.filter((f) => f.severity !== "ok").map(fullKey).sort(),
-        // 一部の解釈にだけ出る指摘（違反と要確認）。両韻字などの読み次第で変わる
-        readingDependent: [...someInterp].filter((k) => !common.has(k) && !k.startsWith("variant:") && !k.startsWith("ok:")).sort(),
+        interpretations: a.interpretations.length,
+        choices,
+        byChoice,
+        interpretationsDigest: createHash("sha256").update(canonical).digest("hex"),
       };
     }),
   };
