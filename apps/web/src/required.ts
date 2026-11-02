@@ -38,12 +38,25 @@ export type RequiredView = {
   conflict: number;
 };
 
+const isAt = (chars: string[], grid: readonly string[], line: number, start: number) =>
+  chars.every((c, k) => grid[line * WIDTH + start + k] === c);
+
+/** 語が詩に入っている位置。語の位置（1-2字目など）に限らず、句の中のどこにあっても拾う */
+export function presentPlaces(word: string, grid: readonly string[]): PlaceView[] {
+  const chars = [...word];
+  const out: PlaceView[] = [];
+  for (let line = 0; line * WIDTH < grid.length; line++)
+    for (let start = 0; start + chars.length <= WIDTH; start++)
+      if (isAt(chars, grid, line, start)) out.push({ line, start, label: `${lineName(line)}の${start + 1}-${start + chars.length}字目` });
+  return out;
+}
+
 export function requiredView(word: string, grid: readonly string[], data: EngineData, options: Options): RequiredView {
   const chars = [...word];
-  const v: RequiredView = { word, present: [], ok: [], depends: [], ng: 0, conflict: 0 };
+  const v: RequiredView = { word, present: presentPlaces(word, grid), ok: [], depends: [], ng: 0, conflict: 0 };
   for (const p of placementsFor(word, grid, data, options)) {
     const place = { line: p.line, start: p.start, label: `${lineName(p.line)}の${p.slot}字目` };
-    if (chars.every((c, k) => grid[p.line * WIDTH + p.start + k] === c)) v.present.push(place);
+    if (isAt(chars, grid, p.line, p.start)) continue; // すでに入っている位置（present にある）
     else if (p.status === "ok") v.ok.push(place);
     else if (p.status === "depends")
       v.depends.push({ ...place, notes: p.dependent.map((f) => `${data.rules.rules[f.rule]?.name ?? f.rule}：${f.message}`) });

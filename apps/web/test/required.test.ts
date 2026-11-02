@@ -1,7 +1,7 @@
 // 必須要素（apps/web/src/required.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
 import { describe, expect, it } from "vitest";
-import { requiredView, validateRequired } from "../src/required";
-import { P, RYO, Z, baseLines, build, fixtureData, replaceAt } from "../../../packages/engine/test/fixture";
+import { presentPlaces, requiredView, validateRequired } from "../src/required";
+import { KOKUJI, P, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "../../../packages/engine/test/fixture";
 
 const HN = baseLines("heiki-nyuin");
 // HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -58,6 +58,32 @@ describe("requiredView", () => {
     const v = requiredView(word, grid, fixtureData, {});
     expect(v.present.map((p) => p.label)).toEqual(["転句の3-4字目"]);
     expect(v.ok.map((p) => p.label)).not.toContain("転句の3-4字目");
+  });
+
+  it("語の位置（1-2字目など）でないところに入っていても、その位置を示す", () => {
+    const grid = gridOf(HN);
+    const two = grid[1]! + grid[2]!; // 起句の2-3字目
+    expect(requiredView(two, grid, fixtureData, {}).present.map((p) => p.label)).toEqual(["起句の2-3字目"]);
+    const three = grid[8]! + grid[9]! + grid[10]!; // 承句の2-4字目
+    expect(presentPlaces(three, grid).map((p) => [p.line, p.start, p.label])).toEqual([[1, 1, "承句の2-4字目"]]);
+  });
+
+  it("国字を含む語は登録でき、置くと違反になる。国字があっても続ける設定なら置ける", () => {
+    const word = KOKUJI + Z[29]!; // 国字＋仄。転句1-2字目（◐●）に置く
+    expect(validateRequired(word, [])).toBeNull();
+    const label = "転句の1-2字目";
+    expect(requiredView(word, withBlankThird(), fixtureData, {}).ok.map((p) => p.label)).not.toContain(label);
+    expect(requiredView(word, withBlankThird(), fixtureData, { allowKokuji: true }).ok.map((p) => p.label)).toContain(label);
+  });
+
+  it("平仄データにない字を含む語は、既定では置ける位置に出し、平・仄として扱う設定ではそれに従う", () => {
+    const word = UNKNOWN + Z[29]!; // データにない字＋仄。転句5-6字目（○●）
+    expect(validateRequired(word, [])).toBeNull();
+    const label = "転句の5-6字目";
+    const okLabels = (o: object) => requiredView(word, withBlankThird(), fixtureData, o).ok.map((p) => p.label);
+    expect(okLabels({})).toContain(label); // 平仄を問わない（要確認だけ）
+    expect(okLabels({ unknownAs: "平" })).toContain(label);
+    expect(okLabels({ unknownAs: "仄" })).not.toContain(label); // 5字目○に仄
   });
 
   it("埋まった詩では、入っていない語はどこにも置けない（すべて重なる）", () => {
