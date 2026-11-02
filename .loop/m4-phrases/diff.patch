@@ -1,0 +1,616 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 609b918..18c04c0 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -20,4 +20,10 @@ jobs:
+         with:
+           python-version: "3.12"
+       - run: npm ci
++      # 詩語頻度表の再現の確認に全唐詩が要る（リポジトリには入れていない。data/corpus.json のハッシュで検証して取得する）
++      - uses: actions/cache@v4
++        with:
++          path: .cache
++          key: corpus-${{ hashFiles('data/corpus.json') }}
++      - run: python3 scripts/fetch_corpus.py
+       - run: npm test
+diff --git a/.gitignore b/.gitignore
+index 7dd0415..c936832 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -4,3 +4,4 @@ coverage/
+ *.log
+ .DS_Store
+ __pycache__/
++.cache/
+diff --git a/DATA_SOURCES.md b/DATA_SOURCES.md
+index 3192825..f5227e2 100644
+--- a/DATA_SOURCES.md
++++ b/DATA_SOURCES.md
+@@ -19,6 +19,9 @@
+ | `data/rules.json` | 規則ごとの既定の重みと根拠（手で書いたもの） | ウィキペディア「近体詩」（ja・zh）の文を根拠として引用 | **CC BY-SA 4.0**（引用元に従う） |
+ | `golden/sources.json` | ゴールデンの詩ごとの本文の照合先 | chinese-poetry（照合の結果） | MIT（上流に従う） |
+ | `golden/input.json` | ゴールデンテストの入力（本文） | chinese-poetry `全唐诗/poet.tang` | MIT（上流に従う。本文自体はパブリックドメイン） |
++| `data/corpus.json` | 詩語頻度表の元にする全唐詩のファイルと SHA-256 | chinese-poetry | MIT（上流に従う） |
++| `data/corpus-exclude.json` | 詩語頻度表で数えないレコード（詩でない現代の文章）と理由 | このプロジェクトで作成 | CC BY 4.0 |
++| `data/phrases/*` | 詩語頻度表（2字語・3字語、用例つき） | chinese-poetry `全唐诗/poet.tang`＋平仄データ | MIT（上流に従う。本文自体はパブリックドメイン）。平仄・韻目は平仄データ由来 |
+ | `data/reports/*` | 生成時のレポート | 上記すべて | 元データのライセンスに従う |
+ 
+ CLAUDE.md §3 の方針（データは CC BY 4.0、不可なら上流に従う）に沿って、上流が許す範囲で CC BY 4.0 とし、上流の条件があるものはそれに従っています。
+@@ -174,6 +177,25 @@ chinese-poetry の繁体字の全唐詩は2種類ある。51首について3つ
+ - `scripts/fetch_golden_sources.py`：照合先の上流ファイルをコミットを固定して取得し、`golden/sources.json` の SHA-256 で検証してから、照合先の詩だけを抜き出して保存する。
+ - `scripts/build_golden_input.py`：保存した詩から `golden/input.json` を生成する（`npm test` で再現を確かめる）。
+ 
++## 7. 詩語頻度表（`data/phrases/`）
++
++| 項目 | 内容 |
++|---|---|
++| 入手元 | chinese-poetry `全唐诗/poet.tang.*.json`（58ファイル、57,607首） |
++| 版 | コミット `b8594f81a89752241442f2ce267d6f66f96704ee`（ゴールデンテストと同じ。6 を参照） |
++| 保存 | 全文（約25MB）はリポジトリに入れない。`scripts/fetch_corpus.py` が `data/corpus.json` の SHA-256 で検証して作業用のキャッシュ `.cache/` に取得する（CI も同じ） |
++| ライセンス | MIT |
++| 再配布 | 可（ライセンス文は `data/raw/chinese-poetry-b8594f8/LICENSE`） |
++
++### 加工内容（`scripts/build_phrases.py`）
++
++- 本文の括弧つきの注記と鉤括弧を除き、句読点で句に分け、7字の句だけを使う。漢字以外の文字を含む句（外字を部品で書き表した「{炙火=肉}」、欠字の「□」、校勘の「[一]」など）は、残った漢字の並びが本文の字の位置と一致しないので使わない。使った七言句は161,861句。
++- 詩でないレコード4件（補遺の巻の現代の序文・後記）は数えない。一覧と理由は `data/corpus-exclude.json`（作者と題が一致することを確かめてから除外する）。
++- 2字語は1-2・3-4・5-6・6-7字目、3字語は5-7字目を数える（CLAUDE.md §4.3）。出現回数1の語は除く（2字語77,397語、3字語17,810語）。
++- 平仄パターンは平仄データから引く。エンジンと同じく、平仄データにない字は異体字の対応（`variants.json`）の候補の読みを使う。読みが複数ある字は、ありうるパターンをすべて載せる（例：「熏風」は「仄平」「平平」）。どの読みにもない字は「？」。末字の韻目も、すべての読みの韻目を載せる。
++- 用例は、全集の並び順で最初に出てくる3句（同じ句は重ねない）。作者・題・句を載せる。
++- 先頭の字ごとのファイル（4,135ファイル）に分け、索引 `data/phrases/index.json` を作る。合計約24MB（圧縮すると約8MB）。
++
+ ---
+ 
+ ## 検討したが使わなかったデータ
+diff --git a/TASKS.md b/TASKS.md
+index 0b2b87c..015daa4 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,16 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m4-phrases — 詩語頻度表（M4）
++
++ブランチ: `task/m4-phrases`
++
++完了条件:
++- [ ] 全唐詩（chinese-poetry `全唐诗/poet.tang`、ゴールデンと同じコミット）の全ファイルを、ハッシュを固定した一覧で検証して作業用のキャッシュに取得するスクリプトがある（全文はリポジトリに入れない）
++- [ ] 七言句（7字の句）を取り出し、2字語（1-2・3-4・5-6・6-7字目）と3字語（5-7字目）の出現回数を数える。出現回数1の語は除く
++- [ ] 各語に、平仄パターン（読みが複数ある字は、ありうるパターンをすべて）、末字の韻目、出現回数、位置ごとの出現回数、用例（最大3件：作者・題・句）を付ける。平仄・韻目は平仄データ（chars.json・variants.json）から引き、記憶で決めない
++- [ ] 先頭の字ごとのファイルに分けて `data/phrases/` に置き、索引を作る。生成は同じ入力から同じ出力（`npm test` と CI で確かめる）
++- [ ] 抽出・パターン・用例の選び方の境界を単体テストで確かめる。`DATA_SOURCES.md` に出典と加工内容を書く
+ 
+ ## 完了
+ 
+diff --git a/data/corpus-exclude.json b/data/corpus-exclude.json
+new file mode 100644
+index 0000000..b33b3e4
+--- /dev/null
++++ b/data/corpus-exclude.json
+@@ -0,0 +1,9 @@
++{
++  "description": "詩語頻度表で数えない全唐詩のレコード（scripts/build_phrases.py が除外する）。詩ではない現代の文章（補遺の巻の序文・後記）。作者と題が一致することを確かめてから除外する。",
++  "records": [
++    { "file": "全唐诗/poet.tang.50000.json", "index": 221, "author": "王重民輯錄，劉脩業整理。", "title": "前言", "reason": "『全唐詩補遺』（敦煌殘卷）の現代の前言" },
++    { "file": "全唐诗/poet.tang.50000.json", "index": 352, "author": "孫望輯錄", "title": "自序", "reason": "『全唐詩補逸』の現代の自序" },
++    { "file": "全唐诗/poet.tang.51000.json", "index": 110, "author": "孫望", "title": "後記", "reason": "『全唐詩補逸』の現代の後記" },
++    { "file": "全唐诗/poet.tang.51000.json", "index": 111, "author": "童養年", "title": "前言", "reason": "『全唐詩續補遺』の現代の前言" }
++  ]
++}
+diff --git a/package.json b/package.json
+index 4624c61..abfd54e 100644
+--- a/package.json
++++ b/package.json
+@@ -16,12 +16,14 @@
+     "test": "npm run typecheck && npm run data:unit && npm run data:verify && vitest run",
+     "data:fetch": "python3 scripts/fetch_sources.py",
+     "data:build": "python3 scripts/build_data.py",
+-    "data:verify": "python3 scripts/build_data.py --check && python3 scripts/build_golden_input.py --check",
++    "data:verify": "python3 scripts/build_data.py --check && python3 scripts/build_golden_input.py --check && python3 scripts/build_phrases.py --check",
+     "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\"",
+     "golden:find": "python3 scripts/find_golden_sources.py",
+     "golden:fetch": "python3 scripts/fetch_golden_sources.py",
+     "golden:input": "python3 scripts/build_golden_input.py",
+-    "golden:update": "GOLDEN_UPDATE=1 vitest run golden"
++    "golden:update": "GOLDEN_UPDATE=1 vitest run golden",
++    "corpus:fetch": "python3 scripts/fetch_corpus.py",
++    "phrases:build": "python3 scripts/build_phrases.py"
+   },
+   "devDependencies": {
+     "@types/node": "^26.6.6",
+diff --git a/scripts/build_phrases.py b/scripts/build_phrases.py
+new file mode 100644
+index 0000000..232e95c
+--- /dev/null
++++ b/scripts/build_phrases.py
+@@ -0,0 +1,198 @@
++#!/usr/bin/env python3
++"""詩語頻度表 data/phrases/ を作る（CLAUDE.md §4.3「詩語頻度表」）。
++
++入力：全唐詩（scripts/fetch_corpus.py が .cache/ に取得したもの）、data/chars.json、data/variants.json。
++同じ入力からは常に同じ出力を出す（§9）。
++
++- 七言句（7字の句）を取り出し、2字語（1-2・3-4・5-6・6-7字目）と3字語（5-7字目）を数える。
++  字の位置が信用できない句（外字の書き表し・欠字・校勘の記号を含む句）と、詩でないレコード（data/corpus-exclude.json）は使わない
++- 出現回数1の語は除く
++- 各語に、平仄パターン（読みが複数ある字は、ありうるパターンをすべて。データにない字は「？」）、末字の韻目、
++  出現回数、位置ごとの出現回数、用例（全集の並び順で最初の3句。同じ句は重ねない）を付ける
++- 平仄・韻目は平仄データから引く。エンジンと同じく、データにない字は異体字の対応（variants.json）の候補の読みを使う
++- 先頭の字ごとのファイル（data/phrases/<先頭の字の符号位置>.json）に分け、索引 data/phrases/index.json を作る
++
++使い方:
++  python3 scripts/build_phrases.py           # 生成して書き出す
++  python3 scripts/build_phrases.py --check   # コミット済みのファイルと一致するか確かめる（書き出さない）
++"""
++
++from __future__ import annotations
++
++import argparse
++import itertools
++import json
++import shutil
++import sys
++from collections import Counter, defaultdict
++from pathlib import Path
++
++from fetch_corpus import corpus_files
++import re
++
++from golden_text import HAN
++
++ROOT = Path(__file__).resolve().parent.parent
++OUT = ROOT / "data" / "phrases"
++EXCLUDE = ROOT / "data" / "corpus-exclude.json"
++
++_PAREN = re.compile(r"[（(][^）)]*[）)]")
++_QUOTES = re.compile(r"[「」『』“”‘’]")
++_SPLIT = re.compile(r"[，。？！；：、\s]")
++_ALL_HAN = re.compile(f"^[{HAN}]+$")
++
++# （開始位置, 字数, 位置の名前）。位置は1始まりで名付ける
++SLOTS = [(0, 2, "1-2"), (2, 2, "3-4"), (4, 2, "5-6"), (5, 2, "6-7"), (4, 3, "5-7")]
++MAX_EXAMPLES = 3
++MIN_COUNT = 2
++UNKNOWN = "？"
++
++
++def reading_lookup(chars: dict, variants: dict):
++    """字 → 読みの一覧（エンジンと同じ：データにあればその読み＋異体字の候補の読み、なければ候補の読み）。"""
++
++    def readings(c: str) -> list[dict]:
++        own = chars.get(c, [])
++        others = [v for v in variants.get(c, []) if v != c and v in chars]
++        return own + [r for v in others for r in chars[v]]
++
++    return readings
++
++
++def pz(tone: str) -> str:
++    return "平" if tone == "平" else "仄"
++
++
++def patterns(word: str, readings) -> list[str]:
++    """ありうる平仄パターン。データにない字は「？」。"""
++    options = []
++    for c in word:
++        rs = readings(c)
++        options.append(sorted({pz(r["tone"]) for r in rs}) if rs else [UNKNOWN])
++    return sorted("".join(p) for p in itertools.product(*options))
++
++
++def last_rhymes(word: str, readings, rhyme_order: dict[str, int]) -> list[str]:
++    return sorted({r["rhyme"] for r in readings(word[-1])}, key=lambda r: rhyme_order[r])
++
++
++def phrase_lines(paragraphs: list[str]) -> list[str]:
++    """詩語に使う句を取り出す。字の位置が信用できない句は使わない。
++
++    - 括弧つきの注記（「(一作：…)」など）と鉤括弧（会話の引用）は取り除く
++    - 句読点で区切った句のうち、漢字以外の文字を含む句は捨てる。外字を部品で書き表したもの（「{炙火=肉}」）、
++      欠字の「□」、校勘の「[一]」などで、残った漢字の並びが本文の字の位置と一致しないため
++    """
++    text = _QUOTES.sub("", _PAREN.sub("", "".join(paragraphs)))
++    return [part for part in _SPLIT.split(text) if part and _ALL_HAN.match(part)]
++
++
++def count_phrases(poems):
++    """poems: [(作者, 題, 段落の一覧)]（全集の並び順）。→ {語: {"n", "at", "e"}}"""
++    counts: Counter = Counter()
++    at: dict[str, Counter] = defaultdict(Counter)
++    examples: dict[str, list] = defaultdict(list)
++    for author, title, paragraphs in poems:
++        for line in phrase_lines(paragraphs):
++            if len(line) != 7:
++                continue
++            for start, size, name in SLOTS:
++                w = line[start : start + size]
++                counts[w] += 1
++                at[w][name] += 1
++                ex = examples[w]
++                if len(ex) < MAX_EXAMPLES and all(e[2] != line for e in ex):
++                    ex.append([author, title, line])
++    return {w: {"n": n, "at": dict(sorted(at[w].items())), "e": examples[w]} for w, n in counts.items() if n >= MIN_COUNT}
++
++
++def _corpus_poems(path: str, cache: Path) -> list[dict]:
++    if not cache.exists():
++        raise SystemExit(f"エラー: {cache.relative_to(ROOT)} がない。先に python3 scripts/fetch_corpus.py を実行する")
++    return json.loads(cache.read_text(encoding="utf-8"))
++
++
++def load_exclusions() -> set[tuple[str, int]]:
++    """数えないレコード（data/corpus-exclude.json）。記録した作者・題が実際のレコードと一致することを確かめる。"""
++    records = json.loads(EXCLUDE.read_text(encoding="utf-8"))["records"]
++    caches = dict(corpus_files()[1])
++    out = set()
++    for r in records:
++        poem = _corpus_poems(r["file"], caches[r["file"]])[r["index"]]
++        if (poem["author"], poem["title"]) != (r["author"], r["title"]):
++            raise SystemExit(f"エラー: 除外の一覧の {r['file']} #{r['index']} が記録と違う（{poem['author']}「{poem['title']}」）")
++        out.add((r["file"], r["index"]))
++    return out
++
++
++def load_corpus():
++    excluded = load_exclusions()
++    for path, cache in corpus_files()[1]:
++        for i, p in enumerate(_corpus_poems(path, cache)):
++            if (path, i) not in excluded:
++                yield p["author"], p["title"], p["paragraphs"]
++
++
++def build() -> dict[Path, str]:
++    chars = json.loads((ROOT / "data" / "chars.json").read_text(encoding="utf-8"))
++    variants = json.loads((ROOT / "data" / "variants.json").read_text(encoding="utf-8"))
++    rhymes = json.loads((ROOT / "data" / "rhymes.json").read_text(encoding="utf-8"))
++    rhyme_order = {r["id"]: i for i, r in enumerate(rhymes)}
++    readings = reading_lookup(chars, variants)
++    counted = count_phrases(load_corpus())
++
++    by_first: dict[str, dict[str, list]] = defaultdict(lambda: {"2": [], "3": []})
++    for w, info in counted.items():
++        entry = {"w": w, "n": info["n"], "at": info["at"], "p": patterns(w, readings), "r": last_rhymes(w, readings, rhyme_order), "e": info["e"]}
++        by_first[w[0]][str(len(w))].append(entry)
++
++    outputs: dict[Path, str] = {}
++    index = {}
++    for first in sorted(by_first, key=ord):
++        groups = by_first[first]
++        for size in groups:
++            groups[size].sort(key=lambda e: (-e["n"], e["w"]))
++        name = f"{ord(first):x}.json"
++        index[first] = {"file": name, "2": len(groups["2"]), "3": len(groups["3"])}
++        outputs[OUT / name] = json.dumps(groups, ensure_ascii=False, separators=(",", ":")) + "\n"
++
++    commit = json.loads((ROOT / "data" / "corpus.json").read_text(encoding="utf-8"))["commit"]
++    index_doc = {
++        "description": "詩語頻度表の索引（scripts/build_phrases.py が生成。手で編集しない）。先頭の字 → ファイルと語数。各ファイルは {\"2\": 2字語, \"3\": 3字語}。語は {w: 語, n: 出現回数, at: 位置ごとの出現回数, p: ありうる平仄パターン（？はデータにない字）, r: 末字の韻目, e: 用例 [作者, 題, 句]（最大3件）}、出現回数の多い順。",
++        "source": {"repo": "https://github.com/chinese-poetry/chinese-poetry", "commit": commit, "files": "全唐诗/poet.tang.*.json", "license": "MIT"},
++        "slots": [name for _, _, name in SLOTS],
++        "minCount": MIN_COUNT,
++        "counts": {"2": sum(v["2"] for v in index.values()), "3": sum(v["3"] for v in index.values()), "files": len(index)},
++        "chars": index,
++    }
++    outputs[OUT / "index.json"] = json.dumps(index_doc, ensure_ascii=False, indent=1) + "\n"
++    return outputs
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    parser.add_argument("--check", action="store_true", help="書き出さずに、コミット済みのファイルと一致するか確かめる")
++    args = parser.parse_args()
++    outputs = build()
++    existing = {p for p in OUT.glob("*.json")} if OUT.exists() else set()
++    if args.check:
++        stale = [p for p, c in outputs.items() if not p.exists() or p.read_text(encoding="utf-8") != c]
++        extra = sorted(existing - set(outputs))
++        if stale or extra:
++            print(f"詩語頻度表がコミット済みのファイルと一致しない（違うファイル {len(stale)}件、余分なファイル {len(extra)}件）。python3 scripts/build_phrases.py で再生成する", file=sys.stderr)
++            for p in (stale + extra)[:10]:
++                print(f"  {p.relative_to(ROOT)}", file=sys.stderr)
++            return 1
++        print(f"詩語頻度表の再現を確認した（{len(outputs)}ファイル）")
++        return 0
++    if OUT.exists():
++        shutil.rmtree(OUT)
++    OUT.mkdir(parents=True)
++    for p, c in outputs.items():
++        p.write_text(c, encoding="utf-8")
++    print(f"書き出し {OUT.relative_to(ROOT)}/（{len(outputs)}ファイル）")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/scripts/check-phrases.test.ts b/scripts/check-phrases.test.ts
+new file mode 100644
+index 0000000..1cbf7fc
+--- /dev/null
++++ b/scripts/check-phrases.test.ts
+@@ -0,0 +1,57 @@
++// 詩語頻度表（data/phrases/）の検査（CLAUDE.md §4.3）。`npm test` で走る。
++import { readFileSync, readdirSync } from "node:fs";
++import { describe, expect, it } from "vitest";
++
++const dir = new URL("../data/phrases/", import.meta.url);
++const read = (name: string) => JSON.parse(readFileSync(new URL(name, dir), "utf-8"));
++const rhymeIds = new Set((JSON.parse(readFileSync(new URL("../data/rhymes.json", import.meta.url), "utf-8")) as { id: string }[]).map((r) => r.id));
++
++type Entry = { w: string; n: number; at: Record<string, number>; p: string[]; r: string[]; e: [string, string, string][] };
++const index: { slots: string[]; minCount: number; counts: Record<string, number>; chars: Record<string, { file: string; "2": number; "3": number }> } = read("index.json");
++const SLOT_START: Record<string, number> = { "1-2": 0, "3-4": 2, "5-6": 4, "6-7": 5, "5-7": 4 };
++
++describe("data/phrases（詩語頻度表）", () => {
++  it("索引とファイルが過不足なく対応する", () => {
++    const files = readdirSync(dir).filter((f) => f !== "index.json").sort();
++    expect(Object.values(index.chars).map((c) => c.file).sort()).toEqual(files);
++    expect(index.counts.files).toBe(files.length);
++  });
++
++  it("各語の形が正しく、出現回数・位置・用例が一貫している", () => {
++    // 9万語あまりを調べるので、1件ごとに expect を呼ばず、誤りを集めて最後に確かめる
++    const errors: string[] = [];
++    const check = (ok: boolean, message: string) => {
++      if (!ok && errors.length < 20) errors.push(message);
++    };
++    let n2 = 0;
++    let n3 = 0;
++    for (const [first, info] of Object.entries(index.chars)) {
++      const groups: Record<"2" | "3", Entry[]> = read(info.file);
++      check(groups["2"].length === info["2"] && groups["3"].length === info["3"], `${first}: 索引の語数と違う`);
++      n2 += groups["2"].length;
++      n3 += groups["3"].length;
++      for (const size of ["2", "3"] as const) {
++        const pattern = size === "2" ? /^[平仄？]{2}$/u : /^[平仄？]{3}$/u;
++        let prev: Entry | null = null;
++        for (const e of groups[size]) {
++          const chars = [...e.w];
++          check(chars.length === Number(size) && chars[0] === first, `${e.w}: 字数か先頭の字が違う`);
++          check(e.n >= index.minCount, `${e.w}: 出現回数が${index.minCount}未満`);
++          check(Object.values(e.at).reduce((a, b) => a + b, 0) === e.n, `${e.w}: 位置ごとの回数の合計が出現回数と違う`);
++          for (const slot of Object.keys(e.at)) check(index.slots.includes(slot) && (slot === "5-7") === (size === "3"), `${e.w}: 位置 ${slot}`);
++          check(e.p.length > 0 && e.p.every((p) => pattern.test(p)), `${e.w}: 平仄パターン ${e.p}`);
++          check(e.r.every((r) => rhymeIds.has(r)), `${e.w}: 韻目 ${e.r}`);
++          check(e.e.length > 0 && e.e.length <= 3, `${e.w}: 用例の数 ${e.e.length}`);
++          for (const [, , line] of e.e) {
++            const found = Object.keys(e.at).some((slot) => [...line].slice(SLOT_START[slot], SLOT_START[slot]! + chars.length).join("") === e.w);
++            check(found, `${e.w}: 用例「${line}」の該当の位置に語がない`);
++          }
++          if (prev !== null) check(prev.n > e.n || (prev.n === e.n && prev.w < e.w), `${prev.w} → ${e.w}: 並び順`);
++          prev = e;
++        }
++      }
++    }
++    expect(errors).toEqual([]);
++    expect([n2, n3]).toEqual([index.counts["2"], index.counts["3"]]);
++  }, 60_000);
++});
+diff --git a/scripts/fetch_corpus.py b/scripts/fetch_corpus.py
+new file mode 100644
+index 0000000..62454e9
+--- /dev/null
++++ b/scripts/fetch_corpus.py
+@@ -0,0 +1,88 @@
++#!/usr/bin/env python3
++"""詩語頻度表の元にする全唐詩（chinese-poetry `全唐诗/poet.tang.*.json`）を、作業用のキャッシュ .cache/ に取得する。
++
++全文は約25MBあるのでリポジトリには入れない。取得するファイルとその SHA-256 は data/corpus.json に固定し、
++取得のたびに検証する（一致しなければ保存しない）。コミットはゴールデンテストと同じ（golden/sources.json）。
++
++使い方:
++  python3 scripts/fetch_corpus.py                       # 欠けているファイルだけ取得して検証
++  python3 scripts/fetch_corpus.py --write-manifest DIR  # 手元の clone（DIR）から data/corpus.json を作る（初回だけ）
++"""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import subprocess
++import sys
++from pathlib import Path
++
++from fetch_golden_sources import raw_url
++from fetch_sources import http_get
++
++ROOT = Path(__file__).resolve().parent.parent
++MANIFEST = ROOT / "data" / "corpus.json"
++PATTERN = "全唐诗/poet.tang.*.json"
++
++
++def cache_dir(commit: str) -> Path:
++    return ROOT / ".cache" / f"chinese-poetry-{commit[:7]}"
++
++
++def corpus_files() -> tuple[str, list[tuple[str, Path]]]:
++    """（コミット, [(上流のパス, キャッシュのパス)]）。ファイルは番号の順。"""
++    doc = json.loads(MANIFEST.read_text(encoding="utf-8"))
++    out = cache_dir(doc["commit"])
++    return doc["commit"], [(f, out / f) for f in doc["files"]]
++
++
++def write_manifest(repo: Path) -> int:
++    commit = json.loads((ROOT / "golden" / "sources.json").read_text(encoding="utf-8"))["upstream"]["commit"]
++    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
++    if head != commit:
++        print(f"エラー: {repo} のコミットが {head} です。{commit} を checkout してください。", file=sys.stderr)
++        return 1
++    files = sorted(repo.glob(PATTERN), key=lambda p: int(p.name.split(".")[-2]))
++    doc = {
++        "description": "詩語頻度表の元にする全唐詩のファイルと SHA-256（scripts/fetch_corpus.py が検証に使う）。",
++        "repo": "https://github.com/chinese-poetry/chinese-poetry",
++        "commit": commit,
++        "license": "MIT",
++        "files": {f.relative_to(repo).as_posix(): hashlib.sha256(f.read_bytes()).hexdigest() for f in files},
++    }
++    MANIFEST.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
++    print(f"書き出し {MANIFEST.relative_to(ROOT)}（{len(files)}ファイル）")
++    return 0
++
++
++def fetch() -> int:
++    doc = json.loads(MANIFEST.read_text(encoding="utf-8"))
++    commit = doc["commit"]
++    ok = True
++    for path, expected in doc["files"].items():
++        dest = cache_dir(commit) / path
++        if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() == expected:
++            continue
++        body = http_get(raw_url(commit, path))
++        digest = hashlib.sha256(body).hexdigest()
++        if digest != expected:
++            print(f"NG   {path}: SHA-256 が一致しません（期待値 {expected}、実際 {digest}）", file=sys.stderr)
++            ok = False
++            continue
++        dest.parent.mkdir(parents=True, exist_ok=True)
++        dest.write_bytes(body)
++        print(f"取得 {path}")
++    print("全唐詩のキャッシュを検証した" if ok else "取得に失敗したファイルがある")
++    return 0 if ok else 1
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    parser.add_argument("--write-manifest", type=Path, metavar="DIR", help="手元の clone から data/corpus.json を作る")
++    args = parser.parse_args()
++    return write_manifest(args.write_manifest) if args.write_manifest else fetch()
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/scripts/test_build_phrases.py b/scripts/test_build_phrases.py
+new file mode 100644
+index 0000000..4ff6c72
+--- /dev/null
++++ b/scripts/test_build_phrases.py
+@@ -0,0 +1,127 @@
++"""scripts/build_phrases.py の単体テスト（詩語の数え方の境界）。`npm test` で走る。
++
++平仄・韻目は架空の小さなデータで与え、実在の字の平仄を記憶で使わない（CLAUDE.md §0）。
++"""
++
++import json
++import unittest
++
++from build_phrases import EXCLUDE, MAX_EXAMPLES, count_phrases, last_rhymes, load_corpus, load_exclusions, patterns, phrase_lines, reading_lookup
++from fetch_corpus import corpus_files
++
++LINE = "甲乙丙丁戊己庚"  # 7字
++
++
++class CountPhrasesTest(unittest.TestCase):
++    def test_slots_of_a_seven_char_line(self):
++        counted = count_phrases([("作者", "題", [LINE + "，" + LINE + "。"])])
++        # 2回出てくる語だけが残る。2字語は 1-2・3-4・5-6・6-7、3字語は 5-7
++        self.assertEqual(sorted(counted), sorted(["甲乙", "丙丁", "戊己", "己庚", "戊己庚"]))
++        self.assertEqual(counted["己庚"]["at"], {"6-7": 2})
++        self.assertEqual(counted["戊己庚"]["at"], {"5-7": 2})
++
++    def test_words_seen_once_are_dropped(self):
++        counted = count_phrases([("作者", "題", [LINE + "。"])])
++        self.assertEqual(counted, {})
++
++    def test_lines_other_than_seven_chars_are_ignored(self):
++        counted = count_phrases([("作者", "題", ["甲乙丙丁戊，甲乙丙丁戊。"])])
++        self.assertEqual(counted, {})
++
++    def test_count_and_positions(self):
++        # 甲乙 は1-2字目に2回、3-4字目に1回
++        counted = count_phrases([("作者", "題", ["甲乙丙丁戊己庚，甲乙辛壬癸子丑，寅卯甲乙辰巳午。"])])
++        self.assertEqual(counted["甲乙"]["n"], 3)
++        self.assertEqual(counted["甲乙"]["at"], {"1-2": 2, "3-4": 1})
++
++    def test_examples_are_the_first_distinct_lines_in_corpus_order(self):
++        poems = [("甲", "一", [LINE + "，" + LINE + "。"])] + [(f"作者{i}", f"題{i}", [f"甲乙{c}丑寅卯辰。"]) for i, c in enumerate("子丑寅卯")]
++        counted = count_phrases(poems)
++        ex = counted["甲乙"]["e"]
++        self.assertEqual(len(ex), MAX_EXAMPLES)
++        self.assertEqual(ex[0], ["甲", "一", LINE])  # 同じ句は重ねない
++        self.assertEqual([e[0] for e in ex[1:]], ["作者0", "作者1"])
++
++    def test_inline_notes_are_removed_before_counting(self):
++        counted = count_phrases([("作者", "題", [LINE + "(一作：子丑)，", LINE + "。"])])
++        self.assertIn("甲乙", counted)
++
++
++class PhraseLinesTest(unittest.TestCase):
++    """詩語に使う句の取り出し（Codex レビュー m4-phrases 往復1 R1）。"""
++
++    def test_lines_with_a_described_character_are_dropped(self):
++        # 外字を部品で書き表した「{炙火=肉}」の中の字を、独立した字として数えない（韓愈「縣齋有懷」の句）
++        self.assertEqual(phrase_lines(["絲竹羅酒{炙火=肉}，甲乙丙丁戊己庚。"]), ["甲乙丙丁戊己庚"])
++
++    def test_lines_with_missing_or_note_marks_are_dropped(self):
++        self.assertEqual(phrase_lines(["甲乙丙□戊己庚，甲乙丙丁[一]戊己，子丑寅卯辰巳午。"]), ["子丑寅卯辰巳午"])
++
++    def test_quotation_marks_are_removed_but_the_line_is_kept(self):
++        self.assertEqual(phrase_lines(["城邊問官使：「早晚發西京？"]), ["城邊問官使", "早晚發西京"])
++
++    def test_inline_notes_in_parentheses_are_removed(self):
++        self.assertEqual(phrase_lines(["甲乙丙丁戊己庚（一作：子丑）。"]), ["甲乙丙丁戊己庚"])
++
++    def test_described_character_does_not_become_a_phrase(self):
++        counted = count_phrases([("韓愈", "縣齋有懷", ["絲竹羅酒{炙火=肉}。"]), ("裴諴", "南歌子詞", ["爭知{炙火=肉}裏心。"])])
++        self.assertNotIn("炙火", counted)
++
++
++class ExclusionTest(unittest.TestCase):
++    def test_every_excluded_record_matches_its_author_and_title(self):
++        # 除外の一覧の番号がずれていたら、作者・題が一致せず止まる
++        excluded = load_exclusions()
++        self.assertEqual(len(excluded), 4)
++
++    def test_load_corpus_skips_exactly_the_excluded_records(self):
++        # 実際の全集（.cache/）を load_corpus に通し、除外した4件だけが外れることを確かめる
++        records = json.loads(EXCLUDE.read_text(encoding="utf-8"))["records"]
++        excluded = {(r["author"], r["title"]) for r in records}
++        total = sum(len(json.loads(cache.read_text(encoding="utf-8"))) for _, cache in corpus_files()[1])
++        loaded = [(a, t) for a, t, _ in load_corpus()]
++        self.assertEqual(len(loaded), total - len(records))
++        self.assertEqual([x for x in loaded if x in excluded], [])
++        # 同じファイルの、除外していない直前のレコードは残る
++        caches = dict(corpus_files()[1])
++        skipped = {(r["file"], r["index"]) for r in records}
++        for r in records:
++            i = r["index"] - 1
++            while (r["file"], i) in skipped:
++                i -= 1
++            neighbor = json.loads(caches[r["file"]].read_text(encoding="utf-8"))[i]
++            self.assertIn((neighbor["author"], neighbor["title"]), loaded)
++
++
++DATA = {
++    "平": [{"tone": "平", "rhyme": "上平一東"}],
++    "仄": [{"tone": "去", "rhyme": "去声一送"}],
++    "兩": [{"tone": "平", "rhyme": "下平一先"}, {"tone": "上", "rhyme": "上声一董"}],
++}
++ORDER = {"上平一東": 0, "下平一先": 1, "上声一董": 2, "去声一送": 3}
++
++
++class PatternTest(unittest.TestCase):
++    def setUp(self):
++        self.readings = reading_lookup(DATA, {"變": ["仄"], "多": ["平", "仄"]})
++
++    def test_single_readings(self):
++        self.assertEqual(patterns("平仄", self.readings), ["平仄"])
++
++    def test_every_possible_pattern_for_a_char_with_both_tones(self):
++        self.assertEqual(patterns("兩平", self.readings), ["仄平", "平平"])
++
++    def test_unknown_char_is_a_question_mark(self):
++        self.assertEqual(patterns("平無", self.readings), ["平？"])
++
++    def test_variant_candidates_are_used_like_the_engine(self):
++        self.assertEqual(patterns("變", self.readings), ["仄"])
++        self.assertEqual(patterns("多", self.readings), ["仄", "平"])
++
++    def test_last_rhymes_are_all_readings_in_rhyme_order(self):
++        self.assertEqual(last_rhymes("平兩", self.readings, ORDER), ["下平一先", "上声一董"])
++        self.assertEqual(last_rhymes("平無", self.readings, ORDER), [])
++
++
++if __name__ == "__main__":
++    unittest.main()
