@@ -1,0 +1,68 @@
+{
+  "description": "七言絶句・平韻の4定型（CLAUDE.md §4.1）。pattern の記号は ○平 ●仄 ◐平仄不問 ◎平声の押韻字。base は資料の律句どおりの全位置の平仄（◐の位置の揺れを『許容される変格』として示すときの基準）。",
+  "source": {
+    "summary": "CLAUDE.md §4.1 の平仄図式を出発点に、下記2資料と照合した。○・●・◎の位置は4定型16句すべてで資料と一致する（scripts/check-forms.test.ts が資料の本文から定型を組み立てて確かめる）。◐の位置は、ja の「一三五不論」（禁忌に抵触しない限り1・3・5字目は問題とされない）に沿い、5字目を変えると下三連になる句だけ5字目を固定している。3字目を変えると孤平になる句（●●○○●●◎）でも3字目は◐とし、孤平は規則 kohei で検出する（misima と同じ扱い）。",
+    "references": [
+      {
+        "title": "ウィキペディア日本語版「近体詩」",
+        "url": "https://ja.wikipedia.org/w/index.php?oldid=96547510",
+        "revision": 96547510,
+        "raw": "data/raw/wikipedia-ja-kintaishi-96547510.wiki",
+        "used_for": "七言の律句4種（二四不同二六対）、一三五不論、下三連、孤平、反法・粘法、挟み平"
+      },
+      {
+        "title": "ウィキペディア中国語版「近体诗」",
+        "url": "https://zh.wikipedia.org/w/index.php?oldid=92701000",
+        "revision": 92701000,
+        "raw": "data/raw/wikipedia-zh-kintaishi-92701000.wiki",
+        "used_for": "七言の4基本句式、相対・相黏による組み立て、首句の入韻・不入韻、七言絶句仄起格首句入韻の譜"
+      }
+    ]
+  },
+  "forms": [
+    {
+      "id": "heiki-nyuin",
+      "name": "平起式・首句入韻",
+      "rhymeLines": [0, 1, 3],
+      "lines": [
+        { "pattern": "◐○◐●●○◎", "base": "○○●●●○○" },
+        { "pattern": "◐●◐○◐●◎", "base": "●●○○●●○" },
+        { "pattern": "◐●◐○○●●", "base": "●●○○○●●" },
+        { "pattern": "◐○◐●●○◎", "base": "○○●●●○○" }
+      ]
+    },
+    {
+      "id": "heiki-funyuin",
+      "name": "平起式・首句不入韻",
+      "rhymeLines": [1, 3],
+      "lines": [
+        { "pattern": "◐○◐●◐○●", "base": "○○●●○○●" },
+        { "pattern": "◐●◐○◐●◎", "base": "●●○○●●○" },
+        { "pattern": "◐●◐○○●●", "base": "●●○○○●●" },
+        { "pattern": "◐○◐●●○◎", "base": "○○●●●○○" }
+      ]
+    },
+    {
+      "id": "sokki-nyuin",
+      "name": "仄起式・首句入韻",
+      "rhymeLines": [0, 1, 3],
+      "lines": [
+        { "pattern": "◐●◐○◐●◎", "base": "●●○○●●○" },
+        { "pattern": "◐○◐●●○◎", "base": "○○●●●○○" },
+        { "pattern": "◐○◐●◐○●", "base": "○○●●○○●" },
+        { "pattern": "◐●◐○◐●◎", "base": "●●○○●●○" }
+      ]
+    },
+    {
+      "id": "sokki-funyuin",
+      "name": "仄起式・首句不入韻",
+      "rhymeLines": [1, 3],
+      "lines": [
+        { "pattern": "◐●◐○○●●", "base": "●●○○○●●" },
+        { "pattern": "◐○◐●●○◎", "base": "○○●●●○○" },
+        { "pattern": "◐○◐●◐○●", "base": "○○●●○○●" },
+        { "pattern": "◐●◐○◐●◎", "base": "●●○○●●○" }
+      ]
+    }
+  ]
+}
