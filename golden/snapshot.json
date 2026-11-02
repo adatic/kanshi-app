@@ -124,13 +124,12 @@
         "○◎●●◎○○",
         "○●◎○●●○",
         "●●●○○●●",
-        "●◎○□●◎○"
+        "●◎○●●◎○"
       ],
       "independent": false,
       "findings": [
         "check:bou-in:2:3",
-        "check:supplement-reading:0:0",
-        "check:unknown-char:3:3"
+        "check:supplement-reading:0:0"
       ],
       "interpretations": 32,
       "choices": {
@@ -170,7 +169,8 @@
               "violation:pattern:1:5",
               "violation:pattern:2:1",
               "violation:pattern:2:3",
-              "violation:pattern:2:5"
+              "violation:pattern:2:5",
+              "violation:pattern:3:3"
             ],
             "sometimes": [
               "check:bou-in:0:4",
@@ -178,6 +178,7 @@
               "violation:ka-sanren-hei:0:4,5,6",
               "violation:kohei:1:3",
               "violation:niroku-tsui:3:1,5",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:3:1",
               "violation:pattern:3:5"
             ]
@@ -191,6 +192,7 @@
               "violation:ka-sanren-hei:0:4,5,6",
               "violation:kohei:1:3",
               "violation:niroku-tsui:3:1,5",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:4",
               "violation:pattern:3:1",
               "violation:pattern:3:5"
@@ -208,6 +210,7 @@
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -217,6 +220,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           },
@@ -233,6 +237,7 @@
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:4",
               "violation:pattern:0:5",
@@ -243,6 +248,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           }
@@ -261,6 +267,7 @@
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:4",
               "violation:pattern:0:5",
@@ -271,6 +278,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           },
@@ -285,6 +293,7 @@
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:4",
               "violation:pattern:0:5",
@@ -295,6 +304,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           }
@@ -303,7 +313,8 @@
           "教=去去声十九效": {
             "always": [
               "check:youtai:-1:",
-              "violation:hanpo-nenpo:3:1"
+              "violation:hanpo-nenpo:3:1",
+              "violation:nishi-fudo:3:1,3"
             ],
             "sometimes": [
               "check:bou-in:0:4",
@@ -323,6 +334,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           },
@@ -347,6 +359,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           }
@@ -364,6 +377,7 @@
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:4",
               "violation:pattern:0:5",
@@ -374,6 +388,7 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           },
@@ -389,6 +404,7 @@
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:4",
               "violation:pattern:0:5",
@@ -399,12 +415,13 @@
               "violation:pattern:2:3",
               "violation:pattern:2:5",
               "violation:pattern:3:1",
+              "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           }
         }
       },
-      "interpretationsDigest": "4237a1ab6d684b0d5698bd2eb0150d87746ce1035441b408a06081285e6f7b3c"
+      "interpretationsDigest": "89ddc2178cb00591e055ad4933d68537ca4c285b45aab4ac0ea14fd003014d57"
     },
     {
       "id": "q03",
@@ -441,7 +458,7 @@
         "auto": true
       },
       "symbols": [
-        "●●●◎□●●",
+        "●●●◎◎●●",
         "●○○●●◎◎",
         "○○○●○○●",
         "□●○○●●○"
@@ -450,18 +467,21 @@
       "findings": [
         "check:douji:0:2,5",
         "check:supplement-reading:3:2",
-        "check:unknown-char:0:4",
         "check:unknown-char:3:0",
         "variant:ichisango-furon:0:2",
         "variant:ichisango-furon:1:0",
         "variant:ichisango-furon:1:2",
         "variant:ichisango-furon:2:2"
       ],
-      "interpretations": 8,
+      "interpretations": 16,
       "choices": {
         "3": [
           "鄉=去去声二十三漾【詞】",
           "鄉=平下平七陽"
+        ],
+        "4": [
+          "爲=去去声四寘→為",
+          "爲=平上平四支→為"
         ],
         "12": [
           "思=去去声四寘",
@@ -481,8 +501,10 @@
               "violation:pattern:0:3"
             ],
             "sometimes": [
+              "check:ka-sanren-soku:0:4,5,6",
               "check:ka-sanren-soku:1:4,5,6",
               "violation:niroku-tsui:1:1,5",
+              "violation:pattern:0:4",
               "violation:pattern:1:5",
               "violation:rhyme-tone:1:6"
             ]
@@ -490,8 +512,41 @@
           "鄉=平下平七陽": {
             "always": [],
             "sometimes": [
+              "check:ka-sanren-soku:0:4,5,6",
               "check:ka-sanren-soku:1:4,5,6",
+              "violation:kohei:0:3",
               "violation:niroku-tsui:1:1,5",
+              "violation:pattern:0:4",
+              "violation:pattern:1:5",
+              "violation:rhyme-tone:1:6"
+            ]
+          }
+        },
+        "4": {
+          "爲=去去声四寘→為": {
+            "always": [
+              "check:ka-sanren-soku:0:4,5,6",
+              "violation:pattern:0:4"
+            ],
+            "sometimes": [
+              "check:ka-sanren-soku:1:4,5,6",
+              "check:supplement-reading:0:3",
+              "violation:kohei:0:3",
+              "violation:niroku-tsui:1:1,5",
+              "violation:nishi-fudo:0:1,3",
+              "violation:pattern:0:3",
+              "violation:pattern:1:5",
+              "violation:rhyme-tone:1:6"
+            ]
+          },
+          "爲=平上平四支→為": {
+            "always": [],
+            "sometimes": [
+              "check:ka-sanren-soku:1:4,5,6",
+              "check:supplement-reading:0:3",
+              "violation:niroku-tsui:1:1,5",
+              "violation:nishi-fudo:0:1,3",
+              "violation:pattern:0:3",
               "violation:pattern:1:5",
               "violation:rhyme-tone:1:6"
             ]
@@ -504,19 +559,25 @@
               "violation:pattern:1:5"
             ],
             "sometimes": [
+              "check:ka-sanren-soku:0:4,5,6",
               "check:ka-sanren-soku:1:4,5,6",
               "check:supplement-reading:0:3",
+              "violation:kohei:0:3",
               "violation:nishi-fudo:0:1,3",
               "violation:pattern:0:3",
+              "violation:pattern:0:4",
               "violation:rhyme-tone:1:6"
             ]
           },
           "思=平上平四支": {
             "always": [],
             "sometimes": [
+              "check:ka-sanren-soku:0:4,5,6",
               "check:supplement-reading:0:3",
+              "violation:kohei:0:3",
               "violation:nishi-fudo:0:1,3",
               "violation:pattern:0:3",
+              "violation:pattern:0:4",
               "violation:rhyme-tone:1:6"
             ]
           }
@@ -527,27 +588,33 @@
               "violation:rhyme-tone:1:6"
             ],
             "sometimes": [
+              "check:ka-sanren-soku:0:4,5,6",
               "check:ka-sanren-soku:1:4,5,6",
               "check:supplement-reading:0:3",
+              "violation:kohei:0:3",
               "violation:niroku-tsui:1:1,5",
               "violation:nishi-fudo:0:1,3",
               "violation:pattern:0:3",
+              "violation:pattern:0:4",
               "violation:pattern:1:5"
             ]
           },
           "親=平上平十一真": {
             "always": [],
             "sometimes": [
+              "check:ka-sanren-soku:0:4,5,6",
               "check:supplement-reading:0:3",
+              "violation:kohei:0:3",
               "violation:niroku-tsui:1:1,5",
               "violation:nishi-fudo:0:1,3",
               "violation:pattern:0:3",
+              "violation:pattern:0:4",
               "violation:pattern:1:5"
             ]
           }
         }
       },
-      "interpretationsDigest": "380ca2a55745bb3f86e8afcec116d306e9dbf0dd19fc8fff52446522b68ce32f"
+      "interpretationsDigest": "73782547a7d5d9261b80a6d0b20cd2cb56fe01871f94d46af3aed34bacbd6d1b"
     },
     {
       "id": "q05",
@@ -1106,13 +1173,12 @@
       "symbols": [
         "●○●●○○●",
         "●●○○●●○",
-        "○◎○○●○□",
+        "○◎○○●○●",
         "●○◎●●○○"
       ],
       "independent": false,
       "findings": [
         "check:bou-in:2:5",
-        "check:unknown-char:2:6",
         "variant:hasami-hei:2:4,5,6",
         "variant:ichisango-furon:0:0",
         "variant:ichisango-furon:2:0",
@@ -1727,12 +1793,12 @@
       "symbols": [
         "○○●●●○◎",
         "○●○○●●○",
-        "●●□○□◎●",
+        "●●○○□◎●",
         "◎○●◎●◎○"
       ],
       "independent": false,
       "findings": [
-        "check:unknown-char:2:2",
+        "check:supplement-reading:2:2",
         "check:unknown-char:2:4",
         "variant:ichisango-furon:1:0"
       ],
@@ -4479,23 +4545,25 @@
         "note": "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。"
       },
       "symbols": [
-        "□●○◎○●◎",
+        "◎●○◎○●◎",
         "●○○●●○○",
-        "○○●●○○□",
+        "○○●●○○●",
         "○●○○●●○"
       ],
       "independent": false,
       "findings": [
         "check:douji:0:4",
         "check:douji:2:0",
-        "check:unknown-char:0:0",
-        "check:unknown-char:2:6",
         "variant:ichisango-furon:1:0",
         "variant:ichisango-furon:1:2",
         "variant:ichisango-furon:3:0"
       ],
-      "interpretations": 4,
+      "interpretations": 8,
       "choices": {
+        "0": [
+          "爲=去去声四寘→為",
+          "爲=平上平四支→為"
+        ],
         "3": [
           "屏=上上声二十三梗",
           "屏=平下平九青"
@@ -4506,6 +4574,22 @@
         ]
       },
       "byChoice": {
+        "0": {
+          "爲=去去声四寘→為": {
+            "always": [],
+            "sometimes": [
+              "violation:nishi-fudo:0:1,3",
+              "violation:pattern:0:3"
+            ]
+          },
+          "爲=平上平四支→為": {
+            "always": [],
+            "sometimes": [
+              "violation:nishi-fudo:0:1,3",
+              "violation:pattern:0:3"
+            ]
+          }
+        },
         "3": {
           "屏=上上声二十三梗": {
             "always": [
@@ -4536,7 +4620,7 @@
           }
         }
       },
-      "interpretationsDigest": "75c9be2eca57d5ce0b953430a83cbd02a490064da556306d171a09ef8e05b291"
+      "interpretationsDigest": "b9e120f56ed0530d0f9f778a3ad18bb09ae23d4239b0e2322fb1aa216629ff7f"
     },
     {
       "id": "q20",
@@ -6309,11 +6393,10 @@
         "◎●◎○●●○",
         "●◎◎●●○○",
         "○○◎◎○○◎",
-        "○●○◎□●○"
+        "○●○◎●●○"
       ],
       "independent": true,
       "findings": [
-        "check:unknown-char:3:4",
         "variant:ichisango-furon:1:0",
         "variant:ichisango-furon:3:0"
       ],
@@ -7058,15 +7141,14 @@
         "●◎○○●●○",
         "●○□●●○○",
         "○○◎●○◎●",
-        "◎□◎○●●○"
+        "◎◎◎○●●○"
       ],
       "independent": false,
       "findings": [
         "check:douji:0:2,3",
-        "check:unknown-char:1:2",
-        "check:unknown-char:3:1"
+        "check:unknown-char:1:2"
       ],
-      "interpretations": 256,
+      "interpretations": 512,
       "choices": {
         "1": [
           "夢=去去声一送",
@@ -7094,6 +7176,10 @@
           "猶=去去声二十六宥",
           "猶=平下平十一尤"
         ],
+        "22": [
+          "爲=去去声四寘→為",
+          "爲=平上平四支→為"
+        ],
         "23": [
           "離=去去声八霽",
           "離=平上平四支"
@@ -7105,9 +7191,14 @@
             "always": [],
             "sometimes": [
               "check:supplement-reading:2:2",
+              "check:youtai:-1:",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:2:1,5",
-              "violation:pattern:2:5"
+              "violation:niroku-tsui:3:1,5",
+              "violation:nishi-fudo:3:1,3",
+              "violation:pattern:2:5",
+              "violation:pattern:3:1"
             ]
           },
           "夢=平上平一東": {
@@ -7128,9 +7219,13 @@
             ],
             "sometimes": [
               "check:supplement-reading:2:2",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:2:1,5",
-              "violation:pattern:2:5"
+              "violation:niroku-tsui:3:1,5",
+              "violation:nishi-fudo:3:1,3",
+              "violation:pattern:2:5",
+              "violation:pattern:3:1"
             ]
           }
         },
@@ -7141,10 +7236,13 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7153,6 +7251,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7163,10 +7262,13 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7175,6 +7277,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7187,10 +7290,13 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7199,6 +7305,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7209,10 +7316,13 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7221,6 +7331,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7232,10 +7343,13 @@
             "sometimes": [
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7244,6 +7358,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7253,10 +7368,13 @@
             "sometimes": [
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7265,6 +7383,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7274,10 +7393,13 @@
             "sometimes": [
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7286,6 +7408,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7297,10 +7420,13 @@
             "sometimes": [
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7309,6 +7435,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7323,9 +7450,12 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7334,6 +7464,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7344,9 +7475,12 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7355,6 +7489,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7367,10 +7502,13 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:kohei:3:3",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7379,11 +7517,40 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           },
           "猶=平下平十一尤": {
+            "always": [],
+            "sometimes": [
+              "check:supplement-reading:2:2",
+              "check:youtai:-1:",
+              "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
+              "violation:kohei:3:3",
+              "violation:niroku-tsui:0:1,5",
+              "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
+              "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
+              "violation:pattern:0:3",
+              "violation:pattern:0:5",
+              "violation:pattern:1:1",
+              "violation:pattern:1:3",
+              "violation:pattern:1:5",
+              "violation:pattern:2:1",
+              "violation:pattern:2:3",
+              "violation:pattern:2:5",
+              "violation:pattern:3:1",
+              "violation:pattern:3:3",
+              "violation:pattern:3:5"
+            ]
+          }
+        },
+        "22": {
+          "爲=去去声四寘→為": {
             "always": [],
             "sometimes": [
               "check:supplement-reading:2:2",
@@ -7401,6 +7568,34 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
+              "violation:pattern:3:3",
+              "violation:pattern:3:5"
+            ]
+          },
+          "爲=平上平四支→為": {
+            "always": [
+              "check:youtai:-1:",
+              "violation:hanpo-nenpo:3:1",
+              "violation:niroku-tsui:3:1,5",
+              "violation:nishi-fudo:3:1,3"
+            ],
+            "sometimes": [
+              "check:supplement-reading:2:2",
+              "violation:hanpo-nenpo:1:1",
+              "violation:kohei:3:3",
+              "violation:niroku-tsui:0:1,5",
+              "violation:niroku-tsui:2:1,5",
+              "violation:nishi-fudo:0:1,3",
+              "violation:pattern:0:3",
+              "violation:pattern:0:5",
+              "violation:pattern:1:1",
+              "violation:pattern:1:3",
+              "violation:pattern:1:5",
+              "violation:pattern:2:1",
+              "violation:pattern:2:3",
+              "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7415,9 +7610,12 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7426,6 +7624,7 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
@@ -7436,9 +7635,12 @@
               "check:supplement-reading:2:2",
               "check:youtai:-1:",
               "violation:hanpo-nenpo:1:1",
+              "violation:hanpo-nenpo:3:1",
               "violation:niroku-tsui:0:1,5",
               "violation:niroku-tsui:2:1,5",
+              "violation:niroku-tsui:3:1,5",
               "violation:nishi-fudo:0:1,3",
+              "violation:nishi-fudo:3:1,3",
               "violation:pattern:0:3",
               "violation:pattern:0:5",
               "violation:pattern:1:1",
@@ -7447,13 +7649,14 @@
               "violation:pattern:2:1",
               "violation:pattern:2:3",
               "violation:pattern:2:5",
+              "violation:pattern:3:1",
               "violation:pattern:3:3",
               "violation:pattern:3:5"
             ]
           }
         }
       },
-      "interpretationsDigest": "c188d143a10117fc461c248e7b82d96e4473a86870ca4d61519e77b15e5b4e10"
+      "interpretationsDigest": "1132e0436397196fa39dc1833e962d1b748e372f339215a2355b9a690cea8f49"
     },
     {
       "id": "q35",
@@ -7801,12 +8004,11 @@
         "●●○○○●○",
         "○○◎●●○○",
         "●○○●◎○●",
-        "●□○○○●○"
+        "●●○○○●○"
       ],
       "independent": false,
       "findings": [
         "check:supplement-reading:2:0",
-        "check:unknown-char:3:1",
         "variant:ichisango-furon:0:4",
         "variant:ichisango-furon:2:0",
         "variant:ichisango-furon:2:2",
@@ -7890,11 +8092,10 @@
       "author": "陳陶",
       "form": {
         "id": "sokki-nyuin",
-        "auto": true,
-        "note": "起句の2字目が決まらないため、承句の2字目から反法・粘法で起式を推定しました。"
+        "auto": true
       },
       "symbols": [
-        "●□○○◎●○",
+        "●●○○◎●○",
         "●○○●◎○○",
         "●○○●○○●",
         "◎●○○◎●○"
@@ -7903,7 +8104,6 @@
       "findings": [
         "check:bou-in:3:2",
         "check:supplement-reading:3:3",
-        "check:unknown-char:0:1",
         "variant:ichisango-furon:1:0",
         "variant:ichisango-furon:1:2",
         "variant:ichisango-furon:2:0",
@@ -8473,7 +8673,7 @@
         "auto": true
       },
       "symbols": [
-        "○●○□◎◎○",
+        "○●○○◎◎○",
         "●○◎●●○◎",
         "●○●◎○○●",
         "●●○◎●●○"
@@ -8482,7 +8682,6 @@
       "findings": [
         "check:bou-in:2:1",
         "check:supplement-reading:2:0",
-        "check:unknown-char:0:3",
         "variant:ichisango-furon:0:0",
         "variant:ichisango-furon:1:0",
         "variant:ichisango-furon:2:0"
