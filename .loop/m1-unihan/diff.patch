@@ -305,7 +305,7 @@ index 3ace318..eae4e92 100644
      if digest != source["sha256"]:
          print(
 diff --git a/scripts/test_build_data.py b/scripts/test_build_data.py
-index b9aadea..6acb45b 100644
+index b9aadea..1f04d3e 100644
 --- a/scripts/test_build_data.py
 +++ b/scripts/test_build_data.py
 @@ -6,14 +6,23 @@
@@ -334,7 +334,7 @@ index b9aadea..6acb45b 100644
  
      def test_one_to_many_with_one_known_candidate_is_reported(self):
          # 甲 → 乙 丙 のうち、データにあるのは丙だけ
-@@ -169,5 +178,90 @@ class ParseKokujiTest(unittest.TestCase):
+@@ -169,5 +178,101 @@ class ParseKokujiTest(unittest.TestCase):
          self.assertEqual(result["萩"], "出典の行見出しに「要出典」「疑問点」の印がある")
  
  
@@ -396,6 +396,17 @@ index b9aadea..6acb45b 100644
 +    def test_unihan_candidates_missing_from_data_are_not_added(self):
 +        variants, _, unmapped, supplemented = self.run_variants(
 +            [], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
++        )
++        self.assertEqual(variants, {})
++        self.assertEqual(supplemented, [])
++        self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
++
++    def test_unihan_is_followed_only_one_step(self):
++        # 甲 → 乙（OpenCC）→ 丙（Unihan 1段目）→ 丁（Unihan 2段目）。データにあるのは 丁 だけ
++        variants, _, unmapped, supplemented = self.run_variants(
++            ["丁"],
++            jp={"甲": ["乙"]},
++            unihan={"乙": [("kZVariant", "丙")], "丙": [("kSemanticVariant", "丁")]},
 +        )
 +        self.assertEqual(variants, {})
 +        self.assertEqual(supplemented, [])
