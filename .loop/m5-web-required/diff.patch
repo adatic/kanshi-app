@@ -216,10 +216,10 @@ index eb19b43..4987c2d 100644
  
 diff --git a/apps/web/src/required.ts b/apps/web/src/required.ts
 new file mode 100644
-index 0000000..1f8a7b3
+index 0000000..ab6818c
 --- /dev/null
 +++ b/apps/web/src/required.ts
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,67 @@
 +// 必須要素（作者が必ず残すと決めた語。最大2語）の受け付けと、置ける位置（CLAUDE.md §4.5・§10）。純関数。
 +// 置けるかどうかの判定はエンジンの placementsFor だけが持つ。
 +import { placementsFor } from "@kanshi/engine";
@@ -260,12 +260,25 @@ index 0000000..1f8a7b3
 +  conflict: number;
 +};
 +
++const isAt = (chars: string[], grid: readonly string[], line: number, start: number) =>
++  chars.every((c, k) => grid[line * WIDTH + start + k] === c);
++
++/** 語が詩に入っている位置。語の位置（1-2字目など）に限らず、句の中のどこにあっても拾う */
++export function presentPlaces(word: string, grid: readonly string[]): PlaceView[] {
++  const chars = [...word];
++  const out: PlaceView[] = [];
++  for (let line = 0; line * WIDTH < grid.length; line++)
++    for (let start = 0; start + chars.length <= WIDTH; start++)
++      if (isAt(chars, grid, line, start)) out.push({ line, start, label: `${lineName(line)}の${start + 1}-${start + chars.length}字目` });
++  return out;
++}
++
 +export function requiredView(word: string, grid: readonly string[], data: EngineData, options: Options): RequiredView {
 +  const chars = [...word];
-+  const v: RequiredView = { word, present: [], ok: [], depends: [], ng: 0, conflict: 0 };
++  const v: RequiredView = { word, present: presentPlaces(word, grid), ok: [], depends: [], ng: 0, conflict: 0 };
 +  for (const p of placementsFor(word, grid, data, options)) {
 +    const place = { line: p.line, start: p.start, label: `${lineName(p.line)}の${p.slot}字目` };
-+    if (chars.every((c, k) => grid[p.line * WIDTH + p.start + k] === c)) v.present.push(place);
++    if (isAt(chars, grid, p.line, p.start)) continue; // すでに入っている位置（present にある）
 +    else if (p.status === "ok") v.ok.push(place);
 +    else if (p.status === "depends")
 +      v.depends.push({ ...place, notes: p.dependent.map((f) => `${data.rules.rules[f.rule]?.name ?? f.rule}：${f.message}`) });
@@ -367,14 +380,14 @@ index e9026f3..d072028 100644
 +}
 diff --git a/apps/web/test/required.test.ts b/apps/web/test/required.test.ts
 new file mode 100644
-index 0000000..2301f20
+index 0000000..881531a
 --- /dev/null
 +++ b/apps/web/test/required.test.ts
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,98 @@
 +// 必須要素（apps/web/src/required.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
-+import { requiredView, validateRequired } from "../src/required";
-+import { P, RYO, Z, baseLines, build, fixtureData, replaceAt } from "../../../packages/engine/test/fixture";
++import { presentPlaces, requiredView, validateRequired } from "../src/required";
++import { KOKUJI, P, RYO, UNKNOWN, Z, baseLines, build, fixtureData, replaceAt } from "../../../packages/engine/test/fixture";
 +
 +const HN = baseLines("heiki-nyuin");
 +// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -431,6 +444,32 @@ index 0000000..2301f20
 +    const v = requiredView(word, grid, fixtureData, {});
 +    expect(v.present.map((p) => p.label)).toEqual(["転句の3-4字目"]);
 +    expect(v.ok.map((p) => p.label)).not.toContain("転句の3-4字目");
++  });
++
++  it("語の位置（1-2字目など）でないところに入っていても、その位置を示す", () => {
++    const grid = gridOf(HN);
++    const two = grid[1]! + grid[2]!; // 起句の2-3字目
++    expect(requiredView(two, grid, fixtureData, {}).present.map((p) => p.label)).toEqual(["起句の2-3字目"]);
++    const three = grid[8]! + grid[9]! + grid[10]!; // 承句の2-4字目
++    expect(presentPlaces(three, grid).map((p) => [p.line, p.start, p.label])).toEqual([[1, 1, "承句の2-4字目"]]);
++  });
++
++  it("国字を含む語は登録でき、置くと違反になる。国字があっても続ける設定なら置ける", () => {
++    const word = KOKUJI + Z[29]!; // 国字＋仄。転句1-2字目（◐●）に置く
++    expect(validateRequired(word, [])).toBeNull();
++    const label = "転句の1-2字目";
++    expect(requiredView(word, withBlankThird(), fixtureData, {}).ok.map((p) => p.label)).not.toContain(label);
++    expect(requiredView(word, withBlankThird(), fixtureData, { allowKokuji: true }).ok.map((p) => p.label)).toContain(label);
++  });
++
++  it("平仄データにない字を含む語は、既定では置ける位置に出し、平・仄として扱う設定ではそれに従う", () => {
++    const word = UNKNOWN + Z[29]!; // データにない字＋仄。転句5-6字目（○●）
++    expect(validateRequired(word, [])).toBeNull();
++    const label = "転句の5-6字目";
++    const okLabels = (o: object) => requiredView(word, withBlankThird(), fixtureData, o).ok.map((p) => p.label);
++    expect(okLabels({})).toContain(label); // 平仄を問わない（要確認だけ）
++    expect(okLabels({ unknownAs: "平" })).toContain(label);
++    expect(okLabels({ unknownAs: "仄" })).not.toContain(label); // 5字目○に仄
 +  });
 +
 +  it("埋まった詩では、入っていない語はどこにも置けない（すべて重なる）", () => {
