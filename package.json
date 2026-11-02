@@ -1,0 +1,23 @@
+{
+  "name": "kanshi-app",
+  "private": true,
+  "description": "七言絶句の作詩を支援する静的Webアプリ",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/engine/tsconfig.json",
+    "test": "npm run typecheck && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
