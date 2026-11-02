@@ -344,10 +344,10 @@ index c0f851c..99e3965 100644
  export type * from "./types";
 diff --git a/packages/engine/src/queries.ts b/packages/engine/src/queries.ts
 new file mode 100644
-index 0000000..13501e1
+index 0000000..7b42448
 --- /dev/null
 +++ b/packages/engine/src/queries.ts
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,213 @@
 +// 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。
 +// 判定の基準を二重に持たないよう、制約と配置は analyze に仮の字を置いて判定した結果から求める。
 +import { analyze } from "./analyze";
@@ -421,7 +421,8 @@ index 0000000..13501e1
 +  return Array.from({ length: 4 }, (_, l) => Array.from({ length: 7 }, (_, p) => lines[l]?.[p]?.input ?? BLANK));
 +}
 +
-+const toText = (grid: string[][]) => grid.map((row) => row.join("")).join("\n");
++/** analyze に渡す28マスの配列。文字列に戻さないので、マスの中の改行が句の区切りとして読まれない */
++const toCells = (grid: string[][]) => grid.flat();
 +const keyOf = (f: Finding) => `${f.rule}|${f.severity}|${f.line}|${f.positions.join(",")}`;
 +const violations = (a: Analysis) => a.findings.filter((f) => f.severity === "violation");
 +const checks = (a: Analysis) => a.findings.filter((f) => f.severity === "check");
@@ -471,7 +472,7 @@ index 0000000..13501e1
 +): CellConstraint {
 +  const grid = toGrid(input);
 +  grid[line]![pos] = BLANK;
-+  const base = analyze(toText(grid), data, options);
++  const base = analyze(toCells(grid), data, options);
 +  const rhymePosition = isRhymePosition(base, line, pos);
 +  const groups = rhymePosition ? rhymeGroups(base, line) : [];
 +
@@ -482,7 +483,7 @@ index 0000000..13501e1
 +      const probe = withProbe(data, pz, rhyme, new Set(grid.flat()));
 +      const g = grid.map((row) => [...row]);
 +      g[line]![pos] = probe.char;
-+      const a = analyze(toText(g), probe.data, options);
++      const a = analyze(toCells(g), probe.data, options);
 +      // 文言の中の仮の字は、利用者には意味がないので「（置く字）」に置き換える
 +      const plain = (fs: Finding[]) => fs.map((f) => ({ ...f, message: f.message.replaceAll(probe.char, PROBE_LABEL) }));
 +      return { violations: plain(newOnes(violations(a), violations(base))), checks: plain(newOnes(checks(a), checks(base))) };
@@ -531,7 +532,7 @@ index 0000000..13501e1
 +  const slots = SLOTS[chars.length];
 +  if (slots === undefined) return [];
 +  const grid = toGrid(input);
-+  const base = analyze(toText(grid), data, options);
++  const base = analyze(toCells(grid), data, options);
 +  const baseAny = anyViolations(base);
 +
 +  return [0, 1, 2, 3].flatMap((line) =>
@@ -543,7 +544,7 @@ index 0000000..13501e1
 +      if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts, errors: [] };
 +      const g = grid.map((row) => [...row]);
 +      chars.forEach((c, i) => (g[line]![start + i] = c));
-+      const a = analyze(toText(g), data, options);
++      const a = analyze(toCells(g), data, options);
 +      // 置いたマスの入力エラー（漢字以外・繰り返す字のない「々」）と、語の中の「＿」は invalid（CLAUDE.md §4.1）
 +      const placed = (e: InputError) => e.line === line && e.position >= start && e.position < start + chars.length;
 +      const errors: InputError[] = [
@@ -625,10 +626,10 @@ index 6c2e5c9..94e2938 100644
 +};
 diff --git a/packages/engine/test/queries.test.ts b/packages/engine/test/queries.test.ts
 new file mode 100644
-index 0000000..efd6a7c
+index 0000000..b3c3912
 --- /dev/null
 +++ b/packages/engine/test/queries.test.ts
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,189 @@
 +// 詩語の検索と、制約・配置の問い合わせ（CLAUDE.md §4.1「制約の問い合わせ」・§4.4）。
 +// 平仄は架空のデータ（fixture.ts）で与え、実在の字の平仄を記憶で使わない（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
@@ -785,6 +786,13 @@ index 0000000..efd6a7c
 +      expect(p.errors.length, word).toBeGreaterThan(0);
 +      expect(p.errors.every((e) => e.line === 2 && (e.position === 2 || e.position === 3)), word).toBe(true);
 +    }
++  });
++
++  it("改行を含む語も invalid で、句の区切りとしては扱わない", () => {
++    const empty = Array(4).fill(BLANK).join("\n");
++    const p = placementsFor(P[28]! + "\n", empty, fixtureData, { form: "heiki-nyuin" }).find((x) => x.line === 2 && x.slot === "3-4")!;
++    expect(p.status).toBe("invalid");
++    expect(p.errors.map((e) => [e.line, e.position])).toEqual([[2, 3]]);
 +  });
 +
 +  it("「＿」を含む語も invalid", () => {
