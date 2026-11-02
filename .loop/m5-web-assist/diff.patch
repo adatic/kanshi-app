@@ -23,7 +23,7 @@ index 700c8d1..a4f0105 100644
  
  ### m5-web-grid — マス目エディタ（M5）
 diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
-index d63a15f..9316d70 100644
+index d63a15f..2bb928b 100644
 --- a/apps/web/e2e/smoke.mjs
 +++ b/apps/web/e2e/smoke.mjs
 @@ -18,6 +18,20 @@ const input = JSON.parse(readFileSync(`${root}golden/input.json`, "utf-8"));
@@ -47,7 +47,7 @@ index d63a15f..9316d70 100644
  const failures = [];
  const check = (ok, message) => {
    console.log(`${ok ? "ok  " : "NG  "} ${message}`);
-@@ -132,6 +146,59 @@ try {
+@@ -132,6 +146,61 @@ try {
      check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 詩全体の貼り付けが句ごとに入る`);
      if (shots) await page.screenshot({ path: `${shots}/${label}-grid.png`, fullPage: true });
  
@@ -85,6 +85,8 @@ index d63a15f..9316d70 100644
 +    await page.waitForSelector("#assist .cand");
 +    const cands = await page.locator("#assist .cand").count();
 +    check(cands > 0 && cands <= 20, `${label}: 転句5-6字目の詩語候補を示す（${cands}語）`);
++    const metas = await page.$$eval("#assist .cand .cand-meta", (m) => m.map((x) => x.textContent));
++    check(metas.every((m) => m.includes("末字") && /\d+回/.test(m)), `${label}: 句末でない位置の候補にも、末字の韻目と出現回数を示す`);
 +    const first = await page.locator("#assist .cand .cand-word").first().textContent();
 +    const firstDepends = (await page.locator("#assist .cand").first().locator(".depends").count()) > 0;
 +    // 用例は開いたときに読み込む
@@ -323,7 +325,7 @@ index 0000000..d3c70b9
 +}
 diff --git a/apps/web/src/assistView.ts b/apps/web/src/assistView.ts
 new file mode 100644
-index 0000000..07a7431
+index 0000000..ea37cc6
 --- /dev/null
 +++ b/apps/web/src/assistView.ts
 @@ -0,0 +1,198 @@
@@ -476,7 +478,7 @@ index 0000000..07a7431
 +        { class: "cand" },
 +        place,
 +        h("span", { class: "cand-word", lang: "zh-Hant" }, c.word),
-+        h("span", { class: "cand-meta" }, c.patterns.join("／"), endsLine && c.rhymes.length > 0 ? `　${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
++        h("span", { class: "cand-meta" }, c.patterns.join("／"), c.rhymes.length > 0 ? `　末字 ${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
 +        c.status === "depends"
 +          ? h("details", { class: "depends" }, h("summary", {}, "字の読みによっては違反"), h("ul", {}, ...c.dependent.map((d) => h("li", {}, d))))
 +          : null,
@@ -1270,7 +1272,7 @@ index 1cbf7fc..2da12c8 100644
 +  }, 60_000);
  });
 diff --git a/scripts/test_build_phrases.py b/scripts/test_build_phrases.py
-index 4ff6c72..eaa0050 100644
+index 4ff6c72..91c1b80 100644
 --- a/scripts/test_build_phrases.py
 +++ b/scripts/test_build_phrases.py
 @@ -6,7 +6,7 @@
@@ -1282,12 +1284,10 @@ index 4ff6c72..eaa0050 100644
  from fetch_corpus import corpus_files
  
  LINE = "甲乙丙丁戊己庚"  # 7字
-@@ -125,3 +125,34 @@ class PatternTest(unittest.TestCase):
+@@ -123,5 +123,36 @@ class PatternTest(unittest.TestCase):
+         self.assertEqual(last_rhymes("平無", self.readings, ORDER), [])
  
- if __name__ == "__main__":
-     unittest.main()
-+
-+
+ 
 +class SearchFilesTest(unittest.TestCase):
 +    """平仄パターンで探すための索引（字数×パターンごとのファイル）。"""
 +
@@ -1317,3 +1317,7 @@ index 4ff6c72..eaa0050 100644
 +            "丁": {"2": [self.entry("丁戊", 2, ["平平"], [], {})], "3": []},
 +        }
 +        self.assertEqual([e[0] for e in search_files(by_first, {})["2-hh"]], ["甲丙", "丁戊", "甲乙"])
++
++
+ if __name__ == "__main__":
+     unittest.main()
