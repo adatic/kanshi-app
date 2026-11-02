@@ -159,17 +159,21 @@ try {
     await page.locator("#tab-paste").click();
     check((await page.inputValue("#poem-input")) === q03.join("，\n"), `${label}: マス目を編集していなければ、貼り付けた本文はそのまま`);
 
-    // 横にはみ出さない
+    // 貼り付けモードで横にはみ出さない
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    check(overflow <= 0, `${label}: 横にはみ出さない（はみ出し ${overflow}px）`);
+    check(overflow <= 0, `${label}: 貼り付けモードで横にはみ出さない（はみ出し ${overflow}px）`);
 
     check(outside.length === 0, `${label}: ページの外への通信がない${outside.length ? `（${outside.join(", ")}）` : ""}`);
     check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
-    if (shots) {
-      await page.locator("#tab-grid").click();
-      await cell(10).click();
-      await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
-    }
+    // マス目モードでも、選択中のマスと検査結果を出した状態で、横にはみ出さない
+    await page.locator("#tab-grid").click();
+    await page.locator("#grid-sample").click();
+    await cell(10).click();
+    const panelShown = await page.locator("#cell-panel .big-char").isVisible();
+    const resultsShown = await page.locator("#grid-result .findings, #grid-result .none").first().isVisible();
+    const gridOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(panelShown && resultsShown && gridOverflow <= 0, `${label}: マス目モード（選択中のマスと検査結果を表示）で横にはみ出さない（はみ出し ${gridOverflow}px）`);
+    if (shots) await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
     await page.close();
   }
 } finally {

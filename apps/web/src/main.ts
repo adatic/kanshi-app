@@ -207,7 +207,7 @@ function app(data: EngineData): HTMLElement {
       const v = buildView(a, data);
       editor.refresh(v, showPattern);
       gridResult.replaceChildren(...resultParts(v, showPattern));
-      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected)));
+      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)));
     } else {
       output.replaceChildren(resultView(buildView(analyze(input.value, data, options), data), showPattern));
     }

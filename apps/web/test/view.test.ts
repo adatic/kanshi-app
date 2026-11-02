@@ -1,6 +1,7 @@
 // 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
 import { describe, expect, it } from "vitest";
 import { analyze } from "@kanshi/engine";
+import type { Options } from "@kanshi/engine";
 import { buildView, cellDetail } from "../src/view";
 import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
 
@@ -176,6 +177,18 @@ describe("cellDetail（選択中のマス）", () => {
   it("データにない字・国字は状態を返す", () => {
     expect(detail(replaceAt(HN, 2, 0, UNKNOWN), 14).status).toBe("unknown");
     expect(detail(replaceAt(HN, 2, 0, KOKUJI), 14).status).toBe("kokuji");
+  });
+
+  it("データにない字・国字の説明は、いまの設定での扱いを書く", () => {
+    const withOptions = (ch: string, options: Options) => {
+      const a = analyze(build(...replaceAt(HN, 2, 0, ch)), fixtureData, options);
+      return cellDetail(a, buildView(a, fixtureData), fixtureData, 14, options).statusText;
+    };
+    expect(withOptions(UNKNOWN, {})).toContain("判定していません");
+    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).toContain("仄として扱って判定しています");
+    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).not.toContain("判定していません");
+    expect(withOptions(KOKUJI, {})).toContain("使えません");
+    expect(withOptions(KOKUJI, { allowKokuji: true })).toContain("要確認として続けています");
   });
 
   it("詩格の候補が複数なら、候補ごとに定型が求める平仄を示す", () => {

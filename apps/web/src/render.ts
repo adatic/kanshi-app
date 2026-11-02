@@ -1,6 +1,5 @@
 // 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
 import type { Severity } from "@kanshi/engine";
-import type { CharStatus } from "@kanshi/engine";
 import type { CellDetailView, FindingView, PoemView, ReadingFindingView, ReadingOptionView } from "./view";
 
 type Attrs = Record<string, string>;
@@ -191,14 +190,6 @@ export function resultParts(v: PoemView, showPattern: boolean): HTMLElement[] {
   return [formLine, legend, ...sections];
 }
 
-const STATUS_TEXT: Record<CharStatus, string> = {
-  known: "平仄データにある字です。",
-  undetermined: "異体字の対応で候補の字が複数あり、どの字か一つに決まりません。候補の字の読みをすべて示します。",
-  unknown: "平仄データにない字です。平仄は判定していません（設定で平・仄のどちらかとして扱えます）。",
-  kokuji: "国字（日本で作られた字）です。漢詩には使えません（設定で続けることもできます）。",
-  blank: "未入力のマスです。",
-  invalid: "漢字ではありません。",
-};
 
 /** 右の列：選択中のマスの字、声調・韻目、定型が求めるもの、指摘、読みごとの結果 */
 export function cellPanel(d: CellDetailView | null): HTMLElement {
@@ -206,7 +197,7 @@ export function cellPanel(d: CellDetailView | null): HTMLElement {
   const parts: (HTMLElement | null)[] = [
     h("p", { class: "where" }, d.where),
     h("p", { class: `big-char ${d.char === null ? "blank" : ""}`, lang: "zh-Hant" }, d.char ?? "＿"),
-    h("p", { class: "status" }, STATUS_TEXT[d.status]),
+    h("p", { class: "status" }, d.statusText),
   ];
   if (d.readings.length > 0) {
     parts.push(

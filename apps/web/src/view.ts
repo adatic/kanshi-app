@@ -1,5 +1,5 @@
 // エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
-import type { Analysis, CharStatus, EngineData, Finding, PZ, Reading, Severity } from "@kanshi/engine";
+import type { Analysis, CharStatus, EngineData, Finding, Options, PZ, Reading, Severity } from "@kanshi/engine";
 
 const LINE_NAMES = ["起句", "承句", "転句", "結句"];
 export const lineName = (l: number) => LINE_NAMES[l] ?? `第${l + 1}句`;
@@ -194,6 +194,8 @@ export type CellDetailView = {
   /** 入力どおりの字。未入力なら null */
   char: string | null;
   status: CharStatus;
+  /** 字の状態と、いまの設定での扱いの説明 */
+  statusText: string;
   /** 字の読み（声調・韻目）と平仄 */
   readings: { label: string; pz: PZ }[];
   /** 詩格の候補ごとに、定型がこのマスに求めるもの。詩格が決まらなければ空 */
@@ -206,7 +208,29 @@ export type CellDetailView = {
 
 const PATTERN_TEXT: Record<string, string> = { "○": "平", "●": "仄", "◐": "平仄を問わない", "◎": "平声で押韻" };
 
-export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: number): CellDetailView {
+/** 字の状態の説明。データにない字と国字は、設定によって扱いが変わるので、いまの扱いを書く */
+export function statusText(status: CharStatus, options: Options): string {
+  switch (status) {
+    case "known":
+      return "平仄データにある字です。";
+    case "undetermined":
+      return "異体字の対応で候補の字が複数あり、どの字か一つに決まりません。候補の字の読みをすべて示します。";
+    case "unknown":
+      return options.unknownAs !== undefined
+        ? `平仄データにない字です。設定により、${options.unknownAs}として扱って判定しています。`
+        : "平仄データにない字です。平仄は判定していません（設定で平・仄のどちらかとして扱えます）。";
+    case "kokuji":
+      return options.allowKokuji
+        ? "国字（日本で作られた字）です。設定により、違反ではなく要確認として続けています。"
+        : "国字（日本で作られた字）です。漢詩には使えません（設定で続けることもできます）。";
+    case "blank":
+      return "未入力のマスです。";
+    case "invalid":
+      return "漢字ではありません。";
+  }
+}
+
+export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: number, options: Options = {}): CellDetailView {
   const l = Math.floor(index / 7);
   const p = index % 7;
   const info = a.chars[l]?.[p];
@@ -221,6 +245,7 @@ export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: nu
     where: `${lineName(l)}の${p + 1}字目`,
     char: info === undefined || info.status === "blank" ? null : (info.input ?? info.char),
     status: info?.status ?? "blank",
+    statusText: statusText(info?.status ?? "blank", options),
     readings: (info?.readings ?? []).map((r) => ({ label: readingLabel(r), pz: r.tone === "平" ? "平" : "仄" })),
     required,
     findings: a.findings.filter((f) => f.line === l && f.positions.includes(p) && f.severity !== "ok").map(view),
