@@ -20,4 +20,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci
+      # 詩語頻度表の再現の確認に全唐詩が要る（リポジトリには入れていない。data/corpus.json のハッシュで検証して取得する）
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: corpus-${{ hashFiles('data/corpus.json') }}
+      - run: python3 scripts/fetch_corpus.py
       - run: npm test
