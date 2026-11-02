@@ -5,7 +5,7 @@
 
 import unittest
 
-from build_phrases import MAX_EXAMPLES, count_phrases, last_rhymes, patterns, reading_lookup
+from build_phrases import MAX_EXAMPLES, count_phrases, last_rhymes, load_exclusions, patterns, phrase_lines, reading_lookup
 
 LINE = "甲乙丙丁戊己庚"  # 7字
 
@@ -43,6 +43,39 @@ class CountPhrasesTest(unittest.TestCase):
     def test_inline_notes_are_removed_before_counting(self):
         counted = count_phrases([("作者", "題", [LINE + "(一作：子丑)，", LINE + "。"])])
         self.assertIn("甲乙", counted)
+
+
+class PhraseLinesTest(unittest.TestCase):
+    """詩語に使う句の取り出し（Codex レビュー m4-phrases 往復1 R1）。"""
+
+    def test_lines_with_a_described_character_are_dropped(self):
+        # 外字を部品で書き表した「{炙火=肉}」の中の字を、独立した字として数えない（韓愈「縣齋有懷」の句）
+        self.assertEqual(phrase_lines(["絲竹羅酒{炙火=肉}，甲乙丙丁戊己庚。"]), ["甲乙丙丁戊己庚"])
+
+    def test_lines_with_missing_or_note_marks_are_dropped(self):
+        self.assertEqual(phrase_lines(["甲乙丙□戊己庚，甲乙丙丁[一]戊己，子丑寅卯辰巳午。"]), ["子丑寅卯辰巳午"])
+
+    def test_quotation_marks_are_removed_but_the_line_is_kept(self):
+        self.assertEqual(phrase_lines(["城邊問官使：「早晚發西京？"]), ["城邊問官使", "早晚發西京"])
+
+    def test_inline_notes_in_parentheses_are_removed(self):
+        self.assertEqual(phrase_lines(["甲乙丙丁戊己庚（一作：子丑）。"]), ["甲乙丙丁戊己庚"])
+
+    def test_described_character_does_not_become_a_phrase(self):
+        counted = count_phrases([("韓愈", "縣齋有懷", ["絲竹羅酒{炙火=肉}。"]), ("裴諴", "南歌子詞", ["爭知{炙火=肉}裏心。"])])
+        self.assertNotIn("炙火", counted)
+
+
+class ExclusionTest(unittest.TestCase):
+    def test_every_excluded_record_matches_its_author_and_title(self):
+        # 除外の一覧の番号がずれていたら、作者・題が一致せず止まる
+        excluded = load_exclusions()
+        self.assertEqual(len(excluded), 4)
+
+    def test_excluded_records_are_not_counted(self):
+        poems = [("作者", "題", ["甲乙丙丁戊己庚。"]), ("作者", "題", ["甲乙丙丁戊己庚。"])]
+        self.assertIn("甲乙", count_phrases(poems))
+        self.assertNotIn("甲乙", count_phrases(poems[:1]))
 
 
 DATA = {

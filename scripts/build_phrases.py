@@ -4,7 +4,8 @@
 入力：全唐詩（scripts/fetch_corpus.py が .cache/ に取得したもの）、data/chars.json、data/variants.json。
 同じ入力からは常に同じ出力を出す（§9）。
 
-- 七言句（7字の句）を取り出し、2字語（1-2・3-4・5-6・6-7字目）と3字語（5-7字目）を数える
+- 七言句（7字の句）を取り出し、2字語（1-2・3-4・5-6・6-7字目）と3字語（5-7字目）を数える。
+  字の位置が信用できない句（外字の書き表し・欠字・校勘の記号を含む句）と、詩でないレコード（data/corpus-exclude.json）は使わない
 - 出現回数1の語は除く
 - 各語に、平仄パターン（読みが複数ある字は、ありうるパターンをすべて。データにない字は「？」）、末字の韻目、
   出現回数、位置ごとの出現回数、用例（全集の並び順で最初の3句。同じ句は重ねない）を付ける
@@ -27,10 +28,18 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from fetch_corpus import corpus_files
-from golden_text import lines_of
+import re
+
+from golden_text import HAN
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "phrases"
+EXCLUDE = ROOT / "data" / "corpus-exclude.json"
+
+_PAREN = re.compile(r"[（(][^）)]*[）)]")
+_QUOTES = re.compile(r"[「」『』“”‘’]")
+_SPLIT = re.compile(r"[，。？！；：、\s]")
+_ALL_HAN = re.compile(f"^[{HAN}]+$")
 
 # （開始位置, 字数, 位置の名前）。位置は1始まりで名付ける
 SLOTS = [(0, 2, "1-2"), (2, 2, "3-4"), (4, 2, "5-6"), (5, 2, "6-7"), (4, 3, "5-7")]
@@ -67,13 +76,24 @@ def last_rhymes(word: str, readings, rhyme_order: dict[str, int]) -> list[str]:
     return sorted({r["rhyme"] for r in readings(word[-1])}, key=lambda r: rhyme_order[r])
 
 
+def phrase_lines(paragraphs: list[str]) -> list[str]:
+    """詩語に使う句を取り出す。字の位置が信用できない句は使わない。
+
+    - 括弧つきの注記（「(一作：…)」など）と鉤括弧（会話の引用）は取り除く
+    - 句読点で区切った句のうち、漢字以外の文字を含む句は捨てる。外字を部品で書き表したもの（「{炙火=肉}」）、
+      欠字の「□」、校勘の「[一]」などで、残った漢字の並びが本文の字の位置と一致しないため
+    """
+    text = _QUOTES.sub("", _PAREN.sub("", "".join(paragraphs)))
+    return [part for part in _SPLIT.split(text) if part and _ALL_HAN.match(part)]
+
+
 def count_phrases(poems):
     """poems: [(作者, 題, 段落の一覧)]（全集の並び順）。→ {語: {"n", "at", "e"}}"""
     counts: Counter = Counter()
     at: dict[str, Counter] = defaultdict(Counter)
     examples: dict[str, list] = defaultdict(list)
     for author, title, paragraphs in poems:
-        for line in lines_of(paragraphs):
+        for line in phrase_lines(paragraphs):
             if len(line) != 7:
                 continue
             for start, size, name in SLOTS:
@@ -86,13 +106,31 @@ def count_phrases(poems):
     return {w: {"n": n, "at": dict(sorted(at[w].items())), "e": examples[w]} for w, n in counts.items() if n >= MIN_COUNT}
 
 
+def _corpus_poems(path: str, cache: Path) -> list[dict]:
+    if not cache.exists():
+        raise SystemExit(f"エラー: {cache.relative_to(ROOT)} がない。先に python3 scripts/fetch_corpus.py を実行する")
+    return json.loads(cache.read_text(encoding="utf-8"))
+
+
+def load_exclusions() -> set[tuple[str, int]]:
+    """数えないレコード（data/corpus-exclude.json）。記録した作者・題が実際のレコードと一致することを確かめる。"""
+    records = json.loads(EXCLUDE.read_text(encoding="utf-8"))["records"]
+    caches = dict(corpus_files()[1])
+    out = set()
+    for r in records:
+        poem = _corpus_poems(r["file"], caches[r["file"]])[r["index"]]
+        if (poem["author"], poem["title"]) != (r["author"], r["title"]):
+            raise SystemExit(f"エラー: 除外の一覧の {r['file']} #{r['index']} が記録と違う（{poem['author']}「{poem['title']}」）")
+        out.add((r["file"], r["index"]))
+    return out
+
+
 def load_corpus():
-    _, files = corpus_files()
-    for path, cache in files:
-        if not cache.exists():
-            raise SystemExit(f"エラー: {cache.relative_to(ROOT)} がない。先に python3 scripts/fetch_corpus.py を実行する")
-        for p in json.loads(cache.read_text(encoding="utf-8")):
-            yield p["author"], p["title"], p["paragraphs"]
+    excluded = load_exclusions()
+    for path, cache in corpus_files()[1]:
+        for i, p in enumerate(_corpus_poems(path, cache)):
+            if (path, i) not in excluded:
+                yield p["author"], p["title"], p["paragraphs"]
 
 
 def build() -> dict[Path, str]:

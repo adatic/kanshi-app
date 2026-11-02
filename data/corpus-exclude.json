@@ -1,0 +1,9 @@
+{
+  "description": "詩語頻度表で数えない全唐詩のレコード（scripts/build_phrases.py が除外する）。詩ではない現代の文章（補遺の巻の序文・後記）。作者と題が一致することを確かめてから除外する。",
+  "records": [
+    { "file": "全唐诗/poet.tang.50000.json", "index": 221, "author": "王重民輯錄，劉脩業整理。", "title": "前言", "reason": "『全唐詩補遺』（敦煌殘卷）の現代の前言" },
+    { "file": "全唐诗/poet.tang.50000.json", "index": 352, "author": "孫望輯錄", "title": "自序", "reason": "『全唐詩補逸』の現代の自序" },
+    { "file": "全唐诗/poet.tang.51000.json", "index": 110, "author": "孫望", "title": "後記", "reason": "『全唐詩補逸』の現代の後記" },
+    { "file": "全唐诗/poet.tang.51000.json", "index": 111, "author": "童養年", "title": "前言", "reason": "『全唐詩續補遺』の現代の前言" }
+  ]
+}
