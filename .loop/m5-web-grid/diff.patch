@@ -24,7 +24,7 @@ index 6a07d38..a6f705f 100644
  
  ### m5-web-paste — Web アプリの土台と、misima 互換の貼り付けモード（M5）
 diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
-index ea9bcce..072b237 100644
+index ea9bcce..d63a15f 100644
 --- a/apps/web/e2e/smoke.mjs
 +++ b/apps/web/e2e/smoke.mjs
 @@ -52,14 +52,93 @@ try {
@@ -124,7 +124,7 @@ index ea9bcce..072b237 100644
  
      // 違反のある詩（q10）を入れると、明確な違反の件数がスナップショットと一致する
      await page.fill("#poem-input", poem("q10").lines.join("\n"));
-@@ -69,10 +148,17 @@ try {
+@@ -69,20 +148,32 @@ try {
      if (shots) await page.screenshot({ path: `${shots}/${label}-q10.png`, fullPage: true });
  
      // 入力の誤り（句読点）は位置つきで知らせる
@@ -133,6 +133,7 @@ index ea9bcce..072b237 100644
      const inputErrors = await page.$$eval("#result .errors li", (li) => li.length);
      check(inputErrors === 3, `${label}: 句読点3つを入力の誤りとして知らせる（${inputErrors}件）`);
  
+-    // 横にはみ出さない
 +    // 7字×4句の漢字にならない本文は、マス目に移さずに理由を示す
 +    await page.locator("#tab-grid").click();
 +    const sync = await page.locator(".sync-note").textContent();
@@ -140,21 +141,29 @@ index ea9bcce..072b237 100644
 +    await page.locator("#tab-paste").click();
 +    check((await page.inputValue("#poem-input")) === q03.join("，\n"), `${label}: マス目を編集していなければ、貼り付けた本文はそのまま`);
 +
-     // 横にはみ出さない
++    // 貼り付けモードで横にはみ出さない
      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-     check(overflow <= 0, `${label}: 横にはみ出さない（はみ出し ${overflow}px）`);
-@@ -80,8 +166,9 @@ try {
+-    check(overflow <= 0, `${label}: 横にはみ出さない（はみ出し ${overflow}px）`);
++    check(overflow <= 0, `${label}: 貼り付けモードで横にはみ出さない（はみ出し ${overflow}px）`);
+ 
      check(outside.length === 0, `${label}: ページの外への通信がない${outside.length ? `（${outside.join(", ")}）` : ""}`);
      check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
-     if (shots) {
+-    if (shots) {
 -      await page.fill("#poem-input", poem("q03").lines.join("\n"));
 -      await page.screenshot({ path: `${shots}/${label}-sample.png`, fullPage: true });
-+      await page.locator("#tab-grid").click();
-+      await cell(10).click();
-+      await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
-     }
+-    }
++    // マス目モードでも、選択中のマスと検査結果を出した状態で、横にはみ出さない
++    await page.locator("#tab-grid").click();
++    await page.locator("#grid-sample").click();
++    await cell(10).click();
++    const panelShown = await page.locator("#cell-panel .big-char").isVisible();
++    const resultsShown = await page.locator("#grid-result .findings, #grid-result .none").first().isVisible();
++    const gridOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    check(panelShown && resultsShown && gridOverflow <= 0, `${label}: マス目モード（選択中のマスと検査結果を表示）で横にはみ出さない（はみ出し ${gridOverflow}px）`);
++    if (shots) await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
      await page.close();
    }
+ } finally {
 diff --git a/apps/web/index.html b/apps/web/index.html
 index 64eae68..2870d0f 100644
 --- a/apps/web/index.html
@@ -450,7 +459,7 @@ index 0000000..5018ce2
 +  };
 +}
 diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
-index 39a9dce..d5b1117 100644
+index 39a9dce..baafdd6 100644
 --- a/apps/web/src/main.ts
 +++ b/apps/web/src/main.ts
 @@ -1,23 +1,19 @@
@@ -692,7 +701,7 @@ index 39a9dce..d5b1117 100644
 +      const v = buildView(a, data);
 +      editor.refresh(v, showPattern);
 +      gridResult.replaceChildren(...resultParts(v, showPattern));
-+      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected)));
++      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)));
 +    } else {
 +      output.replaceChildren(resultView(buildView(analyze(input.value, data, options), data), showPattern));
 +    }
@@ -721,19 +730,18 @@ index 39a9dce..d5b1117 100644
  }
  
 diff --git a/apps/web/src/render.ts b/apps/web/src/render.ts
-index 5452ee1..9441c11 100644
+index 5452ee1..29bc229 100644
 --- a/apps/web/src/render.ts
 +++ b/apps/web/src/render.ts
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,6 @@
  // 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
  import type { Severity } from "@kanshi/engine";
 -import type { FindingView, PoemView, ReadingFindingView } from "./view";
-+import type { CharStatus } from "@kanshi/engine";
 +import type { CellDetailView, FindingView, PoemView, ReadingFindingView, ReadingOptionView } from "./view";
  
  type Attrs = Record<string, string>;
  
-@@ -67,6 +68,34 @@ const choiceItem = (f: ReadingFindingView) =>
+@@ -67,6 +67,34 @@ const choiceItem = (f: ReadingFindingView) =>
  
  /** 判定結果（詩格、記号列、指摘の一覧、作者が判断すること） */
  export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
@@ -768,7 +776,7 @@ index 5452ee1..9441c11 100644
    const formLine = h(
      "p",
      { class: "form" },
-@@ -112,26 +141,7 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
+@@ -112,26 +140,7 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
            h(
              "ul",
              {},
@@ -796,7 +804,7 @@ index 5452ee1..9441c11 100644
            ),
          ),
        ),
-@@ -178,5 +188,56 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
+@@ -178,5 +187,48 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
      ),
    );
  
@@ -804,14 +812,6 @@ index 5452ee1..9441c11 100644
 +  return [formLine, legend, ...sections];
 +}
 +
-+const STATUS_TEXT: Record<CharStatus, string> = {
-+  known: "平仄データにある字です。",
-+  undetermined: "異体字の対応で候補の字が複数あり、どの字か一つに決まりません。候補の字の読みをすべて示します。",
-+  unknown: "平仄データにない字です。平仄は判定していません（設定で平・仄のどちらかとして扱えます）。",
-+  kokuji: "国字（日本で作られた字）です。漢詩には使えません（設定で続けることもできます）。",
-+  blank: "未入力のマスです。",
-+  invalid: "漢字ではありません。",
-+};
 +
 +/** 右の列：選択中のマスの字、声調・韻目、定型が求めるもの、指摘、読みごとの結果 */
 +export function cellPanel(d: CellDetailView | null): HTMLElement {
@@ -819,7 +819,7 @@ index 5452ee1..9441c11 100644
 +  const parts: (HTMLElement | null)[] = [
 +    h("p", { class: "where" }, d.where),
 +    h("p", { class: `big-char ${d.char === null ? "blank" : ""}`, lang: "zh-Hant" }, d.char ?? "＿"),
-+    h("p", { class: "status" }, STATUS_TEXT[d.status]),
++    h("p", { class: "status" }, d.statusText),
 +  ];
 +  if (d.readings.length > 0) {
 +    parts.push(
@@ -1187,13 +1187,13 @@ index a36c4da..9ffa90e 100644
  .result {
    display: grid;
 diff --git a/apps/web/src/view.ts b/apps/web/src/view.ts
-index 5c1e7a8..3b94d30 100644
+index 5c1e7a8..ee598e2 100644
 --- a/apps/web/src/view.ts
 +++ b/apps/web/src/view.ts
 @@ -1,5 +1,5 @@
  // エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
 -import type { Analysis, CharStatus, EngineData, Finding, Reading, Severity } from "@kanshi/engine";
-+import type { Analysis, CharStatus, EngineData, Finding, PZ, Reading, Severity } from "@kanshi/engine";
++import type { Analysis, CharStatus, EngineData, Finding, Options, PZ, Reading, Severity } from "@kanshi/engine";
  
  const LINE_NAMES = ["起句", "承句", "転句", "結句"];
  export const lineName = (l: number) => LINE_NAMES[l] ?? `第${l + 1}句`;
@@ -1214,7 +1214,7 @@ index 5c1e7a8..3b94d30 100644
        cell: `${lineName(l)}の${p + 1}字目「${a.chars[l]![p]!.char}」`,
        options: labels.map((label) => {
          const { always, sometimes } = splitBy(rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings));
-@@ -183,3 +186,44 @@ export function buildView(a: Analysis, data: EngineData): PoemView {
+@@ -183,3 +186,69 @@ export function buildView(a: Analysis, data: EngineData): PoemView {
      errors: a.errors.map((e) => e.message),
    };
  }
@@ -1226,6 +1226,8 @@ index 5c1e7a8..3b94d30 100644
 +  /** 入力どおりの字。未入力なら null */
 +  char: string | null;
 +  status: CharStatus;
++  /** 字の状態と、いまの設定での扱いの説明 */
++  statusText: string;
 +  /** 字の読み（声調・韻目）と平仄 */
 +  readings: { label: string; pz: PZ }[];
 +  /** 詩格の候補ごとに、定型がこのマスに求めるもの。詩格が決まらなければ空 */
@@ -1238,7 +1240,29 @@ index 5c1e7a8..3b94d30 100644
 +
 +const PATTERN_TEXT: Record<string, string> = { "○": "平", "●": "仄", "◐": "平仄を問わない", "◎": "平声で押韻" };
 +
-+export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: number): CellDetailView {
++/** 字の状態の説明。データにない字と国字は、設定によって扱いが変わるので、いまの扱いを書く */
++export function statusText(status: CharStatus, options: Options): string {
++  switch (status) {
++    case "known":
++      return "平仄データにある字です。";
++    case "undetermined":
++      return "異体字の対応で候補の字が複数あり、どの字か一つに決まりません。候補の字の読みをすべて示します。";
++    case "unknown":
++      return options.unknownAs !== undefined
++        ? `平仄データにない字です。設定により、${options.unknownAs}として扱って判定しています。`
++        : "平仄データにない字です。平仄は判定していません（設定で平・仄のどちらかとして扱えます）。";
++    case "kokuji":
++      return options.allowKokuji
++        ? "国字（日本で作られた字）です。設定により、違反ではなく要確認として続けています。"
++        : "国字（日本で作られた字）です。漢詩には使えません（設定で続けることもできます）。";
++    case "blank":
++      return "未入力のマスです。";
++    case "invalid":
++      return "漢字ではありません。";
++  }
++}
++
++export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: number, options: Options = {}): CellDetailView {
 +  const l = Math.floor(index / 7);
 +  const p = index % 7;
 +  const info = a.chars[l]?.[p];
@@ -1253,6 +1277,7 @@ index 5c1e7a8..3b94d30 100644
 +    where: `${lineName(l)}の${p + 1}字目`,
 +    char: info === undefined || info.status === "blank" ? null : (info.input ?? info.char),
 +    status: info?.status ?? "blank",
++    statusText: statusText(info?.status ?? "blank", options),
 +    readings: (info?.readings ?? []).map((r) => ({ label: readingLabel(r), pz: r.tone === "平" ? "平" : "仄" })),
 +    required,
 +    findings: a.findings.filter((f) => f.line === l && f.positions.includes(p) && f.severity !== "ok").map(view),
@@ -1385,19 +1410,20 @@ index 0000000..296d093
 +  });
 +});
 diff --git a/apps/web/test/view.test.ts b/apps/web/test/view.test.ts
-index 5e9072e..66e20dd 100644
+index 5e9072e..a6d2718 100644
 --- a/apps/web/test/view.test.ts
 +++ b/apps/web/test/view.test.ts
-@@ -1,7 +1,7 @@
+@@ -1,7 +1,8 @@
  // 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
  import { describe, expect, it } from "vitest";
  import { analyze } from "@kanshi/engine";
 -import { buildView } from "../src/view";
++import type { Options } from "@kanshi/engine";
 +import { buildView, cellDetail } from "../src/view";
  import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
  
  const HN = baseLines("heiki-nyuin");
-@@ -131,3 +131,64 @@ describe("buildView", () => {
+@@ -131,3 +132,76 @@ describe("buildView", () => {
      expect(v.lines.every((l) => l.pattern === null)).toBe(true);
    });
  });
@@ -1446,6 +1472,18 @@ index 5e9072e..66e20dd 100644
 +  it("データにない字・国字は状態を返す", () => {
 +    expect(detail(replaceAt(HN, 2, 0, UNKNOWN), 14).status).toBe("unknown");
 +    expect(detail(replaceAt(HN, 2, 0, KOKUJI), 14).status).toBe("kokuji");
++  });
++
++  it("データにない字・国字の説明は、いまの設定での扱いを書く", () => {
++    const withOptions = (ch: string, options: Options) => {
++      const a = analyze(build(...replaceAt(HN, 2, 0, ch)), fixtureData, options);
++      return cellDetail(a, buildView(a, fixtureData), fixtureData, 14, options).statusText;
++    };
++    expect(withOptions(UNKNOWN, {})).toContain("判定していません");
++    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).toContain("仄として扱って判定しています");
++    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).not.toContain("判定していません");
++    expect(withOptions(KOKUJI, {})).toContain("使えません");
++    expect(withOptions(KOKUJI, { allowKokuji: true })).toContain("要確認として続けています");
 +  });
 +
 +  it("詩格の候補が複数なら、候補ごとに定型が求める平仄を示す", () => {
