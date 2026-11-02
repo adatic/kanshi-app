@@ -1,0 +1,936 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 9432427..609b918 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -16,5 +16,8 @@ jobs:
+         with:
+           node-version: 22
+           cache: npm
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
+       - run: npm ci
+       - run: npm test
+diff --git a/DATA_SOURCES.md b/DATA_SOURCES.md
+new file mode 100644
+index 0000000..2bcd2fa
+--- /dev/null
++++ b/DATA_SOURCES.md
+@@ -0,0 +1,116 @@
++# データの出典
++
++このアプリが使うデータの入手元・ライセンス・加工内容の記録です（CLAUDE.md §4.3）。ここに書かれていないデータは公開しません。
++
++- 元データは `data/raw/` に、版を固定してそのまま保存しています。取得は `scripts/fetch_sources.py`（SHA-256 で検証）で行います。
++- 生成物は `scripts/build_data.py` が `data/raw/` と `data/corrections.json` だけから作ります。同じ入力から同じ出力が出ることを `npm test`（`npm run data:verify`）で毎回確かめています。
++- 取得日はすべて **2026-11-02** です。
++
++## 生成物とライセンス
++
++| ファイル | 中身 | 元データ | ライセンス |
++|---|---|---|---|
++| `data/rhymes.json` | 平水韻の106韻目 | ウィキソース「平水韻」 | CC BY 4.0（元データはパブリックドメイン） |
++| `data/chars.json` | 字ごとの声調・韻目 | ウィキソース「平水韻」＋ `data/corrections.json` | CC BY 4.0（元データはパブリックドメイン） |
++| `data/corrections.json` | 元データの誤りの修正（根拠つき） | このプロジェクトで作成 | CC BY 4.0 |
++| `data/variants.json` | 新字体・簡体字から、データ上の字への対応 | OpenCC の対応表 | **Apache-2.0**（上流に従う） |
++| `data/kokuji.json` | 国字の一覧 | ウィキペディア「和製漢字」 | **CC BY-SA 4.0**（上流に従う） |
++| `data/reports/*` | 生成時のレポート | 上記すべて | 元データのライセンスに従う |
++
++CLAUDE.md §3 の方針（データは CC BY 4.0、不可なら上流に従う）に沿って、上流が許す範囲で CC BY 4.0 とし、上流の条件があるものはそれに従っています。
++
++---
++
++## 1. ウィキソース「平水韻」
++
++| 項目 | 内容 |
++|---|---|
++| 入手元 | https://zh.wikisource.org/wiki/平水韻 |
++| 版 | 版番号 8264804（2026-08-12T08:23:22Z）。https://zh.wikisource.org/w/index.php?oldid=8264804 |
++| 保存先 | `data/raw/wikisource-pingshui-8264804.wiki`（MediaWiki API で取得した wikitext） |
++| ライセンス | パブリックドメイン（ページに `{{PD-old}}` の表示） |
++| 再配布 | 可 |
++
++### 加工内容
++
++- 見出し（例：`上平聲一{{++|東}}`）から106韻目を取り出し、韻目名を CLAUDE.md の例の書き方（`上平一東`・`下平十一尤`・`上声一董`・`去声四寘`・`入声一屋`）にそろえました。声調は 上平・下平 → 平、上聲 → 上、去聲 → 去、入聲 → 入 です。
++- 本文の各字を、その韻目の読みとして登録しました。複数の韻目に載る字は、読みを複数持ちます（見出しの順に並べています）。
++- 同じ韻目に同じ字が2回以上載っている箇所（32か所）は1つにまとめ、`data/reports/source-duplicates.txt` に記録しました。
++- 漢字以外の文字や想定外の行があれば、生成を止めるようにしています（今の版にはありません）。CJK 互換漢字（Unicode の正規化で別の字に置き換わる字）もありません。
++
++### 【詞】【辭】欄について（未解決）
++
++各韻目の本体の字のあとに、`【詞】`（105か所）または `【辭】`（6か所）の印を付けて、別の字が列挙されています。
++
++- ページ内にもトークページにも、この印の意味の説明はありません。
++- 編集履歴を見ると、ページは2006年に簡体字の別の一覧として作られ、**2008-05-31 の版 104841 で、出典の記載も編集コメントもないまま、今の繁体字の一覧に丸ごと差し替えられています**。【詞】【辭】欄はこの時に現れました。その後は2009〜2017年に数バイトずつの小さな編集が12回あり（最後は版 854913「添加漏字:刏譩」）、2026年8月の3回の編集は見出しの書式の変更だけです（版 854913 との差分で確認）。
++- そのため、本体の一覧も【詞】【辭】欄も、底本（どの韻書の、どの版から写したか）がわかりません。
++
++**扱い**：本体と混ぜず、`chars.json` の読みに `"note": "【詞】"`（または `"【辭】"`）の印を付けて残しました。同じ字が同じ韻目の本体と【詞】欄の両方に載る場合は、本体を採りました。【詞】【辭】欄にだけ載る字は887字あり、`data/reports/supplement-only.txt` に一覧を出しています。エンジンでこれらをどう扱うか（本体と同じに扱う／要確認にする／使わない）は、人間が判断します。
++
++### 修正（`data/corrections.json`）
++
++元データの誤りは、元データ自体は書き換えずに `data/corrections.json` に理由と根拠をつけて書き、生成時に当てています。当てた修正は `data/reports/corrections-applied.txt` に出ます。
++
++| 字 | 韻目 | 内容 | 根拠 |
++|---|---|---|---|
++| 先 | 下平一先 | 追加 | 韻目の見出し字なのに本文に載っていない（ほかの105韻目では、見出し字はすべて本文に載っている）。2008年に差し替えられる前の版 96365 では「下平,一先」の本文が「先」で始まる。 |
++
++## 2. OpenCC の対応表
++
++| 項目 | 内容 |
++|---|---|
++| 入手元 | https://github.com/BYVoid/OpenCC |
++| 版 | タグ `ver.1.4.2` |
++| 使ったファイル | `data/dictionary/STCharacters.txt`（簡体字→繁体字）、`data/dictionary/JPShinjitaiCharacters.txt`（日本の新字体→旧字体） |
++| 保存先 | `data/raw/opencc-ver.1.4.2/`（`LICENSE` も同梱） |
++| ライセンス | Apache License 2.0 |
++| 再配布 | 可（ライセンス文の同梱が条件。`data/raw/opencc-ver.1.4.2/LICENSE`） |
++
++### 加工内容
++
++- 1字→1字以上の対応だけを使いました（語単位の対応は使っていません）。
++- 入力字ごとに、候補を「その字自身（平仄データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に集め、平仄データにある候補だけを `data/variants.json` に載せました。**順序に優先の意味はありません。**
++- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補が複数になった字（201字）は `data/reports/ambiguous.txt` に、どの候補も平仄データにない字（1,472字）は `data/reports/unmapped.txt` に出しています。後者のうち、新字体由来の字（並・艶・渓・炉・汚 など19字）を先頭に並べています。平仄データ側が別の異体字で載せているためと考えられますが、まだ対応していません。
++
++## 3. ウィキペディア日本語版「和製漢字」
++
++| 項目 | 内容 |
++|---|---|
++| 入手元 | https://ja.wikipedia.org/wiki/和製漢字 |
++| 版 | 版番号 109822326（2026-06-06T02:49:47Z）。https://ja.wikipedia.org/w/index.php?oldid=109822326 |
++| 保存先 | `data/raw/wikipedia-ja-wasei-kanji-109822326.wiki` |
++| ライセンス | CC BY-SA 4.0 |
++| 再配布 | 可（表示と継承が条件。派生物の `data/kokuji.json` も CC BY-SA 4.0） |
++
++### 加工内容
++
++- 「和製漢字の例」の表の行見出しから、字を1字ずつ取り出しました（28字）。
++- 行見出しに「要出典」「疑問点」の印がある字（萩）、備考に「国字でない可能性がある」とある字（畠・襷）には、`kokuji.json` で `note` を付けました。
++
++### 限界
++
++- **網羅的な一覧ではありません。** 記事には「未検証」「独自研究」「正確性」の注意書きがあります。国字の数は記事自身が「1500〜2600字と言われている」と書いています。
++- 今の28字は、どれも平水韻データには載っていません（`data/reports/kokuji-overlap.txt` は0件）。
++
++---
++
++## 検討したが使わなかったデータ
++
++### PyPI `pingshui_rhyme` 0.20
++
++CLAUDE.md §4.3 で出発点とされていたパッケージです。
++
++| 項目 | 内容 |
++|---|---|
++| 入手元 | https://pypi.org/project/pingshui-rhyme/ （sdist `pingshui_rhyme-0.20.tar.gz`、SHA-256 `2316fa7e324c7fc156b35d2952900d624451fdcd43ef56d0f08fcc05b50ac339`） |
++| ライセンス | MIT（Copyright (c) 2024 rbnyng） |
++| 同梱データ | `pingshui_rhyme/data/organized_ping_ze_rhyme_dict.json`。同梱の `scraper.py` で、上記のウィキソース「平水韻」ページから作られたもの |
++
++使わなかった理由（同梱の JSON を調べてわかったこと）:
++
++- 【詞】【辭】欄の字を、印を外して本体と同じ韻目の字として連結している。どの字が欄の字か、JSON からは区別できない。
++- ページ末尾のライセンス表示（`Public domain`）の英字が、入声十七洽の字として混入している。
++- 元のページの版が記録されていない。
++
++元データは同じウィキソースのページなので、そちらを版を固定して直接取り込み、【詞】【辭】欄を区別して残すことにしました。
+diff --git a/TASKS.md b/TASKS.md
+index 8f59a02..7042306 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,17 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m1-chars — 平仄データの取得・正規化・検査（M1）
++
++ブランチ: `task/m1-chars`
++
++完了条件:
++- [ ] 元データ（ウィキソース「平水韻」版8264804、OpenCC ver.1.4.2 の対応表、ウィキペディア「和製漢字」版109822326）を版を固定して `data/raw/` に保存し、ハッシュで検証して取得するスクリプトがある
++- [ ] 生成スクリプトが `data/raw/` だけから `data/chars.json`・`data/rhymes.json`・`data/variants.json`・`data/kokuji.json` と `data/reports/` を作り、同じ入力から同じ出力を出す（`npm test` で再生成して差分がないことを確かめる）
++- [ ] ウィキソース版の【詞】【辭】欄の字は本体と区別し、`note` で印を付けて残す（扱いは人間が判断する）
++- [ ] 簡体字→繁体字、新字体→旧字体の対応で候補が複数になった字は一つに決めず `data/reports/ambiguous.txt` に、対応先がデータにない字は `data/reports/unmapped.txt` に出す
++- [ ] データ検査（声調の値域、韻目名の表記揺れ、同一字の重複定義など）が `npm test` で走り、エラーがゼロ
++- [ ] `DATA_SOURCES.md` に、データごとの入手元URL・取得日・ライセンス・加工内容・再配布の可否が書かれている
+ 
+ ## 完了
+ 
+diff --git a/data/corrections.json b/data/corrections.json
+new file mode 100644
+index 0000000..a1b17b2
+--- /dev/null
++++ b/data/corrections.json
+@@ -0,0 +1,15 @@
++{
++  "description": "元データ（data/raw/）の誤りを、根拠つきで直す一覧。scripts/build_data.py が生成時に当てる。元データ自体は書き換えない。1件ごとに理由と根拠を書く。",
++  "corrections": [
++    {
++      "action": "add",
++      "char": "先",
++      "rhyme": "下平一先",
++      "reason": "韻目「下平一先」の見出し字だが、元データ（ウィキソース版8264804）の本文に載っていない。見出しと本文が食い違っており、ほかの105韻目では見出し字がすべて本文に載っている。",
++      "evidence": [
++        "ウィキソース版8264804: 見出し「下平聲一{{++|先}}」の本文は「前千阡箋…」で始まり、「先」がない",
++        "ウィキソース版96365（2008年に差し替えられる前の別の一覧）: 「下平,一先」の本文は「先前千阡…」で始まる"
++      ]
++    }
++  ]
++}
+diff --git a/package.json b/package.json
+index bc3c9b0..c1bd893 100644
+--- a/package.json
++++ b/package.json
+@@ -13,7 +13,10 @@
+   },
+   "scripts": {
+     "typecheck": "tsc -p tsconfig.json && tsc -p packages/engine/tsconfig.json",
+-    "test": "npm run typecheck && vitest run"
++    "test": "npm run typecheck && npm run data:verify && vitest run",
++    "data:fetch": "python3 scripts/fetch_sources.py",
++    "data:build": "python3 scripts/build_data.py",
++    "data:verify": "python3 scripts/build_data.py --check"
+   },
+   "devDependencies": {
+     "@types/node": "^26.6.6",
+diff --git a/scripts/.gitkeep b/scripts/.gitkeep
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/scripts/build_data.py b/scripts/build_data.py
+new file mode 100644
+index 0000000..4226546
+--- /dev/null
++++ b/scripts/build_data.py
+@@ -0,0 +1,443 @@
++#!/usr/bin/env python3
++"""data/raw/ の元データから、エンジンが読むデータとレポートを生成する（CLAUDE.md §4.3）。
++
++ネットワークは使わない。同じ入力からは常に同じ出力を出す（§9）。
++
++生成物:
++  data/rhymes.json        平水韻106韻目の一覧（元データの見出し順）
++  data/chars.json         字 → 読み（声調・韻目）の一覧
++  data/variants.json      入力字（新字体・簡体字）→ データ上の字の候補
++  data/kokuji.json        国字の一覧（出典つき）
++  data/reports/*.txt|md   生成時のレポート
++
++使い方:
++  python3 scripts/build_data.py           # 生成して書き出す
++  python3 scripts/build_data.py --check   # 生成結果がコミット済みのファイルと一致するか確かめる（書き出さない）
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import re
++import sys
++import unicodedata
++from collections import OrderedDict
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parent.parent
++RAW = ROOT / "data" / "raw"
++OUT = ROOT / "data"
++REPORTS = OUT / "reports"
++
++WIKISOURCE = RAW / "wikisource-pingshui-8264804.wiki"
++WASEI = RAW / "wikipedia-ja-wasei-kanji-109822326.wiki"
++OPENCC_DIR = RAW / "opencc-ver.1.4.2"
++ST_CHARS = OPENCC_DIR / "STCharacters.txt"
++JP_SHINJITAI = OPENCC_DIR / "JPShinjitaiCharacters.txt"
++CORRECTIONS = OUT / "corrections.json"
++
++# 元データの見出し（上平聲・下平聲・上聲・去聲・入聲）→ 韻目名の接頭辞と声調。
++# 韻目名は CLAUDE.md の例（"上平四支"・"下平十一尤"・"去声四寘"）の書き方にそろえる。
++SECTION_PREFIX = {
++    "上平聲": ("上平", "平"),
++    "下平聲": ("下平", "平"),
++    "上聲": ("上声", "上"),
++    "去聲": ("去声", "去"),
++    "入聲": ("入声", "入"),
++}
++
++# 本体の字のあとに【詞】【辭】の印で別に列挙された字。意味は元データに書かれていない。
++# 本体と混ぜず、Reading.note に印をそのまま残す（扱いは人間が判断する）。
++SUPPLEMENT_MARKERS = ("【詞】", "【辭】")
++
++HEADING_RE = re.compile(r"^(上平聲|下平聲|上聲|去聲|入聲)([一二三四五六七八九十]+)\{\{\+\+\|(.)\}\}$")
++PART_RE = re.compile(r"^==(上平聲部|下平聲部|上聲部|去聲部|入聲部)==$")
++# 本文以外で、あってよい行（ページの枠組み）
++FRAME_RE = re.compile(r"^(\{\{Header\|.*\}\}|\{\{PD-old\}\}|\{\{wikipedia\}\}|\[\[Category:[^\]]+\]\])$")
++
++
++def is_cjk(ch: str) -> bool:
++    o = ord(ch)
++    return (
++        0x3400 <= o <= 0x4DBF
++        or 0x4E00 <= o <= 0x9FFF
++        or 0xF900 <= o <= 0xFAFF
++        or 0x20000 <= o <= 0x323AF
++        or 0x2F800 <= o <= 0x2FA1F
++    )
++
++
++class BuildError(Exception):
++    pass
++
++
++# ---------------------------------------------------------------------------
++# 平水韻（ウィキソース）
++
++
++def parse_wikisource(text: str):
++    """戻り値: (rhymes, entries, problems)
++
++    rhymes:  [{"id": "上平一東", "tone": "平"}...]（見出し順）
++    entries: [(char, rhyme_id, marker or None, line_no)...]（出現順）
++    """
++    rhymes: list[dict] = []
++    entries: list[tuple[str, str, str | None, int]] = []
++    current: str | None = None
++    for line_no, raw in enumerate(text.splitlines(), 1):
++        line = raw.strip()
++        if not line or PART_RE.match(line) or FRAME_RE.match(line):
++            continue
++        m = HEADING_RE.match(line)
++        if m:
++            prefix, tone = SECTION_PREFIX[m.group(1)]
++            current = f"{prefix}{m.group(2)}{m.group(3)}"
++            if any(r["id"] == current for r in rhymes):
++                raise BuildError(f"{line_no}行目: 韻目 {current} の見出しが2回ある")
++            rhymes.append({"id": current, "tone": tone})
++            continue
++        marker = None
++        for mk in SUPPLEMENT_MARKERS:
++            if line.startswith(mk):
++                marker, line = mk, line[len(mk):]
++                break
++        if current is None:
++            raise BuildError(f"{line_no}行目: 韻目の見出しより前に本文がある: {raw!r}")
++        bad = [c for c in line if not is_cjk(c)]
++        if bad:
++            raise BuildError(f"{line_no}行目: 漢字以外の文字を含む {bad!r}: {raw!r}")
++        for ch in line:
++            entries.append((ch, current, marker, line_no))
++    return rhymes, entries
++
++
++def build_chars(rhymes, entries):
++    """字ごとの読みを作る。同じ韻目への重複は1つにまとめ、レポートに出す。"""
++    tone_of = {r["id"]: r["tone"] for r in rhymes}
++    order = {r["id"]: i for i, r in enumerate(rhymes)}
++    # char -> rhyme -> (marker, first_line)
++    seen: dict[str, dict[str, tuple[str | None, int]]] = {}
++    dup_lines: list[str] = []
++    for ch, rhyme, marker, line_no in entries:
++        per = seen.setdefault(ch, {})
++        if rhyme not in per:
++            per[rhyme] = (marker, line_no)
++            continue
++        prev_marker, prev_line = per[rhyme]
++        kind = f"{prev_marker or '本体'}と{marker or '本体'}"
++        dup_lines.append(f"{ch}\t{rhyme}\t{kind}\t{prev_line}行目・{line_no}行目")
++        # 本体に載っていれば本体を優先する（【詞】【辭】の印は付けない）
++        if prev_marker is not None and marker is None:
++            per[rhyme] = (None, prev_line)
++
++    chars: dict[str, list[dict]] = {}
++    for ch in sorted(seen, key=ord):
++        readings = []
++        for rhyme in sorted(seen[ch], key=lambda r: order[r]):
++            marker, _ = seen[ch][rhyme]
++            reading = {"tone": tone_of[rhyme], "rhyme": rhyme}
++            if marker:
++                reading["note"] = marker
++            readings.append(reading)
++        chars[ch] = readings
++    return chars, dup_lines
++
++
++def apply_corrections(chars, rhymes, corrections):
++    """data/corrections.json の修正を当てる。当たらない修正はエラーにする。"""
++    tone_of = {r["id"]: r["tone"] for r in rhymes}
++    order = {r["id"]: i for i, r in enumerate(rhymes)}
++    applied: list[str] = []
++    for c in corrections:
++        ch, rhyme, action = c["char"], c["rhyme"], c["action"]
++        if rhyme not in tone_of:
++            raise BuildError(f"修正: 韻目 {rhyme} は存在しない")
++        if not c.get("reason") or not c.get("evidence"):
++            raise BuildError(f"修正: {ch} {rhyme} に理由（reason）か根拠（evidence）がない")
++        readings = chars.get(ch, [])
++        present = [r for r in readings if r["rhyme"] == rhyme]
++        if action == "add":
++            if present and "note" not in present[0]:
++                raise BuildError(f"修正: {ch} はすでに {rhyme} の本体に載っている（修正が不要）")
++            readings = [r for r in readings if r["rhyme"] != rhyme]
++            readings.append({"tone": tone_of[rhyme], "rhyme": rhyme})
++            readings.sort(key=lambda r: order[r["rhyme"]])
++        else:
++            raise BuildError(f"修正: 未対応の action {action!r}")
++        chars[ch] = readings
++        applied.append(f"{action}\t{ch}\t{rhyme}\t{c['reason']}")
++    return dict(sorted(chars.items(), key=lambda kv: ord(kv[0]))), applied
++
++
++# ---------------------------------------------------------------------------
++# 異体字の対応（OpenCC）
++
++
++def parse_opencc(text: str) -> dict[str, list[str]]:
++    table: dict[str, list[str]] = {}
++    for line_no, raw in enumerate(text.splitlines(), 1):
++        if not raw or raw.startswith("#"):
++            continue
++        key, _, values = raw.partition("\t")
++        if not values:
++            raise BuildError(f"OpenCC {line_no}行目: 形式が想定と違う: {raw!r}")
++        if key in table:
++            raise BuildError(f"OpenCC {line_no}行目: {key} が2回定義されている")
++        table[key] = values.split(" ")
++    return table
++
++
++def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
++    """入力字 → データにある字の候補。
++
++    候補は「その字自身（データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に並べる。
++    順序に優先の意味はない。どれを採るかはエンジンも決めない（§4.3）。
++    """
++    variants: dict[str, list[str]] = {}
++    ambiguous: list[str] = []
++    unmapped: list[str] = []
++    for key in sorted(set(jp) | set(st), key=ord):
++        if len(key) != 1:
++            continue  # 字単位の対応だけを使う
++        candidates: list[str] = []
++        sources: dict[str, list[str]] = {}
++
++        def add(c: str, src: str):
++            if c not in candidates:
++                candidates.append(c)
++            sources.setdefault(c, []).append(src)
++
++        if key in chars:
++            add(key, "自身")
++        for c in jp.get(key, []):
++            add(c, "新字体→旧字体")
++        for c in st.get(key, []):
++            add(c, "簡体字→繁体字")
++
++        known = [c for c in candidates if c in chars]
++        if known == [key]:
++            continue  # 自分自身にしか対応しない字は載せない
++        if not known:
++            others = [c for c in candidates if c != key]
++            kinds = "・".join(dict.fromkeys(src for c in others for src in sources[c]))
++            unmapped.append((0 if key in jp else 1, ord(key), f"{key}\t{kinds}\t候補: {' '.join(others)}"))
++            continue
++        variants[key] = known
++        if len(known) > 1:
++            detail = "／".join(
++                f"{c}（{'・'.join(sources[c])}: {format_readings(chars[c])}）" for c in known
++            )
++            ambiguous.append(f"{key}\t{detail}")
++    # 日本語入力で出会いやすい新字体由来の字を先に並べる
++    return variants, ambiguous, [row for _, _, row in sorted(unmapped)]
++
++
++def format_readings(readings: list[dict]) -> str:
++    return " ".join(r["rhyme"] + (r.get("note") or "") for r in readings)
++
++
++# ---------------------------------------------------------------------------
++# 国字（ウィキペディア「和製漢字」の例の表）
++
++KOKUJI_SECTION = ("== 和製漢字の例 ==", "== 通用範囲 ==")
++TEMPLATE_CHAR_RE = re.compile(r"^\{\{JIS\d+フォント\|(.)\}\}")
++DOUBT_RE = re.compile(r"\{\{(要出典|疑問点)\|")
++
++
++def parse_kokuji(text: str):
++    start = text.index(KOKUJI_SECTION[0])
++    end = text.index(KOKUJI_SECTION[1], start)
++    rows = text[start:end].split("\n|-\n")
++    result: list[dict] = []
++    for row in rows:
++        lines = row.strip().splitlines()
++        head = next((ln for ln in lines if ln.startswith("!") and "!!" not in ln), None)
++        if head is None:
++            continue
++        cell = head[1:]
++        m = TEMPLATE_CHAR_RE.match(cell)
++        ch = m.group(1) if m else cell[:1]
++        if not is_cjk(ch):
++            raise BuildError(f"国字の表: 行見出しから字を取り出せない: {head!r}")
++        notes = []
++        if DOUBT_RE.search(cell):
++            notes.append("出典の行見出しに「要出典」「疑問点」の印がある")
++        if "国字でない可能性" in row:
++            notes.append("出典の備考に「国字でない可能性がある」とある")
++        entry = {"char": ch}
++        if notes:
++            entry["note"] = "。".join(notes)
++        if any(e["char"] == ch for e in result):
++            raise BuildError(f"国字の表: {ch} が2回ある")
++        result.append(entry)
++    return result
++
++
++# ---------------------------------------------------------------------------
++# 出力
++
++
++def dump_chars(chars) -> str:
++    # 1字1行。重複定義をテキストのまま検査できるようにする（scripts/check-data.test.ts）。
++    lines = [
++        f"  {json.dumps(ch, ensure_ascii=False)}: {json.dumps(rs, ensure_ascii=False, separators=(',', ':'))}"
++        for ch, rs in chars.items()
++    ]
++    return "{\n" + ",\n".join(lines) + "\n}\n"
++
++
++def dump_json(obj) -> str:
++    return json.dumps(obj, ensure_ascii=False, indent=2) + "\n"
++
++
++def report(title: str, explanation: list[str], rows: list[str]) -> str:
++    head = [f"# {title}", *[f"# {e}" for e in explanation], f"# 件数: {len(rows)}", ""]
++    return "\n".join(head + rows) + "\n"
++
++
++def build() -> dict[Path, str]:
++    for p in (WIKISOURCE, WASEI, ST_CHARS, JP_SHINJITAI):
++        if not p.exists():
++            raise BuildError(f"{p.relative_to(ROOT)} がない。先に scripts/fetch_sources.py を実行する")
++
++    ws_text = WIKISOURCE.read_text(encoding="utf-8")
++    if unicodedata.normalize("NFC", ws_text) != ws_text:
++        raise BuildError("平水韻の元データに NFC 正規化で変わる字がある（互換漢字など）。扱いを決めてから進める")
++    rhymes, entries = parse_wikisource(ws_text)
++    chars, dup_lines = build_chars(rhymes, entries)
++    corrections = json.loads(CORRECTIONS.read_text(encoding="utf-8"))["corrections"]
++    chars, applied = apply_corrections(chars, rhymes, corrections)
++
++    jp = parse_opencc(JP_SHINJITAI.read_text(encoding="utf-8"))
++    st = parse_opencc(ST_CHARS.read_text(encoding="utf-8"))
++    variants, ambiguous, unmapped = build_variants(chars, jp, st)
++
++    kokuji = parse_kokuji(WASEI.read_text(encoding="utf-8"))
++    kokuji_overlap = [
++        f"{k['char']}\t{format_readings(chars[k['char']])}" for k in kokuji if k["char"] in chars
++    ]
++
++    supplement_only = [ch for ch, rs in chars.items() if all("note" in r for r in rs)]
++    supplement_extra = [
++        ch for ch, rs in chars.items() if any("note" in r for r in rs) and not all("note" in r for r in rs)
++    ]
++    multi = [ch for ch, rs in chars.items() if len(rs) > 1]
++    both_tones = [ch for ch, rs in chars.items() if len({r["tone"] == "平" for r in rs}) > 1]
++
++    summary = "\n".join(
++        [
++            "# データ生成の概要",
++            "",
++            "`scripts/build_data.py` が生成する。手で編集しない。",
++            "",
++            "| 項目 | 件数 |",
++            "|---|---|",
++            f"| 韻目 | {len(rhymes)} |",
++            f"| 収録字（重複を除く） | {len(chars)} |",
++            f"| 読み（字×韻目） | {sum(len(rs) for rs in chars.values())} |",
++            f"| 複数の韻目に載る字 | {len(multi)} |",
++            f"| 平と仄の両方に載る字（両韻字） | {len(both_tones)} |",
++            f"| 【詞】【辭】欄にだけ載る字 | {len(supplement_only)} |",
++            f"| 本体にも載り、別の韻目の【詞】【辭】欄にも載る字 | {len(supplement_extra)} |",
++            f"| 元データ内の重複（同じ字・同じ韻目） | {len(dup_lines)} |",
++            f"| 当てた修正（corrections.json） | {len(applied)} |",
++            f"| 異体字の対応（variants.json の見出し字） | {len(variants)} |",
++            f"| 対応の候補が複数になる字（ambiguous.txt） | {len(ambiguous)} |",
++            f"| 対応先がデータにない字（unmapped.txt） | {len(unmapped)} |",
++            f"| 国字（kokuji.json） | {len(kokuji)} |",
++            f"| 国字の一覧にあり、平水韻にも載る字 | {len(kokuji_overlap)} |",
++            "",
++        ]
++    )
++
++    kokuji_doc = {
++        "source": {
++            "title": "ウィキペディア日本語版「和製漢字」の「和製漢字の例」の表",
++            "url": "https://ja.wikipedia.org/w/index.php?oldid=109822326",
++            "revision": 109822326,
++            "license": "CC BY-SA 4.0",
++            "caveat": "網羅的な一覧ではない。記事には「未検証」「独自研究」「正確性」の注意書きがある。",
++        },
++        "chars": kokuji,
++    }
++
++    return {
++        OUT / "rhymes.json": dump_json(rhymes),
++        OUT / "chars.json": dump_chars(chars),
++        OUT / "variants.json": dump_json(variants),
++        OUT / "kokuji.json": dump_json(kokuji_doc),
++        REPORTS / "summary.md": summary,
++        REPORTS / "unmapped.txt": report(
++            "対応できなかった字",
++            [
++                "新字体→旧字体・簡体字→繁体字の対応はあるが、どの候補も平仄データ（chars.json）にない字。",
++                "新字体→旧字体の対応がある字を先に、簡体字→繁体字だけの字を後に並べる。",
++                "書式: 入力字<TAB>対応の種類<TAB>候補",
++            ],
++            unmapped,
++        ),
++        REPORTS / "ambiguous.txt": report(
++            "対応の候補が複数になる字",
++            [
++                "一つに決めずに、候補をすべて variants.json に載せた字。",
++                "書式: 入力字<TAB>候補（対応の種類: その字の韻目）／…",
++            ],
++            ambiguous,
++        ),
++        REPORTS / "source-duplicates.txt": report(
++            "元データ内の重複",
++            ["同じ韻目に同じ字が2回以上載っている箇所。chars.json では1つにまとめた（本体と【詞】【辭】が重なる場合は本体を採った）。"],
++            dup_lines,
++        ),
++        REPORTS / "corrections-applied.txt": report(
++            "当てた修正",
++            ["data/corrections.json から当てた修正。根拠は corrections.json を見る。"],
++            applied,
++        ),
++        REPORTS / "supplement-only.txt": report(
++            "【詞】【辭】欄にだけ載る字",
++            ["元データの本体には載らず、【詞】【辭】欄にだけ載る字。意味は元データに書かれていない。"],
++            [f"{ch}\t{format_readings(chars[ch])}" for ch in supplement_only],
++        ),
++        REPORTS / "kokuji-overlap.txt": report(
++            "国字の一覧にあり、平水韻にも載る字",
++            ["kokuji.json と chars.json の両方にある字。どちらを採るかは人間が判断する。"],
++            kokuji_overlap,
++        ),
++    }
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    parser.add_argument("--check", action="store_true", help="書き出さずに、コミット済みのファイルと一致するか確かめる")
++    args = parser.parse_args()
++    try:
++        outputs = build()
++    except BuildError as e:
++        print(f"エラー: {e}", file=sys.stderr)
++        return 1
++
++    if args.check:
++        stale = [
++            p.relative_to(ROOT)
++            for p, content in outputs.items()
++            if not p.exists() or p.read_text(encoding="utf-8") != content
++        ]
++        if stale:
++            print("生成結果がコミット済みのファイルと一致しない（python3 scripts/build_data.py で再生成する）:", file=sys.stderr)
++            for p in stale:
++                print(f"  {p}", file=sys.stderr)
++            return 1
++        print(f"データ生成の再現を確認した（{len(outputs)}ファイル）")
++        return 0
++
++    for p, content in outputs.items():
++        p.parent.mkdir(parents=True, exist_ok=True)
++        p.write_text(content, encoding="utf-8")
++        print(f"書き出し {p.relative_to(ROOT)}")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/scripts/check-data.test.ts b/scripts/check-data.test.ts
+new file mode 100644
+index 0000000..28b0071
+--- /dev/null
++++ b/scripts/check-data.test.ts
+@@ -0,0 +1,137 @@
++// データ検査（CLAUDE.md §4.3）。`npm test` で走る。
++// 生成物（data/*.json）が、エンジンが前提にしてよい形になっているかを確かめる。
++// 平仄・韻目の正誤そのものは判定しない（根拠は元データとゴールデンテストに置く）。
++import { readFileSync } from "node:fs";
++import { describe, expect, it } from "vitest";
++
++type Tone = "平" | "上" | "去" | "入";
++type Reading = { tone: Tone; rhyme: string; note?: string };
++type Rhyme = { id: string; tone: Tone };
++
++const read = (path: string) => readFileSync(new URL(`../data/${path}`, import.meta.url), "utf-8");
++
++const rhymes: Rhyme[] = JSON.parse(read("rhymes.json"));
++const charsText = read("chars.json");
++const chars: Record<string, Reading[]> = JSON.parse(charsText);
++const variants: Record<string, string[]> = JSON.parse(read("variants.json"));
++const kokuji: {
++  source: { url: string; license: string };
++  chars: { char: string; note?: string }[];
++} = JSON.parse(read("kokuji.json"));
++const corrections: {
++  corrections: { action: string; char: string; rhyme: string; reason: string; evidence: string[] }[];
++} = JSON.parse(read("corrections.json"));
++
++const TONES: readonly Tone[] = ["平", "上", "去", "入"];
++const PREFIX_TONE: Record<string, Tone> = { 上平: "平", 下平: "平", 上声: "上", 去声: "去", 入声: "入" };
++const RHYME_ID = /^(上平|下平|上声|去声|入声)([一二三四五六七八九十]+)(\p{Script=Han})$/u;
++const NOTES = new Set(["【詞】", "【辭】"]);
++const rhymeById = new Map(rhymes.map((r) => [r.id, r]));
++
++const isSingleHan = (s: string) => [...s].length === 1 && /^\p{Script=Han}$/u.test(s);
++
++describe("rhymes.json（韻目）", () => {
++  it("平水韻の106韻目がそろい、重複がない", () => {
++    expect(rhymes).toHaveLength(106);
++    expect(rhymeById.size).toBe(106);
++  });
++
++  it("韻目名の書き方が統一され、接頭辞と声調が合っている", () => {
++    for (const r of rhymes) {
++      const m = RHYME_ID.exec(r.id);
++      expect(m, `韻目名の書き方が違う: ${r.id}`).not.toBeNull();
++      expect(r.tone, r.id).toBe(PREFIX_TONE[m![1]!]);
++    }
++  });
++
++  it("韻目の見出し字は、その韻目の本体に載っている", () => {
++    for (const r of rhymes) {
++      const head = [...r.id].at(-1)!;
++      const reading = chars[head]?.find((x) => x.rhyme === r.id);
++      expect(reading, `${r.id} の見出し字「${head}」が載っていない`).toBeDefined();
++      expect(reading!.note, `${r.id} の見出し字「${head}」が【詞】【辭】欄にしかない`).toBeUndefined();
++    }
++  });
++});
++
++describe("chars.json（平仄データ）", () => {
++  it("同じ字が2回定義されていない（JSON として読む前のテキストで確かめる）", () => {
++    const keys = [...charsText.matchAll(/^\s*"([^"]+)":/gmu)].map((m) => m[1]!);
++    expect(keys.length).toBe(Object.keys(chars).length);
++    expect(new Set(keys).size).toBe(keys.length);
++  });
++
++  it("見出しはすべて漢字1字", () => {
++    const bad = Object.keys(chars).filter((c) => !isSingleHan(c));
++    expect(bad).toEqual([]);
++  });
++
++  it("読みの声調は 平・上・去・入 のいずれかで、韻目は rhymes.json にあり、声調と韻目が合っている", () => {
++    for (const [c, readings] of Object.entries(chars)) {
++      expect(readings.length, c).toBeGreaterThan(0);
++      for (const r of readings) {
++        expect(TONES, `${c} の声調`).toContain(r.tone);
++        const rhyme = rhymeById.get(r.rhyme);
++        expect(rhyme, `${c} の韻目 ${r.rhyme} が rhymes.json にない`).toBeDefined();
++        expect(r.tone, `${c} ${r.rhyme}`).toBe(rhyme!.tone);
++        if (r.note !== undefined) expect(NOTES, `${c} の note`).toContain(r.note);
++        expect(Object.keys(r).filter((k) => !["tone", "rhyme", "note"].includes(k)), c).toEqual([]);
++      }
++    }
++  });
++
++  it("1字の中で同じ韻目の読みが重複していない", () => {
++    for (const [c, readings] of Object.entries(chars)) {
++      const ids = readings.map((r) => r.rhyme);
++      expect(new Set(ids).size, c).toBe(ids.length);
++    }
++  });
++
++  it("どの韻目にも本体の字が1字以上ある", () => {
++    const withBody = new Set(
++      Object.values(chars).flatMap((rs) => rs.filter((r) => r.note === undefined).map((r) => r.rhyme)),
++    );
++    expect(rhymes.filter((r) => !withBody.has(r.id)).map((r) => r.id)).toEqual([]);
++  });
++});
++
++describe("corrections.json（元データの修正）", () => {
++  it("修正には理由と根拠があり、生成結果に反映されている", () => {
++    for (const c of corrections.corrections) {
++      expect(c.reason.length, `${c.char} ${c.rhyme}`).toBeGreaterThan(0);
++      expect(c.evidence.length, `${c.char} ${c.rhyme}`).toBeGreaterThan(0);
++      expect(c.action).toBe("add");
++      const reading = chars[c.char]?.find((r) => r.rhyme === c.rhyme);
++      expect(reading, `${c.char} ${c.rhyme}`).toEqual({ tone: rhymeById.get(c.rhyme)!.tone, rhyme: c.rhyme });
++    }
++  });
++});
++
++describe("variants.json（新字体・簡体字の対応）", () => {
++  it("見出しは漢字1字で、候補はすべて平仄データにあり、重複がない", () => {
++    for (const [k, cands] of Object.entries(variants)) {
++      expect(isSingleHan(k), k).toBe(true);
++      expect(cands.length, k).toBeGreaterThan(0);
++      expect(new Set(cands).size, k).toBe(cands.length);
++      for (const c of cands) expect(chars[c], `${k} → ${c}`).toBeDefined();
++    }
++  });
++
++  it("自分自身にしか対応しない見出しは載せていない", () => {
++    const selfOnly = Object.entries(variants).filter(([k, cands]) => cands.length === 1 && cands[0] === k);
++    expect(selfOnly).toEqual([]);
++  });
++});
++
++describe("kokuji.json（国字）", () => {
++  it("出典とライセンスが書かれている", () => {
++    expect(kokuji.source.url).toMatch(/^https:\/\//);
++    expect(kokuji.source.license.length).toBeGreaterThan(0);
++  });
++
++  it("漢字1字ずつで、重複がない", () => {
++    const list = kokuji.chars.map((k) => k.char);
++    expect(list.filter((c) => !isSingleHan(c))).toEqual([]);
++    expect(new Set(list).size).toBe(list.length);
++  });
++});
+diff --git a/scripts/fetch_sources.py b/scripts/fetch_sources.py
+new file mode 100644
+index 0000000..3ace318
+--- /dev/null
++++ b/scripts/fetch_sources.py
+@@ -0,0 +1,140 @@
++#!/usr/bin/env python3
++"""元データを版を固定して取得し、data/raw/ に保存する（CLAUDE.md §4.3）。
++
++ネットワークを使うのはこのスクリプトだけ。生成（build_data.py）は data/raw/ だけを読む。
++取得した中身は SHA-256 で検証し、一致しなければ保存せずに失敗する。
++上流が版を消した・内容が変わった場合は、DATA_SOURCES.md を見直したうえでハッシュを更新すること。
++
++使い方:
++  python3 scripts/fetch_sources.py           # 欠けているファイルだけ取得
++  python3 scripts/fetch_sources.py --force   # すべて取得し直して検証
++"""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import sys
++import time
++import urllib.parse
++import urllib.request
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parent.parent
++RAW = ROOT / "data" / "raw"
++USER_AGENT = "kanshi-app/0.1 (https://github.com/adatic/kanshi-app; data fetch)"
++
++OPENCC_TAG = "ver.1.4.2"
++OPENCC_BASE = f"https://raw.githubusercontent.com/BYVoid/OpenCC/{OPENCC_TAG}"
++
++
++def mediawiki_revision(api: str, revid: int) -> str:
++    query = urllib.parse.urlencode(
++        {
++            "action": "query",
++            "prop": "revisions",
++            "revids": str(revid),
++            "rvprop": "ids|content",
++            "rvslots": "main",
++            "format": "json",
++            "formatversion": "2",
++        }
++    )
++    return f"{api}?{query}"
++
++
++# path: data/raw/ からの相対パス
++# kind: "mediawiki" は API の JSON から本文（wikitext）を取り出して保存する
++SOURCES = [
++    {
++        "path": "wikisource-pingshui-8264804.wiki",
++        "kind": "mediawiki",
++        "url": mediawiki_revision("https://zh.wikisource.org/w/api.php", 8264804),
++        "sha256": "c0003fa238f6cb2c767f7747fae33eecde8c06da3eb661ab9d48bbff655857d9",
++    },
++    {
++        "path": "wikipedia-ja-wasei-kanji-109822326.wiki",
++        "kind": "mediawiki",
++        "url": mediawiki_revision("https://ja.wikipedia.org/w/api.php", 109822326),
++        "sha256": "c8701426f6a5bd74b96337ef037851a6d613a16a5c47812cd1b77fc8950cfe1c",
++    },
++    {
++        "path": f"opencc-{OPENCC_TAG}/STCharacters.txt",
++        "kind": "file",
++        "url": f"{OPENCC_BASE}/data/dictionary/STCharacters.txt",
++        "sha256": "a0ca1601c70648cf48b33c3c6210ccbecc5c7eead4b4c3daf76587ba2c03582b",
++    },
++    {
++        "path": f"opencc-{OPENCC_TAG}/JPShinjitaiCharacters.txt",
++        "kind": "file",
++        "url": f"{OPENCC_BASE}/data/dictionary/JPShinjitaiCharacters.txt",
++        "sha256": "12cec7250b873ef52b36d8f92218d4f92c0aaf5d8cd7c58fe42d9785bdcdc43a",
++    },
++    {
++        "path": f"opencc-{OPENCC_TAG}/LICENSE",
++        "kind": "file",
++        "url": f"{OPENCC_BASE}/LICENSE",
++        "sha256": "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308",
++    },
++]
++
++
++def http_get(url: str) -> bytes:
++    """GET する。429（混雑）なら Retry-After だけ待って最大5回まで取り直す。"""
++    for attempt in range(5):
++        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
++        try:
++            with urllib.request.urlopen(req, timeout=60) as res:
++                return res.read()
++        except urllib.error.HTTPError as e:
++            if e.code != 429 or attempt == 4:
++                raise
++            wait = int(e.headers.get("Retry-After", "10"))
++            print(f"  429 Too Many Requests: {wait}秒待って再試行します", file=sys.stderr)
++            time.sleep(wait)
++    raise AssertionError("unreachable")
++
++
++def extract_mediawiki_content(body: bytes) -> bytes:
++    data = json.loads(body)
++    page = data["query"]["pages"][0]
++    content = page["revisions"][0]["slots"]["main"]["content"]
++    return content.encode("utf-8")
++
++
++def fetch(source: dict, force: bool) -> bool:
++    dest = RAW / source["path"]
++    if dest.exists() and not force:
++        ok = hashlib.sha256(dest.read_bytes()).hexdigest() == source["sha256"]
++        print(f"{'ok  ' if ok else 'NG  '} {source['path']}（既存ファイルを検証）")
++        return ok
++    print(f"取得 {source['path']}")
++    body = http_get(source["url"])
++    if source["kind"] == "mediawiki":
++        body = extract_mediawiki_content(body)
++    digest = hashlib.sha256(body).hexdigest()
++    if digest != source["sha256"]:
++        print(
++            f"NG   {source['path']}: SHA-256 が一致しません\n"
++            f"     期待値 {source['sha256']}\n"
++            f"     実際   {digest}",
++            file=sys.stderr,
++        )
++        return False
++    dest.parent.mkdir(parents=True, exist_ok=True)
++    dest.write_bytes(body)
++    print(f"ok   {source['path']}")
++    return True
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    parser.add_argument("--force", action="store_true", help="既存ファイルがあっても取得し直す")
++    args = parser.parse_args()
++    results = [fetch(s, args.force) for s in SOURCES]
++    return 0 if all(results) else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
