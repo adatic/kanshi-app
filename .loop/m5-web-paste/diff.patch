@@ -350,13 +350,13 @@ index 0000000..39a9dce
 +void start();
 diff --git a/apps/web/src/render.ts b/apps/web/src/render.ts
 new file mode 100644
-index 0000000..7f72c6f
+index 0000000..7356fcd
 --- /dev/null
 +++ b/apps/web/src/render.ts
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,157 @@
 +// 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
 +import type { Severity } from "@kanshi/engine";
-+import type { FindingView, PoemView } from "./view";
++import type { FindingView, PoemView, ReadingFindingView } from "./view";
 +
 +type Attrs = Record<string, string>;
 +
@@ -464,27 +464,28 @@ index 0000000..7f72c6f
 +          h(
 +            "ul",
 +            {},
-+            ...c.options.map((o) =>
-+              h(
++            ...c.options.map((o) => {
++              const item = (f: ReadingFindingView) =>
++                h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`);
++              const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
++              return h(
 +                "li",
 +                {},
 +                h("span", { class: "label" }, o.label),
-+                o.always.length === 0 && o.sometimes.length === 0
-+                  ? h("span", { class: "result ok" }, "この読みなら違反なし")
++                nothingAdded
++                  ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
 +                  : null,
-+                o.always.length > 0
-+                  ? h("ul", { class: "always" }, ...o.always.map((m) => h("li", {}, h("span", { class: "mark", "aria-hidden": "true" }, "✕"), m)))
-+                  : null,
++                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(item)) : null,
 +                o.sometimes.length > 0
 +                  ? h(
 +                      "details",
 +                      { class: "sometimes" },
-+                      h("summary", {}, `ほかの字の読みによっては出る違反（${o.sometimes.length}件）`),
-+                      h("ul", {}, ...o.sometimes.map((m) => h("li", {}, m))),
++                      h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
++                      h("ul", {}, ...o.sometimes.map(item)),
 +                    )
 +                  : null,
-+              ),
-+            ),
++              );
++            }),
 +          ),
 +        ),
 +      ),
@@ -512,10 +513,10 @@ index 0000000..7f72c6f
 +}
 diff --git a/apps/web/src/style.css b/apps/web/src/style.css
 new file mode 100644
-index 0000000..beeaf43
+index 0000000..a36c4da
 --- /dev/null
 +++ b/apps/web/src/style.css
-@@ -0,0 +1,418 @@
+@@ -0,0 +1,428 @@
 +/* 七言絶句の作業台：静かな紙面。墨・藍のアクセント。違反は朱、要確認は黄土、変格は緑青。色だけに頼らず記号を添える。
 +   外部フォントは使わない（初回の静的ファイルの取得以外は通信しない。CLAUDE.md §6.3） */
 +:root {
@@ -905,10 +906,19 @@ index 0000000..beeaf43
 +  padding: 0;
 +  font-size: 0.85rem;
 +}
-+.choice .always .mark {
-+  color: var(--shu);
++.choice .mark {
 +  font-weight: 700;
 +  margin-right: 6px;
++}
++.choice .mark.sev-violation {
++  color: var(--shu);
++}
++.choice .mark.sev-check {
++  color: var(--odo);
++}
++.choice .result {
++  font-size: 0.85rem;
++  color: var(--muted);
 +}
 +.choice .sometimes {
 +  font-size: 0.85rem;
@@ -919,8 +929,9 @@ index 0000000..beeaf43
 +  cursor: pointer;
 +}
 +.choice .sometimes ul {
++  list-style: none;
 +  margin: 2px 0 0;
-+  padding-left: 1.2em;
++  padding-left: 1em;
 +}
 +.errors {
 +  border-color: var(--shu) !important;
@@ -936,10 +947,10 @@ index 0000000..beeaf43
 +}
 diff --git a/apps/web/src/view.ts b/apps/web/src/view.ts
 new file mode 100644
-index 0000000..fea88b1
+index 0000000..889cf77
 --- /dev/null
 +++ b/apps/web/src/view.ts
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,151 @@
 +// エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
 +import type { Analysis, CharStatus, EngineData, Finding, Reading, Severity } from "@kanshi/engine";
 +
@@ -973,13 +984,18 @@ index 0000000..fea88b1
 +  message: string;
 +};
 +
++/** 読みによって出る指摘（違反と要確認） */
++export type ReadingFindingView = { severity: "violation" | "check"; ruleName: string; message: string };
++
 +export type ReadingOptionView = {
 +  /** 「平・上平二冬」「去・去声四寘【詞】」「平・上平一東（豔として）」 */
 +  label: string;
-+  /** この読みを選ぶと、ほかの字の読みにかかわらず出る違反 */
-+  always: string[];
-+  /** この読みを選ぶと、ほかの字の読みによっては出る違反 */
-+  sometimes: string[];
++  /** この読みを選ぶと、ほかの字の読みにかかわらず出る指摘（どの読みでも出る指摘は除く） */
++  always: ReadingFindingView[];
++  /** この読みを選ぶと、ほかの字の読みによっては出る指摘（どの読みでも出る指摘は除く） */
++  sometimes: ReadingFindingView[];
++  /** この読みなら、どの読みでも出る違反も含めて、違反が一つもない */
++  clean: boolean;
 +};
 +
 +export type ReadingChoiceView = {
@@ -1016,15 +1032,27 @@ index 0000000..fea88b1
 +  message: f.message,
 +});
 +
-+/** 読みが複数ある字ごとに、読みを選んだ解釈に出る違反を「必ず出る」「組み合わせによって出る」に分ける */
-+function readingChoices(a: Analysis): ReadingChoiceView[] {
++/**
++ * 読みが複数ある字ごとに、読みを選んだ解釈に出る指摘（違反と要確認）を「必ず出る」「組み合わせによって出る」に分ける。
++ * どの読みでも出る指摘（全体の一覧にあるもの）は除く。
++ */
++function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
 +  if (a.interpretations.length < 2) return [];
-+  const common = new Set(a.findings.map((f) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`));
++  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
++  const common = new Set(a.findings.map(key));
++  const hasCommonViolation = a.findings.some((f) => f.severity === "violation");
 +  const rows = a.interpretations.map((i) => ({
 +    readings: i.readings,
-+    violations: i.findings
-+      .filter((f) => f.severity === "violation" && !common.has(`${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`))
-+      .map((f) => f.message),
++    findings: [
++      ...new Map(
++        i.findings
++          .filter((f) => (f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
++          .map((f): [string, ReadingFindingView] => [
++            key(f),
++            { severity: f.severity as "violation" | "check", ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message },
++          ]),
++      ).entries(),
++    ],
 +  }));
 +  const positions = [...new Set(a.interpretations.flatMap((i) => Object.keys(i.readings).map(Number)))].sort((x, y) => x - y);
 +  return positions.map((n) => {
@@ -1034,10 +1062,13 @@ index 0000000..fea88b1
 +    return {
 +      cell: `${lineName(l)}の${p + 1}字目「${a.chars[l]![p]!.char}」`,
 +      options: labels.map((label) => {
-+        const sets = rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => [...new Set(r.violations)]);
-+        const always = sets.length === 0 ? [] : sets[0]!.filter((m) => sets.every((s) => s.includes(m)));
-+        const sometimes = [...new Set(sets.flat())].filter((m) => !always.includes(m));
-+        return { label, always, sometimes };
++        const sets = rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings);
++        const alwaysKeys = sets.length === 0 ? [] : sets[0]!.map(([k]) => k).filter((k) => sets.every((s) => s.some(([x]) => x === k)));
++        const all = new Map(sets.flat());
++        const always = alwaysKeys.map((k) => all.get(k)!);
++        const sometimes = [...all].filter(([k]) => !alwaysKeys.includes(k)).map(([, f]) => f);
++        const clean = !hasCommonViolation && always.every((f) => f.severity !== "violation") && sometimes.every((f) => f.severity !== "violation");
++        return { label, always, sometimes, clean };
 +      }),
 +    };
 +  });
@@ -1066,22 +1097,22 @@ index 0000000..fea88b1
 +    violations: by("violation"),
 +    variants: by("variant"),
 +    judgements: by("check"),
-+    readingChoices: readingChoices(a),
++    readingChoices: readingChoices(a, data),
 +    independent: a.independent,
 +    errors: a.errors.map((e) => e.message),
 +  };
 +}
 diff --git a/apps/web/test/view.test.ts b/apps/web/test/view.test.ts
 new file mode 100644
-index 0000000..962ea15
+index 0000000..5b910f9
 --- /dev/null
 +++ b/apps/web/test/view.test.ts
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,97 @@
 +// 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
 +import { analyze } from "@kanshi/engine";
 +import { buildView } from "../src/view";
-+import { KOKUJI, RYO, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
++import { KOKUJI, RHY2, RYO, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
 +
 +const HN = baseLines("heiki-nyuin");
 +// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
@@ -1137,9 +1168,27 @@ index 0000000..962ea15
 +    expect(v.readingChoices).toHaveLength(1);
 +    const [choice] = v.readingChoices;
 +    expect(choice!.cell).toBe(`起句の4字目「${RYO[0]}」`);
-+    const byLabel = Object.fromEntries(choice!.options.map((o) => [o.label, o.always.length]));
-+    expect(byLabel).toEqual({ "平・上平二冬": 3, "去・去声二宋": 0 });
++    const byLabel = Object.fromEntries(choice!.options.map((o) => [o.label, o.always.map((f) => f.severity)]));
++    expect(byLabel).toEqual({ "平・上平二冬": ["violation", "violation", "violation"], "去・去声二宋": [] });
++    expect(choice!.options.map((o) => o.clean)).toEqual([false, true]);
 +    expect(v.violations).toEqual([]); // 読みによる違反は、確定の違反には入れない
++  });
++
++  it("どの読みでも出る違反があれば、読みで加わる違反がなくても clean にしない", () => {
++    // 両韻字に加えて、別の位置に国字（どの読みでも違反）
++    const v = view(replaceAt(replaceAt(HN, 0, 3, RYO[0]!), 2, 0, KOKUJI));
++    expect(v.violations.map((f) => f.rule)).toEqual(["koku-ji"]);
++    const zi = v.readingChoices[0]!.options.find((o) => o.label === "去・去声二宋")!;
++    expect([zi.always, zi.sometimes, zi.clean]).toEqual([[], [], false]);
++  });
++
++  it("一部の読みでだけ出る要確認も、読みごとの結果に出す", () => {
++    // 起句末を、押韻で韻目 A と B の読みを持つ字にする（B なら孤雁入群格の可能性）
++    const v = view(replaceAt(HN, 0, 6, RHY2));
++    const options = v.readingChoices[0]!.options;
++    const kogan = options.flatMap((o) => o.always).filter((f) => f.ruleName === "孤雁入群格の可能性");
++    expect(kogan).toHaveLength(1);
++    expect(kogan[0]!.severity).toBe("check");
 +  });
 +
 +  it("入力エラーを文で返す", () => {
