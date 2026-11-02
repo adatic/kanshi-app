@@ -13,7 +13,7 @@
 | `data/rhymes.json` | 平水韻の106韻目 | ウィキソース「平水韻」 | CC BY 4.0（元データはパブリックドメイン） |
 | `data/chars.json` | 字ごとの声調・韻目 | ウィキソース「平水韻」＋ `data/corrections.json` | CC BY 4.0（元データはパブリックドメイン） |
 | `data/corrections.json` | 元データの誤りの修正（根拠つき） | このプロジェクトで作成 | CC BY 4.0 |
-| `data/variants.json` | 新字体・簡体字から、データ上の字への対応 | OpenCC の対応表 | **Apache-2.0**（上流に従う） |
+| `data/variants.json` | 新字体・簡体字から、データ上の字への対応 | OpenCC の対応表＋Unicode Unihan | **Apache-2.0**（OpenCC に従う。Unihan 由来の部分は Unicode License V3 の表示も必要） |
 | `data/kokuji.json` | 国字の一覧 | ウィキペディア「和製漢字」 | **CC BY-SA 4.0**（上流に従う） |
 | `data/reports/*` | 生成時のレポート | 上記すべて | 元データのライセンスに従う |
 
@@ -71,9 +71,33 @@ CLAUDE.md §3 の方針（データは CC BY 4.0、不可なら上流に従う�
 
 - 1字→1字以上の対応だけを使いました（語単位の対応は使っていません）。
 - 入力字ごとに、候補を「その字自身（平仄データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に集め、平仄データにある候補だけを `data/variants.json` に載せました。**順序に優先の意味はありません。**
-- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（395字）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（175字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データにない字（1,472字）は `data/reports/unmapped.txt` に出しています。後者のうち、新字体由来の字（並・艶・渓・炉・汚 など19字）を先頭に並べています。平仄データ側が別の異体字で載せているためと考えられますが、まだ対応していません。
+- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（485字。Unihan で補った候補を含む）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（265字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データになく、次節の Unihan でも補えなかった字（1,378字）は `data/reports/unmapped.txt` に出しています。新字体由来の字（13字）を先頭に並べています。
 
-## 3. ウィキペディア日本語版「和製漢字」
+## 3. Unicode Unihan データベース（異体字）
+
+人間の判断（`DECISIONS.md` (c)）により、OpenCC の対応では平仄データにつながらない字を補うために使っています。
+
+| 項目 | 内容 |
+|---|---|
+| 入手元 | https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip （SHA-256 `4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e`） |
+| 版 | Unicode 18.0.0（`Unihan_Variants.txt` の日付 2026-07-31） |
+| 保存先 | `data/raw/unicode-18.0.0/Unihan_Variants.txt`（zip から取り出した1ファイル）、`data/raw/unicode-18.0.0/license.txt` |
+| ライセンス | Unicode License V3（https://www.unicode.org/license.txt） |
+| 再配布 | 可（著作権表示と許諾表示の同梱が条件。`data/raw/unicode-18.0.0/license.txt`） |
+
+### 加工内容
+
+- 使う欄は3つだけです：`kZVariant`（同じ字の字形違い）、`kSemanticVariant`（意味が同じで置き換えられる字）、`kJapaneseOldVariant`（日本の新字体に対する旧字体）。
+- 使わない欄：`kSpecializedSemanticVariant`（特定の文脈でだけ置き換えられる）、`kSpoofingVariant`（見た目が似ているだけ）、`kSimplifiedVariant`・`kTraditionalVariant`（簡繁は OpenCC で扱う）、`kJapaneseNewVariant`（旧字体→新字体で向きが逆）。
+- OpenCC の候補がどれも平仄データにない字についてだけ、入力字そのものと OpenCC の候補から Unihan の異体字を**1段だけ**たどり、平仄データにある字を候補に足しました（2段たどっても、新字体由来の字で増える対応はありませんでした）。OpenCC でつながる字には使いません。
+- 足した対応（98件）は、欄名とたどった字を添えて `data/reports/unihan-supplemented.txt` に出しています。例：艶→豔（艶の kSemanticVariant）、鉱→礦（鑛の kSemanticVariant）、为→為（爲の kSemanticVariant）。
+
+### 限界
+
+- 平仄データの字と、よく使う形とを Unihan がつないでいない組があります。例：平仄データは「谿」「鑪」で載せているが、Unihan は「溪」「爐」とこれらをつないでいない。根拠となる資料がないため、つないでいません。
+- 「竈」「蔥」のように、平仄データにどの形でも載っていない字もあります。これらは入力すると「平仄データにない字」（要確認）になります。
+
+## 4. ウィキペディア日本語版「和製漢字」
 
 | 項目 | 内容 |
 |---|---|

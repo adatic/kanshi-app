@@ -6,7 +6,7 @@
 生成物:
   data/rhymes.json        平水韻106韻目の一覧（元データの見出し順）
   data/chars.json         字 → 読み（声調・韻目）の一覧
-  data/variants.json      入力字（新字体・簡体字）→ データ上の字の候補
+  data/variants.json      入力字（新字体・簡体字）→ データ上の字の候補（OpenCC、足りない字は Unihan で補う）
   data/kokuji.json        国字の一覧（出典つき）
   data/reports/*.txt|md   生成時のレポート
 
@@ -34,6 +34,7 @@ WASEI = RAW / "wikipedia-ja-wasei-kanji-109822326.wiki"
 OPENCC_DIR = RAW / "opencc-ver.1.4.2"
 ST_CHARS = OPENCC_DIR / "STCharacters.txt"
 JP_SHINJITAI = OPENCC_DIR / "JPShinjitaiCharacters.txt"
+UNIHAN_VARIANTS = RAW / "unicode-18.0.0" / "Unihan_Variants.txt"
 CORRECTIONS = OUT / "corrections.json"
 
 # 元データの見出し（上平聲・下平聲・上聲・去聲・入聲）→ 韻目名の接頭辞と声調。
@@ -187,6 +188,37 @@ def parse_opencc(text: str) -> dict[str, list[str]]:
     return table
 
 
+# Unihan の異体字の欄のうち、使うもの（DECISIONS.md (c)）。
+#   kZVariant           同じ字の字形違い
+#   kSemanticVariant    意味が同じで置き換えられる字
+#   kJapaneseOldVariant 日本の新字体に対する旧字体
+# 使わないもの: kSpecializedSemanticVariant（特定の文脈でだけ置き換えられる）、
+#   kSpoofingVariant（見た目が似ているだけ）、kSimplifiedVariant・kTraditionalVariant（OpenCC で扱う）、
+#   kJapaneseNewVariant（旧字体→新字体で、向きが逆）
+UNIHAN_FIELDS = ("kZVariant", "kSemanticVariant", "kJapaneseOldVariant")
+
+
+def parse_unihan_variants(text: str) -> dict[str, list[tuple[str, str]]]:
+    """Unihan_Variants.txt → 字 → [(欄名, 異体字)...]（ファイルの順）。使う欄だけを読む。"""
+    table: dict[str, list[tuple[str, str]]] = {}
+    for line_no, raw in enumerate(text.splitlines(), 1):
+        if not raw or raw.startswith("#"):
+            continue
+        parts = raw.split("\t")
+        if len(parts) != 3:
+            raise BuildError(f"Unihan {line_no}行目: 形式が想定と違う: {raw!r}")
+        code, field, value = parts
+        if field not in UNIHAN_FIELDS:
+            continue
+        ch = chr(int(code.removeprefix("U+"), 16))
+        for token in value.split(" "):
+            target = token.split("<", 1)[0]  # "U+4E94<kMatthews" の出典タグは外す
+            if not target.startswith("U+"):
+                raise BuildError(f"Unihan {line_no}行目: 字の書き方が想定と違う: {token!r}")
+            table.setdefault(ch, []).append((field, chr(int(target[2:], 16))))
+    return table
+
+
 def _collect_variant_candidates(key, chars, jp, st):
     """候補の出現順を保ち、同じ候補の由来をすべて残す。"""
     sources: dict[str, list[str]] = {}
@@ -203,20 +235,41 @@ def _collect_variant_candidates(key, chars, jp, st):
     return list(sources), sources
 
 
-def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
+def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]], unihan):
     """入力字 → データにある字の候補。
 
     候補は「その字自身（データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に並べる。
+    OpenCC の候補がどれも平仄データにないときだけ、入力字と OpenCC の候補から Unihan の異体字を
+    1段たどり、平仄データにある字を候補に足す（DECISIONS.md (c)）。
     順序に優先の意味はない。どれを採るかはエンジンも決めない（§4.3）。
+
+    戻り値: (variants, ambiguous, unmapped, supplemented)
     """
     variants: dict[str, list[str]] = {}
     ambiguous: list[str] = []
     unmapped: list[str] = []
+    supplemented: list[str] = []
     # 字単位の対応だけを使う（語単位の見出しは除く）
     for key in sorted((k for k in set(jp) | set(st) if len(k) == 1), key=ord):
         candidates, sources = _collect_variant_candidates(key, chars, jp, st)
 
         known = [c for c in candidates if c in chars]
+        if not known:
+            # 同じ字に複数の経路でたどり着いたら、経路をまとめて1件として記録する
+            labels: dict[str, list[str]] = {}
+            for via in dict.fromkeys([key, *candidates]):
+                for field, target in unihan.get(via, []):
+                    if target in chars:
+                        labels.setdefault(target, [])
+                        label = f"{field}（{via}から）"
+                        if label not in labels[target]:
+                            labels[target].append(label)
+            for target, target_labels in labels.items():
+                if target not in sources:
+                    candidates.append(target)
+                sources.setdefault(target, []).extend(f"Unihan {lb}" for lb in target_labels)
+                supplemented.append(f"{key}\t{target}\t{'・'.join(target_labels)}")
+            known = [c for c in candidates if c in chars]
         # 一対多かどうかは、平仄データに絞る前の候補で判定する。
         # データにない候補も「平仄データにない」と書いて残し、黙って一つに決めない。
         if len(candidates) > 1:
@@ -235,7 +288,7 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
             continue  # データ上で自分自身にしか対応しない字は variants.json に載せない
         variants[key] = known
     # 日本語入力で出会いやすい新字体由来の字を先に並べる
-    return variants, ambiguous, [row for _, _, row in sorted(unmapped)]
+    return variants, ambiguous, [row for _, _, row in sorted(unmapped)], supplemented
 
 
 def format_readings(readings: list[dict]) -> str:
@@ -305,7 +358,7 @@ def report(title: str, explanation: list[str], rows: list[str]) -> str:
 
 
 def build() -> dict[Path, str]:
-    for p in (WIKISOURCE, WASEI, ST_CHARS, JP_SHINJITAI):
+    for p in (WIKISOURCE, WASEI, ST_CHARS, JP_SHINJITAI, UNIHAN_VARIANTS):
         if not p.exists():
             raise BuildError(f"{p.relative_to(ROOT)} がない。先に scripts/fetch_sources.py を実行する")
 
@@ -319,7 +372,8 @@ def build() -> dict[Path, str]:
 
     jp = parse_opencc(JP_SHINJITAI.read_text(encoding="utf-8"))
     st = parse_opencc(ST_CHARS.read_text(encoding="utf-8"))
-    variants, ambiguous, unmapped = build_variants(chars, jp, st)
+    unihan = parse_unihan_variants(UNIHAN_VARIANTS.read_text(encoding="utf-8"))
+    variants, ambiguous, unmapped, supplemented = build_variants(chars, jp, st, unihan)
 
     kokuji = parse_kokuji(WASEI.read_text(encoding="utf-8"))
     kokuji_overlap = [
@@ -352,6 +406,7 @@ def build() -> dict[Path, str]:
             f"| 当てた修正（corrections.json） | {len(applied)} |",
             f"| 異体字の対応（variants.json の見出し字） | {len(variants)} |",
             f"| 対応の候補が2字以上になる字（ambiguous.txt） | {len(ambiguous)} |",
+            f"| Unihan で補った対応（unihan-supplemented.txt） | {len(supplemented)} |",
             f"| 対応先がデータにない字（unmapped.txt） | {len(unmapped)} |",
             f"| 国字（kokuji.json） | {len(kokuji)} |",
             f"| 国字の一覧にあり、平水韻にも載る字 | {len(kokuji_overlap)} |",
@@ -376,10 +431,19 @@ def build() -> dict[Path, str]:
         OUT / "variants.json": dump_json(variants),
         OUT / "kokuji.json": dump_json(kokuji_doc),
         REPORTS / "summary.md": summary,
+        REPORTS / "unihan-supplemented.txt": report(
+            "Unihan で補った対応",
+            [
+                "OpenCC の対応では平仄データにつながらず、Unihan の異体字情報で候補を足した字（DECISIONS.md (c)）。",
+                "使った欄: kZVariant（字形違い）・kSemanticVariant（意味が同じ）・kJapaneseOldVariant（旧字体）。1段だけたどる。",
+                "書式: 入力字<TAB>足した候補<TAB>欄（どの字からたどったか）",
+            ],
+            supplemented,
+        ),
         REPORTS / "unmapped.txt": report(
             "対応できなかった字",
             [
-                "新字体→旧字体・簡体字→繁体字の対応はあるが、どの候補も平仄データ（chars.json）にない字。",
+                "新字体→旧字体・簡体字→繁体字の対応はあるが、どの候補も平仄データ（chars.json）になく、Unihan の異体字情報でも補えなかった字。",
                 "新字体→旧字体の対応がある字を先に、簡体字→繁体字だけの字を後に並べる。",
                 "書式: 入力字<TAB>対応の種類<TAB>候補",
             ],

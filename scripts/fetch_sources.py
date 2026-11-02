@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import sys
 import time
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +29,8 @@ USER_AGENT = "kanshi-app/0.1 (https://github.com/adatic/kanshi-app; data fetch)"
 
 OPENCC_TAG = "ver.1.4.2"
 OPENCC_BASE = f"https://raw.githubusercontent.com/BYVoid/OpenCC/{OPENCC_TAG}"
+
+UNICODE_VERSION = "18.0.0"
 
 
 def mediawiki_revision(api: str, revid: int) -> str:
@@ -46,6 +50,7 @@ def mediawiki_revision(api: str, revid: int) -> str:
 
 # path: data/raw/ からの相対パス
 # kind: "mediawiki" は API の JSON から本文（wikitext）を取り出して保存する
+#       "zip-member" は zip を取得して archive_sha256 で検証し、member だけを取り出して保存する
 SOURCES = [
     {
         "path": "wikisource-pingshui-8264804.wiki",
@@ -76,6 +81,20 @@ SOURCES = [
         "kind": "file",
         "url": f"{OPENCC_BASE}/LICENSE",
         "sha256": "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308",
+    },
+    {
+        "path": f"unicode-{UNICODE_VERSION}/Unihan_Variants.txt",
+        "kind": "zip-member",
+        "url": f"https://www.unicode.org/Public/{UNICODE_VERSION}/ucd/Unihan.zip",
+        "archive_sha256": "4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e",
+        "member": "Unihan_Variants.txt",
+        "sha256": "4ccfd34b08ac7b9c14353f6668ba43e3796d85c4cdce7952b635be16015aafa2",
+    },
+    {
+        "path": f"unicode-{UNICODE_VERSION}/license.txt",
+        "kind": "file",
+        "url": "https://www.unicode.org/license.txt",
+        "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     },
 ]
 
@@ -113,6 +132,18 @@ def fetch(source: dict, force: bool) -> bool:
     body = http_get(source["url"])
     if source["kind"] == "mediawiki":
         body = extract_mediawiki_content(body)
+    elif source["kind"] == "zip-member":
+        archive_digest = hashlib.sha256(body).hexdigest()
+        if archive_digest != source["archive_sha256"]:
+            print(
+                f"NG   {source['path']}: zip の SHA-256 が一致しません\n"
+                f"     期待値 {source['archive_sha256']}\n"
+                f"     実際   {archive_digest}",
+                file=sys.stderr,
+            )
+            return False
+        with zipfile.ZipFile(io.BytesIO(body)) as zf:
+            body = zf.read(source["member"])
     digest = hashlib.sha256(body).hexdigest()
     if digest != source["sha256"]:
         print(

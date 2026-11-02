@@ -6,14 +6,23 @@
 
 import unittest
 
-from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_kokuji, parse_wikisource
+from build_data import (
+    BuildError,
+    apply_corrections,
+    build_chars,
+    build_variants,
+    parse_kokuji,
+    parse_unihan_variants,
+    parse_wikisource,
+)
 
 R = {"tone": "平", "rhyme": "上平一東"}  # 仮の読み
 
 
 class BuildVariantsTest(unittest.TestCase):
     def run_variants(self, chars, jp=None, st=None):
-        return build_variants({c: [R] for c in chars}, jp or {}, st or {})
+        variants, ambiguous, unmapped, _ = build_variants({c: [R] for c in chars}, jp or {}, st or {}, {})
+        return variants, ambiguous, unmapped
 
     def test_one_to_many_with_one_known_candidate_is_reported(self):
         # 甲 → 乙 丙 のうち、データにあるのは丙だけ
@@ -167,6 +176,102 @@ class ParseKokujiTest(unittest.TestCase):
         self.assertEqual(result["辻"], "出典の備考に「国字でない可能性」とある")
         self.assertEqual(result["搾"], "出典の備考に「国字とは言い難い」とある")
         self.assertEqual(result["萩"], "出典の行見出しに「要出典」「疑問点」の印がある")
+
+
+UNIHAN = """\
+# comment
+U+4E19\tkSemanticVariant\tU+4E01<kMatthews
+U+4E59\tkZVariant\tU+4E03
+U+4E59\tkSpoofingVariant\tU+4E09
+U+4E59\tkSpecializedSemanticVariant\tU+4E0A
+U+4E59\tkSimplifiedVariant\tU+4E0B
+U+4E59\tkTraditionalVariant\tU+4E0D
+U+4E59\tkJapaneseNewVariant\tU+4E10
+U+4E19\tkJapaneseOldVariant\tU+4E08 U+4E07
+"""
+
+
+class ParseUnihanTest(unittest.TestCase):
+    def test_only_the_three_allowed_fields_are_used(self):
+        table = parse_unihan_variants(UNIHAN)
+        # 乙(U+4E59) は kZVariant の 七 だけ。除外する欄（見た目が似ているだけ・特定の文脈だけ・簡繁・新字体）は使わない
+        self.assertEqual(table["乙"], [("kZVariant", "七")])
+        # 丙(U+4E19) は kSemanticVariant の 丁（出典タグ <kMatthews は外す）と、kJapaneseOldVariant の 丈・万
+        self.assertEqual(
+            table["丙"],
+            [("kSemanticVariant", "丁"), ("kJapaneseOldVariant", "丈"), ("kJapaneseOldVariant", "万")],
+        )
+
+
+class UnihanSupplementTest(unittest.TestCase):
+    def run_variants(self, chars, jp=None, st=None, unihan=None):
+        return build_variants({c: [R] for c in chars}, jp or {}, st or {}, unihan or {})
+
+    def test_unihan_fills_a_key_that_opencc_could_not_map(self):
+        # 甲 → 乙（OpenCC。データにない）、甲 の Unihan 意味異体字 丙 はデータにある
+        variants, ambiguous, unmapped, supplemented = self.run_variants(
+            ["丙"], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
+        )
+        self.assertEqual(variants, {"甲": ["丙"]})
+        self.assertEqual(unmapped, [])
+        self.assertEqual(supplemented, ["甲\t丙\tkSemanticVariant（甲から）"])
+        # OpenCC の候補 乙 はデータにないので、候補は2字（一対多）として記録される
+        self.assertTrue(ambiguous[0].startswith("甲\t1/2\t"))
+
+    def test_unihan_is_followed_from_opencc_candidates_too(self):
+        # 甲 → 乙（OpenCC）→ 丙（乙 の Unihan Z異体字）
+        variants, _, _, supplemented = self.run_variants(
+            ["丙"], jp={"甲": ["乙"]}, unihan={"乙": [("kZVariant", "丙")]}
+        )
+        self.assertEqual(variants, {"甲": ["丙"]})
+        self.assertEqual(supplemented, ["甲\t丙\tkZVariant（乙から）"])
+
+    def test_unihan_is_not_used_when_opencc_already_maps(self):
+        variants, _, _, supplemented = self.run_variants(
+            ["乙", "丙"], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
+        )
+        self.assertEqual(variants, {"甲": ["乙"]})
+        self.assertEqual(supplemented, [])
+
+    def test_unihan_candidates_missing_from_data_are_not_added(self):
+        variants, _, unmapped, supplemented = self.run_variants(
+            [], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
+        )
+        self.assertEqual(variants, {})
+        self.assertEqual(supplemented, [])
+        self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
+
+    def test_unihan_is_followed_only_one_step(self):
+        # 甲 → 乙（OpenCC）→ 丙（Unihan 1段目）→ 丁（Unihan 2段目）。データにあるのは 丁 だけ
+        variants, _, unmapped, supplemented = self.run_variants(
+            ["丁"],
+            jp={"甲": ["乙"]},
+            unihan={"乙": [("kZVariant", "丙")], "丙": [("kSemanticVariant", "丁")]},
+        )
+        self.assertEqual(variants, {})
+        self.assertEqual(supplemented, [])
+        self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
+
+    def test_one_target_reached_by_several_paths_is_one_row(self):
+        # 甲 からも、OpenCC の候補 乙 からも 丙 にたどり着く。甲 は簡体字→繁体字で自分自身にも対応する
+        variants, _, _, supplemented = self.run_variants(
+            ["丙"],
+            jp={"甲": ["乙"]},
+            st={"甲": ["甲"]},
+            unihan={"甲": [("kSemanticVariant", "丙")], "乙": [("kZVariant", "丙")]},
+        )
+        self.assertEqual(variants, {"甲": ["丙"]})
+        self.assertEqual(supplemented, ["甲\t丙\tkSemanticVariant（甲から）・kZVariant（乙から）"])
+
+    def test_several_unihan_candidates_are_all_kept(self):
+        variants, ambiguous, _, supplemented = self.run_variants(
+            ["丙", "丁"],
+            jp={"甲": ["乙"]},
+            unihan={"甲": [("kSemanticVariant", "丙"), ("kSemanticVariant", "丁")]},
+        )
+        self.assertEqual(variants, {"甲": ["丙", "丁"]})
+        self.assertTrue(ambiguous[0].startswith("甲\t2/3\t"))
+        self.assertEqual(len(supplemented), 2)
 
 
 if __name__ == "__main__":
