@@ -20,6 +20,8 @@
     "packages/*/src",
     "packages/*/test",
     "apps/*/src",
+    "apps/*/test",
+    "apps/*/vite.config.ts",
     "scripts/**/*.ts",
     "golden/**/*.ts",
     "vitest.config.ts"

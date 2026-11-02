@@ -24,10 +24,14 @@
     "golden:update": "GOLDEN_UPDATE=1 vitest run golden",
     "corpus:fetch": "python3 scripts/fetch_corpus.py",
     "phrases:build": "python3 scripts/build_phrases.py",
-    "placements:update": "PLACEMENTS_UPDATE=1 vitest run scripts/placements-report.test.ts"
+    "placements:update": "PLACEMENTS_UPDATE=1 vitest run scripts/placements-report.test.ts",
+    "web:dev": "npm run dev -w @kanshi/web",
+    "web:build": "npm run build -w @kanshi/web",
+    "web:e2e": "npm run build -w @kanshi/web && node apps/web/e2e/smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "playwright": "^1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   }
