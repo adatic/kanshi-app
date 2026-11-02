@@ -156,6 +156,13 @@ describe("placementsFor（語を置ける位置）", () => {
     }
   });
 
+  it("改行を含む語も invalid で、句の区切りとしては扱わない", () => {
+    const empty = Array(4).fill(BLANK).join("\n");
+    const p = placementsFor(P[28]! + "\n", empty, fixtureData, { form: "heiki-nyuin" }).find((x) => x.line === 2 && x.slot === "3-4")!;
+    expect(p.status).toBe("invalid");
+    expect(p.errors.map((e) => [e.line, e.position])).toEqual([[2, 3]]);
+  });
+
   it("「＿」を含む語も invalid", () => {
     const p = placementsFor(P[28]! + "＿", poem, fixtureData).find((x) => x.line === 2 && x.slot === "3-4")!;
     expect(p.status).toBe("invalid");

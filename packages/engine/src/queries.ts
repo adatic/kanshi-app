@@ -71,7 +71,8 @@ function toGrid(input: string | readonly string[]): string[][] {
   return Array.from({ length: 4 }, (_, l) => Array.from({ length: 7 }, (_, p) => lines[l]?.[p]?.input ?? BLANK));
 }
 
-const toText = (grid: string[][]) => grid.map((row) => row.join("")).join("\n");
+/** analyze に渡す28マスの配列。文字列に戻さないので、マスの中の改行が句の区切りとして読まれない */
+const toCells = (grid: string[][]) => grid.flat();
 const keyOf = (f: Finding) => `${f.rule}|${f.severity}|${f.line}|${f.positions.join(",")}`;
 const violations = (a: Analysis) => a.findings.filter((f) => f.severity === "violation");
 const checks = (a: Analysis) => a.findings.filter((f) => f.severity === "check");
@@ -121,7 +122,7 @@ export function constraintsAt(
 ): CellConstraint {
   const grid = toGrid(input);
   grid[line]![pos] = BLANK;
-  const base = analyze(toText(grid), data, options);
+  const base = analyze(toCells(grid), data, options);
   const rhymePosition = isRhymePosition(base, line, pos);
   const groups = rhymePosition ? rhymeGroups(base, line) : [];
 
@@ -132,7 +133,7 @@ export function constraintsAt(
       const probe = withProbe(data, pz, rhyme, new Set(grid.flat()));
       const g = grid.map((row) => [...row]);
       g[line]![pos] = probe.char;
-      const a = analyze(toText(g), probe.data, options);
+      const a = analyze(toCells(g), probe.data, options);
       // 文言の中の仮の字は、利用者には意味がないので「（置く字）」に置き換える
       const plain = (fs: Finding[]) => fs.map((f) => ({ ...f, message: f.message.replaceAll(probe.char, PROBE_LABEL) }));
       return { violations: plain(newOnes(violations(a), violations(base))), checks: plain(newOnes(checks(a), checks(base))) };
@@ -181,7 +182,7 @@ export function placementsFor(
   const slots = SLOTS[chars.length];
   if (slots === undefined) return [];
   const grid = toGrid(input);
-  const base = analyze(toText(grid), data, options);
+  const base = analyze(toCells(grid), data, options);
   const baseAny = anyViolations(base);
 
   return [0, 1, 2, 3].flatMap((line) =>
@@ -193,7 +194,7 @@ export function placementsFor(
       if (conflicts.length > 0) return { line, start, slot, status: "conflict", violations: [], dependent: [], conflicts, errors: [] };
       const g = grid.map((row) => [...row]);
       chars.forEach((c, i) => (g[line]![start + i] = c));
-      const a = analyze(toText(g), data, options);
+      const a = analyze(toCells(g), data, options);
       // 置いたマスの入力エラー（漢字以外・繰り返す字のない「々」）と、語の中の「＿」は invalid（CLAUDE.md §4.1）
       const placed = (e: InputError) => e.line === line && e.position >= start && e.position < start + chars.length;
       const errors: InputError[] = [
