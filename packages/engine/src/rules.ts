@@ -47,6 +47,17 @@ export function evaluate(
   form: FormDef | null,
   ctx: RuleContext,
 ): Finding[] {
+  // 指摘の並び順も維持する（句内 → 句間 → 押韻 → 補助読み）。
+  return [
+    ...evaluateLines(grid, form, ctx),
+    ...evaluateLinks(grid, ctx),
+    ...evaluateRhymes(grid, chars, form, ctx),
+    ...evaluateSupplementReadings(grid, chars, ctx),
+  ];
+}
+
+/** 句内の定型・平仄の規則 */
+function evaluateLines(grid: CellState[][], form: FormDef | null, ctx: RuleContext): Finding[] {
   const out: Finding[] = [];
   const pz = (l: number, p: number) => grid[l]?.[p]?.pz ?? null;
   const lineCount = Math.min(grid.length, 4);
@@ -111,6 +122,15 @@ export function evaluate(
     }
   }
 
+  return out;
+}
+
+/** 句間の反法・粘法と、それに伴う拗体の注意 */
+function evaluateLinks(grid: CellState[][], ctx: RuleContext): Finding[] {
+  const out: Finding[] = [];
+  const pz = (l: number, p: number) => grid[l]?.[p]?.pz ?? null;
+  const lineCount = Math.min(grid.length, 4);
+
   // 反法・粘法：起承は2字目が逆、承転は同じ、転結は逆
   const pairs: [number, number, "diff" | "same"][] = [
     [0, 1, "diff"],
@@ -134,6 +154,16 @@ export function evaluate(
   if (brokenLink) {
     out.push(finding(ctx, "youtai", -1, [], "反法・粘法が守られていない句があります。拗体（不粘）として意図した作りかどうかは、作者が判断してください。"));
   }
+
+  return out;
+}
+
+/** 押韻字の声調・韻目、孤雁入群格、冒韻 */
+function evaluateRhymes(grid: CellState[][], chars: CharInfo[][], form: FormDef | null, ctx: RuleContext): Finding[] {
+  const out: Finding[] = [];
+  const pz = (l: number, p: number) => grid[l]?.[p]?.pz ?? null;
+  const lineCount = Math.min(grid.length, 4);
+  const rhymeLines = form?.rhymeLines ?? [1, 3];
 
   // 押韻
   const rhymeCell = (l: number) => (l < lineCount ? grid[l]?.[6] : undefined);
@@ -176,6 +206,15 @@ export function evaluate(
       });
     }
   }
+
+  return out;
+}
+
+/** 【詞】【辭】欄にだけある読みの注意 */
+function evaluateSupplementReadings(grid: CellState[][], chars: CharInfo[][], ctx: RuleContext): Finding[] {
+  const out: Finding[] = [];
+  const lineCount = Math.min(grid.length, 4);
+  const charAt = (l: number, p: number) => chars[l]?.[p]?.char ?? "";
 
   // 【詞】【辭】欄にだけある読み
   for (let l = 0; l < lineCount; l++) {

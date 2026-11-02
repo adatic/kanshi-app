@@ -28,16 +28,17 @@ export function charInfo(cell: Cell, data: EngineData, kokuji: ReadonlySet<strin
   const own = data.chars[c];
   const others = (data.variants[c] ?? []).filter((v) => v !== c && data.chars[v] !== undefined);
 
+  const variantReadings = others.flatMap((v) => data.chars[v]!.map((r) => copyReading(r, v)));
+
   if (own !== undefined) {
     const readings = [
       ...own.map((r) => copyReading(r)),
-      ...others.flatMap((v) => data.chars[v]!.map((r) => copyReading(r, v))),
+      ...variantReadings,
     ];
     return { ...base, status: others.length > 0 ? "undetermined" : "known", readings };
   }
   if (others.length > 0) {
-    const readings = others.flatMap((v) => data.chars[v]!.map((r) => copyReading(r, v)));
-    return { ...base, status: others.length > 1 ? "undetermined" : "known", readings };
+    return { ...base, status: others.length > 1 ? "undetermined" : "known", readings: variantReadings };
   }
   return { ...base, status: kokuji.has(c) ? "kokuji" : "unknown", readings: [] };
 }
