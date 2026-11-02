@@ -1,0 +1,12 @@
+{
+  "name": "@kanshi/engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "七言絶句の平仄・押韻・禁則を判定する規則エンジン（外部依存なし）",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
