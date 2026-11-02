@@ -197,9 +197,8 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
     variants: dict[str, list[str]] = {}
     ambiguous: list[str] = []
     unmapped: list[str] = []
-    for key in sorted(set(jp) | set(st), key=ord):
-        if len(key) != 1:
-            continue  # 字単位の対応だけを使う
+    # 字単位の対応だけを使う（語単位の見出しは除く）
+    for key in sorted((k for k in set(jp) | set(st) if len(k) == 1), key=ord):
         candidates: list[str] = []
         sources: dict[str, list[str]] = {}
 
@@ -216,19 +215,23 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
             add(c, "簡体字→繁体字")
 
         known = [c for c in candidates if c in chars]
-        if known == [key]:
-            continue  # 自分自身にしか対応しない字は載せない
+        # 一対多かどうかは、平仄データに絞る前の候補で判定する。
+        # データにない候補も「平仄データにない」と書いて残し、黙って一つに決めない。
+        if len(candidates) > 1:
+            detail = "／".join(
+                f"{c}（{'・'.join(sources[c])}: "
+                f"{format_readings(chars[c]) if c in chars else '平仄データにない'}）"
+                for c in candidates
+            )
+            ambiguous.append(f"{key}\t{len(known)}/{len(candidates)}\t{detail}")
         if not known:
             others = [c for c in candidates if c != key]
             kinds = "・".join(dict.fromkeys(src for c in others for src in sources[c]))
             unmapped.append((0 if key in jp else 1, ord(key), f"{key}\t{kinds}\t候補: {' '.join(others)}"))
             continue
+        if known == [key]:
+            continue  # データ上で自分自身にしか対応しない字は variants.json に載せない
         variants[key] = known
-        if len(known) > 1:
-            detail = "／".join(
-                f"{c}（{'・'.join(sources[c])}: {format_readings(chars[c])}）" for c in known
-            )
-            ambiguous.append(f"{key}\t{detail}")
     # 日本語入力で出会いやすい新字体由来の字を先に並べる
     return variants, ambiguous, [row for _, _, row in sorted(unmapped)]
 
@@ -343,7 +346,7 @@ def build() -> dict[Path, str]:
             f"| 元データ内の重複（同じ字・同じ韻目） | {len(dup_lines)} |",
             f"| 当てた修正（corrections.json） | {len(applied)} |",
             f"| 異体字の対応（variants.json の見出し字） | {len(variants)} |",
-            f"| 対応の候補が複数になる字（ambiguous.txt） | {len(ambiguous)} |",
+            f"| 対応の候補が2字以上になる字（ambiguous.txt） | {len(ambiguous)} |",
             f"| 対応先がデータにない字（unmapped.txt） | {len(unmapped)} |",
             f"| 国字（kokuji.json） | {len(kokuji)} |",
             f"| 国字の一覧にあり、平水韻にも載る字 | {len(kokuji_overlap)} |",
@@ -380,8 +383,9 @@ def build() -> dict[Path, str]:
         REPORTS / "ambiguous.txt": report(
             "対応の候補が複数になる字",
             [
-                "一つに決めずに、候補をすべて variants.json に載せた字。",
-                "書式: 入力字<TAB>候補（対応の種類: その字の韻目）／…",
+                "新字体→旧字体・簡体字→繁体字の対応で、候補（その字自身を含む）が2字以上になる字。",
+                "平仄データにある候補はすべて variants.json に載せた（一つに決めていない）。平仄データにない候補もここに残す。",
+                "書式: 入力字<TAB>平仄データにある候補の数/候補の数<TAB>候補（対応の種類: その字の韻目）／…",
             ],
             ambiguous,
         ),
