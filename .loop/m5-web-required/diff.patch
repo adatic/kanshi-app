@@ -1,0 +1,445 @@
+diff --git a/TASKS.md b/TASKS.md
+index cd4bce2..298e47c 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,6 +4,17 @@
+ 
+ ## 進行中
+ 
++### m5-web-required — 必須要素と、置ける位置（M5）
++
++ブランチ: `task/m5-web-required`
++
++完了条件:
++- [ ] 設定の列で、必須要素（作者が必ず残す語）を最大2語まで登録・削除できる。2字・3字の漢字の語だけを受け付け、それ以外は理由を示して登録しない（CLAUDE.md §4.5・§10）
++- [ ] 登録した語ごとに、置ける句・位置を `placementsFor` で示す：置ける／字の読みによって違反が出る（理由つき）／置けない（件数）／すでにある別の字と重なる（件数）。すでに詩に入っていれば、その位置を示す
++- [ ] 置ける位置を選ぶと、その語がマス目に入る
++- [ ] 表示の組み立ては純関数にして架空のデータで単体テストする。Playwright で、登録・置ける位置の表示・マス目への配置を確かめる
++- [ ] 必須要素の消失警告と保存は M6 で扱う（ここでは作らない）
++
+ ## 完了
+ 
+ ### m5-web-assist — 選んだマスの条件と詩語候補（M5）
+diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
+index 2bb928b..1185cf6 100644
+--- a/apps/web/e2e/smoke.mjs
++++ b/apps/web/e2e/smoke.mjs
+@@ -70,6 +70,12 @@ try {
+     await page.goto(`${ORIGIN}/`);
+     await page.waitForSelector("#grid-mode .gin");
+     const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
++    const pasteText = (text) =>
++      page.evaluate((t) => {
++        const dt = new DataTransfer();
++        dt.setData("text/plain", t);
++        document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
++      }, text);
+     const focused = () => page.evaluate(() => Number(document.activeElement?.getAttribute("data-index") ?? -1));
+     const actualSymbols = () =>
+       page.$$eval("#grid-mode .grow.gact", (rows) => rows.map((r) => [...r.querySelectorAll(".gsym")].map((s) => s.textContent || "＿").join("")));
+@@ -138,11 +144,7 @@ try {
+     // 詩全体（改行つき）の貼り付けは、句ごとに分けて入る
+     await page.locator("#grid-clear").click();
+     await cell(0).click();
+-    await page.evaluate((text) => {
+-      const dt = new DataTransfer();
+-      dt.setData("text/plain", text);
+-      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+-    }, q03.join("\n"));
++    await pasteText(q03.join("\n"));
+     check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 詩全体の貼り付けが句ごとに入る`);
+     if (shots) await page.screenshot({ path: `${shots}/${label}-grid.png`, fullPage: true });
+ 
+@@ -201,6 +203,48 @@ try {
+     await cell(18).click();
+     await page.keyboard.insertText(q03[2].slice(4, 6));
+ 
++    // ---- 必須要素 ----
++    const register = async (w) => {
++      await page.fill("#required-input", w);
++      await page.locator("#required-add").click();
++    };
++    await register("あい");
++    check((await page.locator(".required-note").textContent()).includes("漢字だけ"), `${label}: 必須要素は漢字以外を理由つきで断る`);
++    await register(word0);
++    check(
++      (await page.locator(".required-item .present").first().textContent()).includes("起句の1-2字目"),
++      `${label}: 詩に入っている必須要素は、その位置を示す`,
++    );
++    // 空のマス目に、もう一つの語を置ける位置から入れる
++    const word2 = q03[2].slice(4, 6);
++    await page.locator("#grid-clear").click();
++    await register(word2);
++    const item2 = page.locator(".required-item").nth(1);
++    const places = await item2.locator(".place-req").count();
++    check(places > 0, `${label}: 必須要素の置ける位置を示す（${places}か所）`);
++    const target = await item2.locator(".place-req").first().textContent();
++    await item2.locator(".place-req").first().click();
++    check((await item2.locator(".present").textContent()).includes(target), `${label}: 置ける位置を選ぶと、その位置に入る（${target}）`);
++    await register(q03[1].slice(0, 2));
++    check((await page.locator(".required-note").textContent()).includes("2語まで"), `${label}: 必須要素は2語まで`);
++    await page.locator(".required-item .remove").first().click();
++    check((await page.locator(".required-item").count()) === 1, `${label}: 必須要素の登録を外せる`);
++    // 列の中身が隣の列にはみ出さない（ページ全体がはみ出さなくても、列どうしで重なることがある）
++    const spill = await page.evaluate(() =>
++      [".side", ".poem-area", ".cell-panel"].flatMap((sel) => {
++        const box = document.querySelector(sel).getBoundingClientRect();
++        return [...document.querySelectorAll(`${sel} *`)]
++          .filter((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().right > box.right + 1)
++          .map((el) => `${sel} ${el.tagName.toLowerCase()}.${el.className}`);
++      }),
++    );
++    check(spill.length === 0, `${label}: 列の中身が列の外にはみ出さない${spill.length ? `（${spill.slice(0, 3).join(", ")}）` : ""}`);
++    if (shots) await page.screenshot({ path: `${shots}/${label}-required.png`, fullPage: true });
++    // 元の詩に戻す（詩全体の貼り付け）
++    await page.locator("#grid-clear").click();
++    await cell(0).click();
++    await pasteText(q03.join("\n"));
++
+     // ---- 貼り付けモード。マス目の詩を引き継ぐ ----
+     await page.locator("#tab-paste").click();
+     check((await page.inputValue("#poem-input")) === q03.join("\n"), `${label}: 貼り付けモードへマス目の詩を引き継ぐ`);
+diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
+index eb19b43..4987c2d 100644
+--- a/apps/web/src/main.ts
++++ b/apps/web/src/main.ts
+@@ -3,8 +3,9 @@ import { analyze } from "@kanshi/engine";
+ import type { EngineData, FormId, Options } from "@kanshi/engine";
+ import { assistPanel } from "./assistView";
+ import { loadEngineData, loadRhymes, phraseStore, type Rhyme } from "./data";
+-import { BLANK, emptyGrid, gridToText, textToGrid } from "./grid";
++import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid } from "./grid";
+ import { gridEditor } from "./gridEditor";
++import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
+ import { cellPanel, h, resultParts, resultView } from "./render";
+ import { buildView, cellDetail } from "./view";
+ 
+@@ -128,6 +129,74 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   const gridClear = h("button", { type: "button", class: "small", id: "grid-clear" }, "すべて消す");
+   gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "マス目の字をすべて消しますか？"));
+ 
++  // ---- 必須要素（最大2語）と、置ける位置 ----
++  let required: string[] = [];
++  const requiredInput = h("input", {
++    id: "required-input",
++    type: "text",
++    lang: "zh-Hant",
++    autocomplete: "off",
++    spellcheck: "false",
++    "aria-describedby": "required-help",
++  }) as HTMLInputElement;
++  const requiredAdd = h("button", { type: "button", class: "small", id: "required-add" }, "登録");
++  const requiredNote = h("p", { class: "required-note", role: "status" });
++  const requiredList = h("div", { class: "required-list" });
++  const addRequired = () => {
++    const error = validateRequired(requiredInput.value, required);
++    requiredNote.textContent = error ?? "";
++    if (error !== null) return;
++    required = [...required, requiredInput.value.trim()];
++    requiredInput.value = "";
++    update();
++  };
++  requiredAdd.addEventListener("click", addRequired);
++  requiredInput.addEventListener("keydown", (e) => {
++    if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
++      e.preventDefault();
++      addRequired();
++    }
++  });
++  const requiredCard = h(
++    "section",
++    { class: "required", "aria-labelledby": "required-title" },
++    h("h2", { id: "required-title" }, `必須要素（最大${MAX_REQUIRED}語）`),
++    h("p", { id: "required-help", class: "help" }, "必ず残すと決めた2字・3字の語。登録すると、置ける句と位置を示します。"),
++    h("div", { class: "required-entry" }, requiredInput, requiredAdd),
++    requiredNote,
++    requiredList,
++  );
++  const requiredItem = (r: RequiredView): HTMLElement => {
++    const placeButton = (pl: { line: number; start: number; label: string }, extra = "") => {
++      const b = h("button", { type: "button", class: "small place-req", "aria-label": `「${r.word}」を${pl.label}に入れる` }, `${pl.label}${extra}`);
++      const at = pl.line * WIDTH + pl.start;
++      b.addEventListener("click", () => editor.place(at, r.word, at));
++      return b;
++    };
++    const remove = h("button", { type: "button", class: "small remove", "aria-label": `「${r.word}」の登録を外す` }, "外す");
++    remove.addEventListener("click", () => {
++      required = required.filter((w) => w !== r.word);
++      update();
++    });
++    return h(
++      "div",
++      { class: "required-item" },
++      h("p", { class: "required-head" }, h("span", { class: "cand-word", lang: "zh-Hant" }, r.word), remove),
++      r.present.length > 0 ? h("p", { class: "present" }, `詩に入っています：${r.present.map((p) => p.label).join("、")}`) : null,
++      r.ok.length > 0 ? h("div", { class: "places" }, h("p", { class: "explain" }, "置ける位置"), ...r.ok.map((pl) => placeButton(pl))) : null,
++      r.depends.length > 0
++        ? h(
++            "div",
++            { class: "places depends" },
++            h("p", { class: "explain" }, "字の読みによっては違反が出る位置"),
++            ...r.depends.map((pl) => h("div", {}, placeButton(pl), h("details", {}, h("summary", {}, "理由"), h("ul", {}, ...pl.notes.map((n) => h("li", {}, n)))))),
++          )
++        : null,
++      r.present.length === 0 && r.ok.length === 0 && r.depends.length === 0 ? h("p", { class: "none" }, "いまの詩には、違反を出さずに置ける位置がありません。") : null,
++      h("p", { class: "explain counts" }, `置くと違反が出る位置 ${r.ng}　別の字と重なる位置 ${r.conflict}`),
++    );
++  };
++
+   const gridMode = h(
+     "section",
+     { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
+@@ -207,6 +276,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     }
+     gridMode.hidden = mode !== "grid";
+     pasteMode.hidden = mode !== "paste";
++    requiredCard.hidden = mode !== "grid";
+     update();
+   };
+   for (const m of ["grid", "paste"] as const) {
+@@ -228,6 +298,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+       const a = analyze(grid, data, options);
+       const v = buildView(a, data);
+       editor.refresh(v, showPattern);
++      requiredList.replaceChildren(...required.map((w) => requiredItem(requiredView(w, grid, data, options))));
+       gridResult.replaceChildren(...resultParts(v, showPattern));
+       panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
+       const turn = ++assistTurn;
+@@ -272,7 +343,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     "div",
+     { class: "app" },
+     h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
+-    h("div", { class: "workbench" }, settings.el, gridMode, pasteMode),
++    h("div", { class: "workbench" }, h("div", { class: "side" }, settings.el, requiredCard), gridMode, pasteMode),
+   );
+ }
+ 
+diff --git a/apps/web/src/required.ts b/apps/web/src/required.ts
+new file mode 100644
+index 0000000..1f8a7b3
+--- /dev/null
++++ b/apps/web/src/required.ts
+@@ -0,0 +1,54 @@
++// 必須要素（作者が必ず残すと決めた語。最大2語）の受け付けと、置ける位置（CLAUDE.md §4.5・§10）。純関数。
++// 置けるかどうかの判定はエンジンの placementsFor だけが持つ。
++import { placementsFor } from "@kanshi/engine";
++import type { EngineData, Options } from "@kanshi/engine";
++import { WIDTH } from "./grid";
++import { lineName } from "./view";
++
++export const MAX_REQUIRED = 2;
++
++const isHan = (c: string) => /^\p{Script=Han}$/u.test(c);
++
++/** 登録できない理由。登録できれば null。前後の空白は無視する */
++export function validateRequired(input: string, current: readonly string[]): string | null {
++  const word = input.trim();
++  if (word === "") return "語を入れてください。";
++  const chars = [...word];
++  const bad = chars.find((c) => !isHan(c));
++  if (bad !== undefined) return `漢字だけの語を入れてください（「${bad}」は漢字ではありません）。`;
++  if (chars.length !== 2 && chars.length !== 3) return `2字か3字の語を入れてください（${chars.length}字）。`;
++  if (current.includes(word)) return "すでに登録しています。";
++  if (current.length >= MAX_REQUIRED) return `必須要素は${MAX_REQUIRED}語までです。`;
++  return null;
++}
++
++export type PlaceView = { line: number; start: number; label: string };
++
++export type RequiredView = {
++  word: string;
++  /** すでに詩に入っている位置 */
++  present: PlaceView[];
++  /** 置ける位置 */
++  ok: PlaceView[];
++  /** 字の読みによって違反が出る位置と、その違反 */
++  depends: (PlaceView & { notes: string[] })[];
++  /** 置くと違反が出る位置の数 */
++  ng: number;
++  /** すでにある別の字と重なる位置の数 */
++  conflict: number;
++};
++
++export function requiredView(word: string, grid: readonly string[], data: EngineData, options: Options): RequiredView {
++  const chars = [...word];
++  const v: RequiredView = { word, present: [], ok: [], depends: [], ng: 0, conflict: 0 };
++  for (const p of placementsFor(word, grid, data, options)) {
++    const place = { line: p.line, start: p.start, label: `${lineName(p.line)}の${p.slot}字目` };
++    if (chars.every((c, k) => grid[p.line * WIDTH + p.start + k] === c)) v.present.push(place);
++    else if (p.status === "ok") v.ok.push(place);
++    else if (p.status === "depends")
++      v.depends.push({ ...place, notes: p.dependent.map((f) => `${data.rules.rules[f.rule]?.name ?? f.rule}：${f.message}`) });
++    else if (p.status === "conflict") v.conflict++;
++    else v.ng++;
++  }
++  return v;
++}
+diff --git a/apps/web/src/style.css b/apps/web/src/style.css
+index e9026f3..d072028 100644
+--- a/apps/web/src/style.css
++++ b/apps/web/src/style.css
+@@ -792,3 +792,86 @@ button.more {
+ .settings .options > * {
+   min-width: 0;
+ }
++
++/* 左の列：設定と必須要素 */
++.side {
++  display: grid;
++  gap: 16px;
++  min-width: 0;
++}
++.required {
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  padding: 12px 14px;
++  min-width: 0;
++  display: grid;
++  gap: 6px;
++}
++.required-entry {
++  display: flex;
++  gap: 6px;
++  min-width: 0;
++}
++.required-entry input {
++  flex: 1;
++  width: 0;
++  min-width: 0;
++  font-family: var(--f-han);
++  font-size: 1.1rem;
++  padding: 2px 8px;
++  border: 1px solid var(--line);
++  border-radius: 6px;
++  background: var(--paper);
++  color: var(--ink);
++}
++.required-note {
++  margin: 0;
++  font-size: 0.8rem;
++  color: var(--shu);
++}
++.required-note:empty {
++  display: none;
++}
++.required-list {
++  display: grid;
++  gap: 10px;
++}
++.required-item {
++  border-top: 1px dashed var(--line);
++  padding-top: 8px;
++  display: grid;
++  gap: 4px;
++}
++.required-head {
++  margin: 0;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++.required-item .present {
++  margin: 0;
++  font-size: 0.85rem;
++  color: var(--rokusho);
++}
++.places {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 4px;
++}
++.places > .explain {
++  flex-basis: 100%;
++}
++.places.depends > div {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 4px;
++  align-items: baseline;
++  font-size: 0.8rem;
++}
++.places.depends .place-req {
++  border-color: var(--odo);
++}
++.required-item .counts {
++  font-size: 0.78rem;
++}
+diff --git a/apps/web/test/required.test.ts b/apps/web/test/required.test.ts
+new file mode 100644
+index 0000000..2301f20
+--- /dev/null
++++ b/apps/web/test/required.test.ts
+@@ -0,0 +1,72 @@
++// 必須要素（apps/web/src/required.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
++import { describe, expect, it } from "vitest";
++import { requiredView, validateRequired } from "../src/required";
++import { P, RYO, Z, baseLines, build, fixtureData, replaceAt } from "../../../packages/engine/test/fixture";
++
++const HN = baseLines("heiki-nyuin");
++// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
++const gridOf = (lines: string[]) => [...build(...lines).replaceAll("\n", "")];
++const BLANK_LINE = "＿＿＿＿＿＿＿";
++/** 転句だけが未入力の詩（転句の定型は ◐●◐○○●●） */
++const withBlankThird = () => gridOf([HN[0]!, HN[1]!, BLANK_LINE, HN[3]!]);
++
++describe("validateRequired", () => {
++  it("2字・3字の漢字の語を受け付ける", () => {
++    expect(validateRequired(P[28]! + P[27]!, [])).toBeNull();
++    expect(validateRequired(P[28]! + P[27]! + Z[29]!, [])).toBeNull();
++    expect(validateRequired(` ${P[28]}${P[27]} `, [])).toBeNull(); // 前後の空白は無視する
++  });
++
++  it("それ以外は理由を返す", () => {
++    expect(validateRequired("", [])).toBe("語を入れてください。");
++    expect(validateRequired(P[28]!, [])).toBe("2字か3字の語を入れてください（1字）。");
++    expect(validateRequired(P.slice(0, 4).join(""), [])).toBe("2字か3字の語を入れてください（4字）。");
++    expect(validateRequired(`${P[28]}あ`, [])).toBe("漢字だけの語を入れてください（「あ」は漢字ではありません）。");
++  });
++
++  it("同じ語は二度登録しない。3語目は登録しない", () => {
++    const w = P[28]! + P[27]!;
++    expect(validateRequired(w, [w])).toBe("すでに登録しています。");
++    expect(validateRequired(w, [P[1]! + P[2]!, P[3]! + P[4]!])).toBe("必須要素は2語までです。");
++  });
++});
++
++describe("requiredView", () => {
++  it("未入力の句の位置は、置ける・置けないを分け、ほかの句は重なる字として数える", () => {
++    const v = requiredView(P[28]! + P[27]!, withBlankThird(), fixtureData, {}); // 平平
++    expect(v.ok.map((p) => p.label)).toContain("転句の3-4字目"); // ◐○
++    expect(v.ok.map((p) => p.label)).not.toContain("転句の5-6字目"); // ○● に平平は合わない
++    expect(v.ng).toBeGreaterThan(0);
++    expect(v.conflict).toBe(12); // 起句・承句・結句の4位置ずつ
++    expect(v.present).toEqual([]);
++  });
++
++  it("字の読みによって違反が出る位置は、理由つきで分ける", () => {
++    const v = requiredView(RYO[2]! + Z[29]!, withBlankThird(), fixtureData, {}); // 両韻字＋仄
++    const dep = v.depends.find((p) => p.label === "転句の5-6字目");
++    expect(dep).toBeDefined();
++    expect(dep!.notes.length).toBeGreaterThan(0);
++    expect(dep!.start).toBe(4);
++    expect(dep!.line).toBe(2);
++  });
++
++  it("すでに詩に入っている語は、その位置を示し、ほかの数には入れない", () => {
++    const word = P[28]! + P[27]!;
++    const grid = withBlankThird();
++    grid[16] = P[28]!;
++    grid[17] = P[27]!;
++    const v = requiredView(word, grid, fixtureData, {});
++    expect(v.present.map((p) => p.label)).toEqual(["転句の3-4字目"]);
++    expect(v.ok.map((p) => p.label)).not.toContain("転句の3-4字目");
++  });
++
++  it("埋まった詩では、入っていない語はどこにも置けない（すべて重なる）", () => {
++    const v = requiredView(P[28]! + P[27]!, gridOf(HN), fixtureData, {});
++    expect([v.ok, v.depends, v.ng, v.conflict, v.present]).toEqual([[], [], 0, 16, []]);
++  });
++
++  it("3字語は各句の5-7字目だけ", () => {
++    const v = requiredView(P[28]! + P[27]! + Z[29]!, gridOf([HN[0]!, HN[1]!, BLANK_LINE, HN[3]!]), fixtureData, {});
++    expect(v.conflict + v.ng + v.ok.length + v.depends.length + v.present.length).toBe(4);
++  });
++});
