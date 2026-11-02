@@ -1,0 +1,1334 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 18c04c0..1184a79 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -27,3 +27,6 @@ jobs:
+           key: corpus-${{ hashFiles('data/corpus.json') }}
+       - run: python3 scripts/fetch_corpus.py
+       - run: npm test
++      # 画面の確認（ビルドした画面を Chromium で開く。CLAUDE.md §6.3）
++      - run: npx playwright install --with-deps chromium
++      - run: npm run web:e2e
+diff --git a/.gitignore b/.gitignore
+index c936832..a9ebf96 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,3 +5,5 @@ coverage/
+ .DS_Store
+ __pycache__/
+ .cache/
++apps/web/public/data/
++apps/web/dist/
+diff --git a/TASKS.md b/TASKS.md
+index 4602e72..3a81492 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,17 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m5-web-paste — Web アプリの土台と、misima 互換の貼り付けモード（M5）
++
++ブランチ: `task/m5-web-paste`
++
++完了条件:
++- [ ] `apps/web`（Vite + TypeScript、画面の部品ライブラリは使わない）が npm workspaces の一員として起動・ビルドできる。エンジンは `packages/engine` をそのまま使う
++- [ ] 判定に要るデータ（chars・variants・kokuji・forms・rules）は、ビルド時に `data/` から静的ファイルとして同梱する。初回の静的ファイルの取得以外は通信しない（外部フォントも使わない）（CLAUDE.md §6.3）
++- [ ] 貼り付けモード：1句1行のテキストを入れると判定し、各句の下に misima 互換の記号列（○●◎□■）を並べる。平仄図式（○●◐◎）を表示／非表示で切り替えられる（§4.2）
++- [ ] 検査結果の一覧（規則名・句・位置・日本語の説明）を、明確な違反・要確認・許容される変格に分けて出す。判定できない事項（拗体、通韻、同字重出の妥当性、両韻字の読み）は、作者が判断すべきことを明記する（§4.2）
++- [ ] 読みが複数ある字は、読みごとの結果（その読みなら出る違反）を示す（§4.1・§4.2）
++- [ ] 画面の表示を組み立てる処理は純関数にして、架空のデータで単体テストする。Playwright（Chromium）で、ビルドした画面が詩を判定して表示すること、スマホ幅で横にはみ出さないこと、外部への通信がないことを確かめる
+ 
+ ## 完了
+ 
+diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
+new file mode 100644
+index 0000000..ea9bcce
+--- /dev/null
++++ b/apps/web/e2e/smoke.mjs
+@@ -0,0 +1,98 @@
++// ビルドした画面の E2E 確認（CLAUDE.md §6.3）。`npm run web:e2e` で走る（ビルドしてから実行する）。
++// 期待値は記憶ではなく、ゴールデンテストのスナップショット（エンジンが出した結果）から取る。
++// SHOTS_DIR を渡すと、確認用の画面写真をそこに保存する。
++import { spawn } from "node:child_process";
++import { mkdirSync, readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { chromium } from "playwright";
++
++const webDir = fileURLToPath(new URL("../", import.meta.url));
++const root = fileURLToPath(new URL("../../../", import.meta.url));
++const PORT = 4173;
++const ORIGIN = `http://localhost:${PORT}`;
++const shots = process.env.SHOTS_DIR;
++if (shots) mkdirSync(shots, { recursive: true });
++
++const snapshot = JSON.parse(readFileSync(`${root}golden/snapshot.json`, "utf-8"));
++const input = JSON.parse(readFileSync(`${root}golden/input.json`, "utf-8"));
++const poem = (id) => input.poems.find((p) => p.id === id);
++const snap = (id) => snapshot.poems.find((p) => p.id === id);
++
++const failures = [];
++const check = (ok, message) => {
++  console.log(`${ok ? "ok  " : "NG  "} ${message}`);
++  if (!ok) failures.push(message);
++};
++
++// npx を挟むと、止めたときに中の Vite が残るので、Vite を直接起動する
++const viteBin = fileURLToPath(new URL("../../../node_modules/vite/bin/vite.js", import.meta.url));
++const server = spawn(process.execPath, [viteBin, "preview", "--port", String(PORT), "--strictPort"], { cwd: webDir, stdio: "pipe" });
++await new Promise((resolve, reject) => {
++  const timer = setTimeout(() => reject(new Error("vite preview が起動しない")), 20000);
++  server.stdout.on("data", (d) => {
++    if (String(d).includes(String(PORT))) {
++      clearTimeout(timer);
++      resolve();
++    }
++  });
++  server.on("exit", (code) => reject(new Error(`vite preview が終了した（${code}）`)));
++});
++
++const browser = await chromium.launch();
++try {
++  for (const [label, viewport, colorScheme] of [
++    ["desktop", { width: 1280, height: 900 }, "light"],
++    ["phone", { width: 390, height: 844 }, "light"],
++    ["phone-dark", { width: 390, height: 844 }, "dark"],
++  ]) {
++    const page = await browser.newPage({ viewport, colorScheme });
++    const outside = [];
++    page.on("request", (req) => {
++      if (!req.url().startsWith(ORIGIN)) outside.push(req.url());
++    });
++    const errors = [];
++    page.on("pageerror", (e) => errors.push(String(e)));
++    await page.goto(`${ORIGIN}/`);
++    await page.waitForSelector("#result .poem");
++
++    // 例の詩（q03 と同じ本文）の記号列が、スナップショットと一致する
++    const symbols = await page.$$eval("#result .line", (lines) =>
++      lines.map((l) => [...l.querySelectorAll(".ch .sym")].map((s) => s.textContent).join("")),
++    );
++    check(JSON.stringify(symbols) === JSON.stringify(snap("q03").symbols), `${label}: 例の詩の記号列がスナップショット q03 と一致`);
++
++    // 違反のある詩（q10）を入れると、明確な違反の件数がスナップショットと一致する
++    await page.fill("#poem-input", poem("q10").lines.join("\n"));
++    const violations = snap("q10").findings.filter((f) => f.startsWith("violation:")).length;
++    const shown = await page.$$eval("#result .findings.sev-violation li", (li) => li.length);
++    check(shown === violations, `${label}: q10 の明確な違反の件数（${shown}）がスナップショット（${violations}）と一致`);
++    if (shots) await page.screenshot({ path: `${shots}/${label}-q10.png`, fullPage: true });
++
++    // 入力の誤り（句読点）は位置つきで知らせる
++    await page.fill("#poem-input", poem("q03").lines.join("，\n"));
++    const inputErrors = await page.$$eval("#result .errors li", (li) => li.length);
++    check(inputErrors === 3, `${label}: 句読点3つを入力の誤りとして知らせる（${inputErrors}件）`);
++
++    // 横にはみ出さない
++    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    check(overflow <= 0, `${label}: 横にはみ出さない（はみ出し ${overflow}px）`);
++
++    check(outside.length === 0, `${label}: ページの外への通信がない${outside.length ? `（${outside.join(", ")}）` : ""}`);
++    check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
++    if (shots) {
++      await page.fill("#poem-input", poem("q03").lines.join("\n"));
++      await page.screenshot({ path: `${shots}/${label}-sample.png`, fullPage: true });
++    }
++    await page.close();
++  }
++} finally {
++  await browser.close();
++  server.kill();
++}
++
++if (failures.length > 0) {
++  console.error(`\n${failures.length}件の確認に失敗した`);
++  process.exit(1);
++}
++console.log("\n画面の確認がすべて通った");
++process.exit(0);
+diff --git a/apps/web/index.html b/apps/web/index.html
+new file mode 100644
+index 0000000..64eae68
+--- /dev/null
++++ b/apps/web/index.html
+@@ -0,0 +1,23 @@
++<!doctype html>
++<html lang="ja">
++  <head>
++    <meta charset="utf-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1" />
++    <title>七言絶句の作業台</title>
++    <meta name="description" content="七言絶句の平仄・押韻・禁則を、平水韻のデータで機械的に判定する作詩の作業台。" />
++    <link rel="stylesheet" href="./src/style.css" />
++  </head>
++  <body>
++    <header class="site">
++      <h1>七言絶句の作業台</h1>
++      <p class="lede">平仄・押韻・禁則を、平水韻のデータで機械的に判定します。詩の良し悪しは作者が決めます。</p>
++    </header>
++    <main id="app" aria-live="polite">
++      <p class="loading">データを読み込んでいます…</p>
++    </main>
++    <footer class="site">
++      <p>判定の根拠：平水韻（ウィキソース）、定型と規則（ウィキペディア「近体詩」）。出典とライセンスはリポジトリの DATA_SOURCES.md にあります。この画面は、最初にデータを読み込んだあとはどこにも通信しません。</p>
++    </footer>
++    <script type="module" src="./src/main.ts"></script>
++  </body>
++</html>
+diff --git a/apps/web/package.json b/apps/web/package.json
+new file mode 100644
+index 0000000..555f1e1
+--- /dev/null
++++ b/apps/web/package.json
+@@ -0,0 +1,17 @@
++{
++  "name": "@kanshi/web",
++  "version": "0.0.0",
++  "private": true,
++  "description": "七言絶句の作詩を支援する Web アプリ（エディタ）",
++  "license": "MIT",
++  "type": "module",
++  "scripts": {
++    "data": "node scripts/prepare-data.mjs",
++    "dev": "npm run data && vite",
++    "build": "npm run data && vite build",
++    "preview": "vite preview"
++  },
++  "dependencies": {
++    "@kanshi/engine": "*"
++  }
++}
+diff --git a/apps/web/scripts/prepare-data.mjs b/apps/web/scripts/prepare-data.mjs
+new file mode 100644
+index 0000000..4f599f2
+--- /dev/null
++++ b/apps/web/scripts/prepare-data.mjs
+@@ -0,0 +1,13 @@
++// 判定に要るデータを data/ から apps/web/public/data/ にコピーする（ビルドのたびに作り直す。リポジトリには入れない）。
++// 画面は初回にこれらの静的ファイルを取得するだけで、ほかに通信しない（CLAUDE.md §6.3）。
++import { cpSync, mkdirSync, rmSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++const root = fileURLToPath(new URL("../../../", import.meta.url));
++const out = fileURLToPath(new URL("../public/data/", import.meta.url));
++const FILES = ["chars.json", "variants.json", "kokuji.json", "forms.json", "rules.json", "rhymes.json"];
++
++rmSync(out, { recursive: true, force: true });
++mkdirSync(out, { recursive: true });
++for (const f of FILES) cpSync(`${root}data/${f}`, `${out}${f}`);
++console.log(`データを用意した（${FILES.length}ファイル）`);
+diff --git a/apps/web/src/data.ts b/apps/web/src/data.ts
+new file mode 100644
+index 0000000..0ffa553
+--- /dev/null
++++ b/apps/web/src/data.ts
+@@ -0,0 +1,20 @@
++// 判定に要るデータ（ビルド時に data/ から同梱した静的ファイル）を読み込む。ほかには通信しない（CLAUDE.md §6.3）。
++import type { EngineData } from "@kanshi/engine";
++
++const load = async <T>(name: string): Promise<T> => {
++  // ページの場所を基準にした相対パス（GitHub Pages のサブパスでも動く）
++  const res = await fetch(new URL(`data/${name}`, document.baseURI));
++  if (!res.ok) throw new Error(`${name} を読み込めませんでした（${res.status}）`);
++  return (await res.json()) as T;
++};
++
++export async function loadEngineData(): Promise<EngineData> {
++  const [chars, variants, kokuji, forms, rules] = await Promise.all([
++    load<EngineData["chars"]>("chars.json"),
++    load<EngineData["variants"]>("variants.json"),
++    load<EngineData["kokuji"]>("kokuji.json"),
++    load<EngineData["forms"]>("forms.json"),
++    load<EngineData["rules"]>("rules.json"),
++  ]);
++  return { chars, variants, kokuji, forms, rules };
++}
+diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
+new file mode 100644
+index 0000000..39a9dce
+--- /dev/null
++++ b/apps/web/src/main.ts
+@@ -0,0 +1,99 @@
++// 画面の起動。いまは misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
++import { analyze } from "@kanshi/engine";
++import type { EngineData, FormId, Options } from "@kanshi/engine";
++import { loadEngineData } from "./data";
++import { h, resultView } from "./render";
++import { buildView } from "./view";
++
++/** 最初に表示する例（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
++const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞新承寵", "簾外春寒賜錦袍"].join("\n");
++
++function pasteMode(data: EngineData): HTMLElement {
++  const input = h("textarea", {
++    id: "poem-input",
++    rows: "4",
++    spellcheck: "false",
++    autocomplete: "off",
++    "aria-describedby": "poem-help",
++  }) as HTMLTextAreaElement;
++  input.value = SAMPLE;
++
++  const formSelect = h(
++    "select",
++    { id: "form-select" },
++    h("option", { value: "" }, "自動で判定する"),
++    ...data.forms.forms.map((f) => h("option", { value: f.id }, `${f.name}に固定`)),
++  ) as HTMLSelectElement;
++  const unknownSelect = h(
++    "select",
++    { id: "unknown-select" },
++    h("option", { value: "" }, "平仄を問わない"),
++    h("option", { value: "平" }, "平として扱う"),
++    h("option", { value: "仄" }, "仄として扱う"),
++  ) as HTMLSelectElement;
++  const kokuji = h("input", { id: "allow-kokuji", type: "checkbox" }) as HTMLInputElement;
++  const pattern = h("input", { id: "show-pattern", type: "checkbox", checked: "" }) as HTMLInputElement;
++  const output = h("div", { id: "result" });
++
++  const update = () => {
++    const options: Options = {};
++    if (formSelect.value) options.form = formSelect.value as FormId;
++    if (unknownSelect.value) options.unknownAs = unknownSelect.value as "平" | "仄";
++    if (kokuji.checked) options.allowKokuji = true;
++    const view = buildView(analyze(input.value, data, options), data);
++    output.replaceChildren(resultView(view, pattern.checked));
++  };
++  for (const el of [input, formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("input", update);
++  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", update);
++  update();
++
++  const sample = h("button", { type: "button", class: "small" }, "例の詩を入れる");
++  sample.addEventListener("click", () => {
++    input.value = SAMPLE;
++    update();
++  });
++  const clear = h("button", { type: "button", class: "small" }, "消す");
++  clear.addEventListener("click", () => {
++    input.value = "";
++    update();
++    input.focus();
++  });
++
++  return h(
++    "section",
++    { class: "mode paste", "aria-labelledby": "paste-title" },
++    h(
++      "div",
++      { class: "entry" },
++      h("h2", { id: "paste-title" }, "貼り付けて判定する"),
++      h("label", { for: "poem-input" }, "詩の本文（1句1行、7字×4行）"),
++      input,
++      h("p", { id: "poem-help", class: "help" }, "未入力のマスは「＿」、繰り返しは「々」で書けます。句読点や空白は漢字以外の文字として位置つきで知らせます。"),
++      h("div", { class: "buttons" }, sample, clear),
++      h(
++        "fieldset",
++        { class: "options" },
++        h("legend", {}, "設定"),
++        h("label", { for: "form-select" }, "詩格"),
++        formSelect,
++        h("label", { for: "unknown-select" }, "平仄データにない字"),
++        unknownSelect,
++        h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
++        h("label", { class: "check" }, pattern, "平仄図式を表示する"),
++      ),
++    ),
++    output,
++  );
++}
++
++async function start() {
++  const app = document.getElementById("app")!;
++  try {
++    const data = await loadEngineData();
++    app.replaceChildren(pasteMode(data));
++  } catch (e) {
++    app.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
++  }
++}
++
++void start();
+diff --git a/apps/web/src/render.ts b/apps/web/src/render.ts
+new file mode 100644
+index 0000000..6666082
+--- /dev/null
++++ b/apps/web/src/render.ts
+@@ -0,0 +1,179 @@
++// 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
++import type { Severity } from "@kanshi/engine";
++import type { FindingView, PoemView, ReadingFindingView } from "./view";
++
++type Attrs = Record<string, string>;
++
++/** 要素を作る小さな道具。子は文字列（textContent）か要素 */
++export function h(tag: string, attrs: Attrs = {}, ...children: (Node | string | null | false)[]): HTMLElement {
++  const el = document.createElement(tag);
++  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
++  for (const c of children) if (c !== null && c !== false) el.append(c);
++  return el;
++}
++
++/** 色だけに頼らないための記号（CLAUDE.md §4.5） */
++export const SEVERITY_MARK: Record<Severity, string> = { ok: "", variant: "△", check: "！", violation: "✕" };
++export const SEVERITY_NAME: Record<Severity, string> = { ok: "問題なし", variant: "許容される変格", check: "要確認", violation: "明確な違反" };
++
++/** 句ごとに、字と、その下に misima 互換の記号列（と平仄図式）を並べる */
++export function poemTable(v: PoemView, showPattern: boolean): HTMLElement {
++  const rows = v.lines.map((line) => {
++    const chars = line.cells.map((c) =>
++      h(
++        "span",
++        {
++          class: `ch ${c.severity ? `sev-${c.severity}` : ""}`,
++          title: c.severity ? `${SEVERITY_NAME[c.severity]}（下の一覧を見てください）` : "",
++        },
++        h("span", { class: "glyph", lang: "zh-Hant" }, c.char),
++        h("span", { class: "sym", "aria-label": `記号 ${c.symbol}` }, c.symbol),
++        c.severity && c.severity !== "ok" ? h("span", { class: "mark", "aria-label": SEVERITY_NAME[c.severity] }, SEVERITY_MARK[c.severity]) : null,
++      ),
++    );
++    return h(
++      "div",
++      { class: "line" },
++      h("span", { class: "line-name" }, line.name),
++      h("span", { class: "chars" }, ...chars),
++      showPattern && line.pattern !== null
++        ? h("span", { class: "pattern", "aria-label": `平仄図式 ${line.pattern}` }, ...[...line.pattern].map((s) => h("span", { class: "pc", "aria-hidden": "true" }, s)))
++        : null,
++    );
++  });
++  return h("div", { class: "poem" }, ...rows);
++}
++
++function findingList(items: FindingView[], severity: Severity): HTMLElement {
++  return h(
++    "ul",
++    { class: `findings sev-${severity}` },
++    ...items.map((f) =>
++      h(
++        "li",
++        {},
++        h("span", { class: "mark", "aria-hidden": "true" }, SEVERITY_MARK[severity]),
++        h("span", { class: "rule" }, f.ruleName),
++        h("span", { class: "where" }, f.where),
++        h("span", { class: "msg" }, f.message),
++      ),
++    ),
++  );
++}
++
++/** 判定結果（詩格、記号列、指摘の一覧、作者が判断すること） */
++export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
++  const formLine = h(
++    "p",
++    { class: "form" },
++    "詩格：",
++    h("strong", {}, v.form.name ?? "未定"),
++    v.form.name !== null ? `（${v.form.auto ? "自動判定" : "固定"}）` : "",
++    v.form.note ? h("span", { class: "note" }, v.form.note) : null,
++  );
++  const legend = h(
++    "p",
++    { class: "legend" },
++    "記号：○平　●仄　◎平仄両方の読み　□平仄データにない　■国字　＿未入力",
++    showPattern ? "　／　平仄図式：○平　●仄　◐平仄を問わない　◎平声の押韻字" : "",
++  );
++
++  const sections: HTMLElement[] = [];
++  if (v.errors.length > 0) {
++    sections.push(h("section", { class: "errors" }, h("h3", {}, "入力の誤り"), h("ul", {}, ...v.errors.map((e) => h("li", {}, e)))));
++  }
++  sections.push(
++    h(
++      "section",
++      {},
++      h("h3", {}, `${SEVERITY_MARK.violation} 明確な違反`, h("span", { class: "count" }, `${v.violations.length}件`)),
++      v.violations.length > 0 ? findingList(v.violations, "violation") : h("p", { class: "none" }, "ありません。"),
++    ),
++  );
++
++  const judge: (HTMLElement | null)[] = [
++    h("p", { class: "explain" }, "機械は判定しません。意図した作りかどうか、作者が判断してください。"),
++    v.judgements.length > 0 ? findingList(v.judgements, "check") : null,
++  ];
++  if (v.readingChoices.length > 0) {
++    judge.push(
++      h("h4", {}, "読みが複数ある字"),
++      h("p", { class: "explain" }, "どの読みが正しいかは文脈で決まるので、機械は決めません。読みごとに、出る違反を示します。"),
++      v.independent ? h("p", { class: "note" }, "読みの組み合わせが多いため、字ごとに独立して評価しています。") : null,
++      ...v.readingChoices.map((c) =>
++        h(
++          "div",
++          { class: "choice" },
++          h("p", { class: "cell" }, c.cell),
++          h(
++            "ul",
++            {},
++            ...c.options.map((o) => {
++              const item = (f: ReadingFindingView) =>
++                h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`);
++              const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
++              return h(
++                "li",
++                {},
++                h("span", { class: "label" }, o.label),
++                nothingAdded
++                  ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
++                  : null,
++                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(item)) : null,
++                o.sometimes.length > 0
++                  ? h(
++                      "details",
++                      { class: "sometimes" },
++                      h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
++                      h("ul", {}, ...o.sometimes.map(item)),
++                    )
++                  : null,
++              );
++            }),
++          ),
++        ),
++      ),
++    );
++  }
++  if (v.formChoices.length > 0) {
++    judge.push(
++      h("h4", {}, "詩格の候補ごとの指摘"),
++      h("p", { class: "explain" }, "未入力のマスなどのため詩格が一つに決まりません。候補ごとに、その詩格でだけ出る指摘を示します。"),
++      ...v.formChoices.map((c) =>
++        h(
++          "div",
++          { class: "choice" },
++          h("p", { class: "cell" }, c.formName),
++          c.findings.length === 0
++            ? h("p", { class: "result" }, "この詩格で加わる指摘はありません")
++            : h(
++                "ul",
++                { class: "always" },
++                ...c.findings.map((f) =>
++                  h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`),
++                ),
++              ),
++        ),
++      ),
++    );
++  }
++  if (v.judgements.length === 0 && v.readingChoices.length === 0 && v.formChoices.length === 0) judge.push(h("p", { class: "none" }, "ありません。"));
++  sections.push(
++    h(
++      "section",
++      {},
++      h("h3", {}, `${SEVERITY_MARK.check} 作者が判断すること`, h("span", { class: "count" }, `${v.judgements.length + v.readingChoices.length + v.formChoices.length}件`)),
++      ...judge.filter((x): x is HTMLElement => x !== null),
++    ),
++  );
++  sections.push(
++    h(
++      "section",
++      {},
++      h("h3", {}, `${SEVERITY_MARK.variant} 許容される変格`, h("span", { class: "count" }, `${v.variants.length}件`)),
++      v.variants.length > 0 ? findingList(v.variants, "variant") : h("p", { class: "none" }, "ありません。"),
++    ),
++  );
++
++  return h("div", { class: "result" }, formLine, poemTable(v, showPattern), legend, ...sections);
++}
+diff --git a/apps/web/src/style.css b/apps/web/src/style.css
+new file mode 100644
+index 0000000..a36c4da
+--- /dev/null
++++ b/apps/web/src/style.css
+@@ -0,0 +1,428 @@
++/* 七言絶句の作業台：静かな紙面。墨・藍のアクセント。違反は朱、要確認は黄土、変格は緑青。色だけに頼らず記号を添える。
++   外部フォントは使わない（初回の静的ファイルの取得以外は通信しない。CLAUDE.md §6.3） */
++:root {
++  --paper: #f1f3f1;
++  --sheet: #fbfcfb;
++  --ink: #1d2326;
++  --muted: #5b666b;
++  --line: #d4dbd7;
++  --ai: #2b4a78;
++  --ai-soft: #e2e8f1;
++  --shu: #b0392b;
++  --shu-soft: #f6e2de;
++  --odo: #885900;
++  --odo-soft: #f5ead2;
++  --rokusho: #2c6d61;
++  --rokusho-soft: #dceee9;
++  --f-han: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif CJK JP", "Noto Serif JP", "Songti TC", serif;
++  --f-ui: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", sans-serif;
++  color-scheme: light;
++}
++@media (prefers-color-scheme: dark) {
++  :root {
++    --paper: #151a1c;
++    --sheet: #1c2225;
++    --ink: #e5e9e7;
++    --muted: #9ba6aa;
++    --line: #2f383b;
++    --ai: #91b1e4;
++    --ai-soft: #233149;
++    --shu: #ec8f82;
++    --shu-soft: #3d231f;
++    --odo: #e0b05a;
++    --odo-soft: #3a2e17;
++    --rokusho: #7fc9b8;
++    --rokusho-soft: #1d3632;
++    color-scheme: dark;
++  }
++}
++
++* {
++  box-sizing: border-box;
++}
++html {
++  -webkit-text-size-adjust: 100%;
++}
++body {
++  margin: 0;
++  background: var(--paper);
++  color: var(--ink);
++  font-family: var(--f-ui);
++  font-size: 15px;
++  line-height: 1.7;
++  padding-left: max(16px, env(safe-area-inset-left, 0px));
++  padding-right: max(16px, env(safe-area-inset-right, 0px));
++}
++header.site,
++main,
++footer.site {
++  max-width: 1080px;
++  margin: 0 auto;
++}
++header.site {
++  padding-block: 28px 8px;
++}
++h1 {
++  font-family: var(--f-han);
++  font-size: 1.8rem;
++  letter-spacing: 0.1em;
++  margin: 0;
++  text-wrap: balance;
++}
++.lede {
++  color: var(--muted);
++  margin: 4px 0 0;
++  max-width: 62ch;
++}
++footer.site {
++  color: var(--muted);
++  font-size: 0.8rem;
++  padding-block: 24px 40px;
++}
++.loading,
++.error {
++  color: var(--muted);
++}
++.error {
++  color: var(--shu);
++}
++
++/* 貼り付けモード：左に入力と設定、右に結果。狭い画面では縦に積む */
++.mode {
++  display: grid;
++  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
++  gap: 24px;
++  align-items: start;
++  padding-block: 16px;
++}
++@media (max-width: 760px) {
++  .mode {
++    grid-template-columns: minmax(0, 1fr);
++  }
++}
++.entry {
++  display: grid;
++  gap: 8px;
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  padding: 16px;
++  min-width: 0;
++}
++h2 {
++  font-size: 1rem;
++  margin: 0 0 4px;
++}
++label {
++  font-size: 0.85rem;
++  color: var(--muted);
++}
++textarea {
++  width: 100%;
++  font-family: var(--f-han);
++  font-size: 1.5rem;
++  line-height: 1.6;
++  letter-spacing: 0.18em;
++  padding: 8px 10px;
++  border: 1px solid var(--line);
++  border-radius: 8px;
++  background: var(--paper);
++  color: var(--ink);
++  resize: vertical;
++}
++select {
++  font: inherit;
++  padding: 4px 6px;
++  border: 1px solid var(--line);
++  border-radius: 6px;
++  background: var(--paper);
++  color: var(--ink);
++  max-width: 100%;
++}
++textarea:focus-visible,
++select:focus-visible,
++button:focus-visible,
++input:focus-visible {
++  outline: 2px solid var(--ai);
++  outline-offset: 2px;
++}
++.help {
++  font-size: 0.8rem;
++  color: var(--muted);
++  margin: 0;
++}
++.buttons {
++  display: flex;
++  gap: 8px;
++  flex-wrap: wrap;
++}
++button.small {
++  font: inherit;
++  font-size: 0.85rem;
++  padding: 3px 12px;
++  border: 1px solid var(--line);
++  border-radius: 999px;
++  background: transparent;
++  color: var(--ink);
++  cursor: pointer;
++}
++button.small:hover {
++  border-color: var(--ai);
++  color: var(--ai);
++}
++.options {
++  display: grid;
++  gap: 4px;
++  border: 0;
++  border-top: 1px solid var(--line);
++  padding: 12px 0 0;
++  margin: 4px 0 0;
++  min-width: 0;
++}
++.options legend {
++  font-size: 0.8rem;
++  color: var(--muted);
++  padding: 0;
++}
++.options label.check {
++  display: flex;
++  gap: 6px;
++  align-items: baseline;
++  color: var(--ink);
++}
++
++/* 結果 */
++.result {
++  display: grid;
++  gap: 16px;
++  min-width: 0;
++}
++.form {
++  margin: 0;
++}
++.form .note {
++  display: block;
++  color: var(--muted);
++  font-size: 0.85rem;
++}
++.poem {
++  display: grid;
++  gap: 10px;
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  padding: 16px;
++  overflow-x: auto;
++}
++.line {
++  display: grid;
++  grid-template-columns: 2.6em auto;
++  column-gap: 8px;
++  align-items: start;
++}
++.line-name {
++  color: var(--muted);
++  font-size: 0.85rem;
++  padding-top: 0.6em;
++}
++.chars {
++  display: flex;
++  gap: 2px;
++}
++.pattern {
++  grid-column: 2;
++  display: flex;
++  gap: 2px;
++  color: var(--ai);
++}
++.pattern .pc {
++  width: 2.4rem;
++  text-align: center;
++  font-size: 1rem;
++  line-height: 1.2;
++}
++.ch {
++  position: relative;
++  display: grid;
++  justify-items: center;
++  width: 2.4rem;
++  padding: 2px 0;
++  border-radius: 6px;
++  border: 1px solid transparent;
++}
++.ch .glyph {
++  font-family: var(--f-han);
++  font-size: 1.6rem;
++  line-height: 1.3;
++}
++.ch .sym {
++  font-size: 1rem;
++  line-height: 1.2;
++  color: var(--muted);
++}
++.ch .mark {
++  position: absolute;
++  top: -4px;
++  right: 0;
++  font-size: 0.7rem;
++  font-weight: 700;
++}
++.ch.sev-violation {
++  background: var(--shu-soft);
++  border-color: var(--shu);
++}
++.ch.sev-violation .mark {
++  color: var(--shu);
++}
++.ch.sev-check {
++  background: var(--odo-soft);
++  border-color: var(--odo);
++}
++.ch.sev-check .mark {
++  color: var(--odo);
++}
++.ch.sev-variant {
++  background: var(--rokusho-soft);
++}
++.ch.sev-variant .mark {
++  color: var(--rokusho);
++}
++.legend {
++  font-size: 0.8rem;
++  color: var(--muted);
++  margin: -8px 0 0;
++}
++.result section {
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  padding: 12px 16px;
++  min-width: 0;
++}
++h3 {
++  font-size: 1rem;
++  margin: 0 0 8px;
++  display: flex;
++  gap: 8px;
++  align-items: baseline;
++}
++h4 {
++  font-size: 0.9rem;
++  margin: 12px 0 4px;
++}
++.count {
++  color: var(--muted);
++  font-size: 0.8rem;
++  font-weight: 400;
++}
++.none,
++.explain {
++  margin: 0;
++  color: var(--muted);
++  font-size: 0.85rem;
++}
++.findings {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: grid;
++  gap: 6px;
++}
++.findings li {
++  display: grid;
++  grid-template-columns: 1.4em auto 1fr;
++  column-gap: 8px;
++  align-items: baseline;
++}
++.findings .mark {
++  font-weight: 700;
++}
++.findings.sev-violation .mark {
++  color: var(--shu);
++}
++.findings.sev-check .mark {
++  color: var(--odo);
++}
++.findings.sev-variant .mark {
++  color: var(--rokusho);
++}
++.findings .rule {
++  font-weight: 600;
++}
++.findings .where {
++  color: var(--muted);
++  font-size: 0.85rem;
++}
++.findings .msg {
++  grid-column: 2 / -1;
++  min-width: 0;
++}
++.choice {
++  border-top: 1px dashed var(--line);
++  padding-top: 8px;
++  margin-top: 8px;
++}
++.choice .cell {
++  margin: 0;
++  font-family: var(--f-han);
++}
++.choice ul {
++  margin: 4px 0 0;
++  padding-left: 1.2em;
++}
++.choice .label {
++  font-family: var(--f-han);
++  margin-right: 8px;
++}
++.choice > ul > li {
++  margin-top: 4px;
++}
++.choice .result.ok {
++  font-size: 0.85rem;
++  color: var(--rokusho);
++}
++.choice .always {
++  list-style: none;
++  margin: 2px 0 0;
++  padding: 0;
++  font-size: 0.85rem;
++}
++.choice .mark {
++  font-weight: 700;
++  margin-right: 6px;
++}
++.choice .mark.sev-violation {
++  color: var(--shu);
++}
++.choice .mark.sev-check {
++  color: var(--odo);
++}
++.choice .result {
++  font-size: 0.85rem;
++  color: var(--muted);
++}
++.choice .sometimes {
++  font-size: 0.85rem;
++  color: var(--muted);
++  margin-top: 2px;
++}
++.choice .sometimes summary {
++  cursor: pointer;
++}
++.choice .sometimes ul {
++  list-style: none;
++  margin: 2px 0 0;
++  padding-left: 1em;
++}
++.errors {
++  border-color: var(--shu) !important;
++}
++.errors ul {
++  margin: 0;
++  padding-left: 1.2em;
++}
++@media (prefers-reduced-motion: no-preference) {
++  .ch {
++    transition: background-color 0.15s;
++  }
++}
+diff --git a/apps/web/src/view.ts b/apps/web/src/view.ts
+new file mode 100644
+index 0000000..995b324
+--- /dev/null
++++ b/apps/web/src/view.ts
+@@ -0,0 +1,177 @@
++// エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
++import type { Analysis, CharStatus, EngineData, Finding, Reading, Severity } from "@kanshi/engine";
++
++const LINE_NAMES = ["起句", "承句", "転句", "結句"];
++export const lineName = (l: number) => LINE_NAMES[l] ?? `第${l + 1}句`;
++
++const RANK: Record<Severity, number> = { ok: 0, variant: 1, check: 2, violation: 3 };
++
++export type CellView = {
++  char: string;
++  /** misima 互換の記号（○●◎□■＿×） */
++  symbol: string;
++  status: CharStatus;
++  /** このマスに出ている指摘のうち一番重いもの（全解釈に共通する指摘から） */
++  severity: Severity | null;
++};
++
++export type LineView = {
++  name: string;
++  cells: CellView[];
++  /** 平仄図式（○●◐◎）。詩格が決まらないときは null */
++  pattern: string | null;
++};
++
++export type FindingView = {
++  rule: string;
++  ruleName: string;
++  severity: Severity;
++  /** 「起句の2字目・4字目」「詩全体」など */
++  where: string;
++  message: string;
++};
++
++/** 読みによって出る指摘（違反と要確認） */
++export type ReadingFindingView = { severity: "violation" | "check"; ruleName: string; message: string };
++
++export type ReadingOptionView = {
++  /** 「平・上平二冬」「去・去声四寘【詞】」「平・上平一東（豔として）」 */
++  label: string;
++  /** この読みを選ぶと、ほかの字の読みにかかわらず出る指摘（どの読みでも出る指摘は除く） */
++  always: ReadingFindingView[];
++  /** この読みを選ぶと、ほかの字の読みによっては出る指摘（どの読みでも出る指摘は除く） */
++  sometimes: ReadingFindingView[];
++  /** この読みなら、どの読みでも出る違反も含めて、違反が一つもない */
++  clean: boolean;
++};
++
++export type ReadingChoiceView = {
++  /** 「起句の1字目「娉」」 */
++  cell: string;
++  options: ReadingOptionView[];
++};
++
++/** 詩格が一つに決まらない（起句の末字が未入力など）ときの、詩格の候補ごとに出る指摘 */
++export type FormChoiceView = {
++  formName: string;
++  /** その詩格の解釈に出て、全体の一覧（どの解釈にも出る指摘）にはない指摘 */
++  findings: ReadingFindingView[];
++};
++
++export type PoemView = {
++  form: { name: string | null; auto: boolean; note?: string };
++  lines: LineView[];
++  violations: FindingView[];
++  variants: FindingView[];
++  /** 機械は判定しない、作者が判断すること（要確認の指摘） */
++  judgements: FindingView[];
++  /** 読みが複数ある字の、読みごとの結果（読みが一つに決まる詩では空） */
++  readingChoices: ReadingChoiceView[];
++  /** 詩格の候補ごとの結果（詩格が一つに決まる詩では空） */
++  formChoices: FormChoiceView[];
++  /** 組み合わせが多すぎて、位置ごとに独立して評価した */
++  independent: boolean;
++  /** 入力エラー（漢字以外の文字など） */
++  errors: string[];
++};
++
++const where = (f: Finding) => (f.line < 0 ? "詩全体" : `${lineName(f.line)}の${f.positions.map((p) => `${p + 1}字目`).join("・")}`);
++
++export const readingLabel = (r: Reading) =>
++  `${r.tone}・${r.rhyme}${r.note ?? ""}${r.via !== undefined ? `（${r.via}として）` : ""}`;
++
++const toFindingView = (data: EngineData) => (f: Finding): FindingView => ({
++  rule: f.rule,
++  ruleName: data.rules.rules[f.rule]?.name ?? f.rule,
++  severity: f.severity,
++  where: where(f),
++  message: f.message,
++});
++
++/**
++ * 読みが複数ある字ごとに、読みを選んだ解釈に出る指摘（違反と要確認）を「必ず出る」「組み合わせによって出る」に分ける。
++ * どの読みでも出る指摘（全体の一覧にあるもの）は除く。
++ */
++function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
++  if (a.interpretations.length < 2) return [];
++  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
++  const common = new Set(a.findings.map(key));
++  const hasCommonViolation = a.findings.some((f) => f.severity === "violation");
++  const rows = a.interpretations.map((i) => ({
++    readings: i.readings,
++    findings: [
++      ...new Map(
++        i.findings
++          .filter((f) => (f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
++          .map((f): [string, ReadingFindingView] => [
++            key(f),
++            { severity: f.severity as "violation" | "check", ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message },
++          ]),
++      ).entries(),
++    ],
++  }));
++  const positions = [...new Set(a.interpretations.flatMap((i) => Object.keys(i.readings).map(Number)))].sort((x, y) => x - y);
++  return positions.map((n) => {
++    const l = Math.floor(n / 7);
++    const p = n % 7;
++    const labels = [...new Set(rows.flatMap((r) => (r.readings[n] ? [readingLabel(r.readings[n]!)] : [])))];
++    return {
++      cell: `${lineName(l)}の${p + 1}字目「${a.chars[l]![p]!.char}」`,
++      options: labels.map((label) => {
++        const sets = rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings);
++        const alwaysKeys = sets.length === 0 ? [] : sets[0]!.map(([k]) => k).filter((k) => sets.every((s) => s.some(([x]) => x === k)));
++        const all = new Map(sets.flat());
++        const always = alwaysKeys.map((k) => all.get(k)!);
++        const sometimes = [...all].filter(([k]) => !alwaysKeys.includes(k)).map(([, f]) => f);
++        const clean = !hasCommonViolation && always.every((f) => f.severity !== "violation") && sometimes.every((f) => f.severity !== "violation");
++        return { label, always, sometimes, clean };
++      }),
++    };
++  });
++}
++
++/** 詩格の候補ごとに、その詩格の解釈に出て、どの解釈にも出るわけではない指摘を集める */
++function formChoices(a: Analysis, data: EngineData): FormChoiceView[] {
++  const ids = [...new Set(a.interpretations.map((i) => i.form.id))];
++  if (ids.length < 2) return [];
++  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
++  const common = new Set(a.findings.map(key));
++  return ids.map((id) => {
++    const found = new Map<string, ReadingFindingView>();
++    for (const i of a.interpretations.filter((x) => x.form.id === id))
++      for (const f of i.findings)
++        if ((f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
++          found.set(key(f), { severity: f.severity, ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message });
++    return { formName: data.forms.forms.find((f) => f.id === id)?.name ?? "未定", findings: [...found.values()] };
++  });
++}
++
++export function buildView(a: Analysis, data: EngineData): PoemView {
++  const form = a.form.id === null ? null : (data.forms.forms.find((f) => f.id === a.form.id) ?? null);
++  const severityAt = (l: number, p: number): Severity | null => {
++    let best: Severity | null = null;
++    for (const f of a.findings) {
++      if (f.line !== l || !f.positions.includes(p) || f.severity === "ok") continue;
++      if (best === null || RANK[f.severity] > RANK[best]) best = f.severity;
++    }
++    return best;
++  };
++  const lines: LineView[] = a.chars.map((row, l) => ({
++    name: lineName(l),
++    cells: row.map((c, p) => ({ char: c.input ?? c.char, symbol: a.symbols[l]![p] ?? "", status: c.status, severity: severityAt(l, p) })),
++    pattern: form?.lines[l]?.pattern ?? null,
++  }));
++  const view = toFindingView(data);
++  const by = (s: Severity) => a.findings.filter((f) => f.severity === s).map(view);
++  return {
++    form: { name: form?.name ?? null, auto: a.form.auto, ...(a.form.note !== undefined ? { note: a.form.note } : {}) },
++    lines,
++    violations: by("violation"),
++    variants: by("variant"),
++    judgements: by("check"),
++    readingChoices: readingChoices(a, data),
++    formChoices: formChoices(a, data),
++    independent: a.independent,
++    errors: a.errors.map((e) => e.message),
++  };
++}
+diff --git a/apps/web/test/view.test.ts b/apps/web/test/view.test.ts
+new file mode 100644
+index 0000000..aef5972
+--- /dev/null
++++ b/apps/web/test/view.test.ts
+@@ -0,0 +1,116 @@
++// 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
++import { describe, expect, it } from "vitest";
++import { analyze } from "@kanshi/engine";
++import { buildView } from "../src/view";
++import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
++
++const HN = baseLines("heiki-nyuin");
++// HN = ○○●●●○◎ / ●●○○●●◎ / ●●○○○●● / ○○●●●○◎
++const view = (lines: string[]) => buildView(analyze(build(...lines), fixtureData), fixtureData);
++
++describe("buildView", () => {
++  it("律句どおりの詩：詩格の名前、句ごとの記号と平仄図式、指摘なし", () => {
++    const v = view(HN);
++    expect(v.form).toEqual({ name: "平起式・首句入韻", auto: true });
++    expect(v.lines.map((l) => l.name)).toEqual(["起句", "承句", "転句", "結句"]);
++    expect(v.lines.map((l) => l.cells.map((c) => c.symbol).join(""))).toEqual(HN.map((l) => l.replaceAll("◎", "○")));
++    expect(v.lines.map((l) => l.pattern)).toEqual(form("heiki-nyuin").lines.map((l) => l.pattern));
++    expect([v.violations, v.variants, v.judgements, v.readingChoices, v.errors]).toEqual([[], [], [], [], []]);
++  });
++
++  it("指摘を重みごとに分け、規則名と場所を日本語で付ける", () => {
++    const v = view(replaceAt(HN, 0, 3, "○")); // 起句4字目を平に
++    expect(v.violations.map((f) => [f.ruleName, f.where])).toEqual([
++      ["定型との不一致", "起句の4字目"],
++      ["二四不同", "起句の2字目・4字目"],
++      ["孤平", "起句の4字目"],
++    ]);
++  });
++
++  it("マスの重みは、そのマスに出ている指摘のうち一番重いもの", () => {
++    const v = view(replaceAt(replaceAt(HN, 0, 3, "○"), 0, 0, "●"));
++    const sev = v.lines[0]!.cells.map((c) => c.severity);
++    expect(sev[0]).toBe("variant"); // 一三五不論の揺れ
++    expect(sev[1]).toBe("violation"); // 二四不同
++    expect(sev[3]).toBe("violation");
++    expect(sev[2]).toBeNull();
++  });
++
++  it("要確認は「作者が判断すること」に入る（詩全体の指摘は「詩全体」）", () => {
++    const v = view(replaceAt(HN, 2, 1, "○")); // 転句2字目：粘法の違反と拗体の可能性
++    expect(v.judgements.map((f) => [f.ruleName, f.where])).toEqual([["拗体・不粘の可能性", "詩全体"]]);
++  });
++
++  it("国字の字はそのまま表示し、記号は■", () => {
++    const v = view(replaceAt(HN, 2, 0, KOKUJI));
++    expect(v.lines[2]!.cells[0]).toEqual({ char: KOKUJI, symbol: "■", status: "kokuji", severity: "violation" });
++  });
++
++  it("データにない字は記号□で、作者が判断することに入る", () => {
++    const v = view(replaceAt(HN, 2, 0, UNKNOWN));
++    expect(v.lines[2]!.cells[0]).toEqual({ char: UNKNOWN, symbol: "□", status: "unknown", severity: "check" });
++    expect(v.judgements.map((f) => [f.ruleName, f.where])).toEqual([["平仄データにない字", "転句の1字目"]]);
++  });
++
++  it("起句の末字が未入力で詩格が分かれるときは、詩格ごとに出る指摘を示す", () => {
++    // 起句5字目を平に、末字を未入力に。入韻型では5字目が●（定型と不一致）、不入韻型では◐
++    const v = view(replaceAt(replaceAt(HN, 0, 4, "○"), 0, 6, "＿"));
++    expect(v.readingChoices).toEqual([]);
++    const byForm = Object.fromEntries(v.formChoices.map((c) => [c.formName, c.findings.map((f) => f.ruleName)]));
++    expect(byForm["平起式・首句入韻"]).toContain("定型との不一致");
++    expect(byForm["平起式・首句不入韻"]).not.toContain("定型との不一致");
++  });
++
++  it("詩格が一つに決まる詩では、詩格ごとの欄は空", () => {
++    expect(view(HN).formChoices).toEqual([]);
++  });
++
++  it("「々」は入力どおりに表示する", () => {
++    const text = build(...HN).split("\n");
++    text[0] = [...text[0]!].map((c, i) => (i === 1 ? "々" : c)).join("");
++    const v = buildView(analyze(text.join("\n"), fixtureData), fixtureData);
++    expect(v.lines[0]!.cells[1]!.char).toBe("々");
++  });
++
++  it("両韻字は、読みごとに出る違反を示す", () => {
++    const v = view(replaceAt(HN, 0, 3, RYO[0]!)); // 起句4字目（定型は●）
++    expect(v.readingChoices).toHaveLength(1);
++    const [choice] = v.readingChoices;
++    expect(choice!.cell).toBe(`起句の4字目「${RYO[0]}」`);
++    const byLabel = Object.fromEntries(choice!.options.map((o) => [o.label, o.always.map((f) => f.severity)]));
++    expect(byLabel).toEqual({ "平・上平二冬": ["violation", "violation", "violation"], "去・去声二宋": [] });
++    expect(choice!.options.map((o) => o.clean)).toEqual([false, true]);
++    expect(v.violations).toEqual([]); // 読みによる違反は、確定の違反には入れない
++  });
++
++  it("どの読みでも出る違反があれば、読みで加わる違反がなくても clean にしない", () => {
++    // 両韻字に加えて、別の位置に国字（どの読みでも違反）
++    const v = view(replaceAt(replaceAt(HN, 0, 3, RYO[0]!), 2, 0, KOKUJI));
++    expect(v.violations.map((f) => f.rule)).toEqual(["koku-ji"]);
++    const zi = v.readingChoices[0]!.options.find((o) => o.label === "去・去声二宋")!;
++    expect([zi.always, zi.sometimes, zi.clean]).toEqual([[], [], false]);
++  });
++
++  it("一部の読みでだけ出る要確認も、読みごとの結果に出す", () => {
++    // 起句末を、押韻で韻目 A と B の読みを持つ字にする（B なら孤雁入群格の可能性）
++    const v = view(replaceAt(HN, 0, 6, RHY2));
++    const options = v.readingChoices[0]!.options;
++    const kogan = options.flatMap((o) => o.always).filter((f) => f.ruleName === "孤雁入群格の可能性");
++    expect(kogan).toHaveLength(1);
++    expect(kogan[0]!.severity).toBe("check");
++  });
++
++  it("入力エラーを文で返す", () => {
++    const lines = [...HN];
++    lines[0] = lines[0]!.slice(0, 6) + "・";
++    expect(view(lines).errors).toEqual([expect.stringContaining("漢字ではありません")]);
++  });
++
++  it("詩格が決まらないときは、名前と平仄図式は null", () => {
++    let lines = HN;
++    for (let i = 0; i < 4; i++) lines = replaceAt(lines, i, 1, "＿");
++    const v = view(lines);
++    expect(v.form.name).toBeNull();
++    expect(v.lines.every((l) => l.pattern === null)).toBe(true);
++  });
++});
+diff --git a/apps/web/vite.config.ts b/apps/web/vite.config.ts
+new file mode 100644
+index 0000000..23b40ed
+--- /dev/null
++++ b/apps/web/vite.config.ts
+@@ -0,0 +1,9 @@
++import { defineConfig } from "vite";
++
++// GitHub Pages のサブパスに置けるよう、パスは相対にする（CLAUDE.md §3）
++export default defineConfig({
++  base: "./",
++  build: { outDir: "dist", emptyOutDir: true },
++  server: { port: 5173 },
++  preview: { port: 4173 },
++});
+diff --git a/package.json b/package.json
+index cdb9cf8..9a56dd2 100644
+--- a/package.json
++++ b/package.json
+@@ -24,10 +24,14 @@
+     "golden:update": "GOLDEN_UPDATE=1 vitest run golden",
+     "corpus:fetch": "python3 scripts/fetch_corpus.py",
+     "phrases:build": "python3 scripts/build_phrases.py",
+-    "placements:update": "PLACEMENTS_UPDATE=1 vitest run scripts/placements-report.test.ts"
++    "placements:update": "PLACEMENTS_UPDATE=1 vitest run scripts/placements-report.test.ts",
++    "web:dev": "npm run dev -w @kanshi/web",
++    "web:build": "npm run build -w @kanshi/web",
++    "web:e2e": "npm run build -w @kanshi/web && node apps/web/e2e/smoke.mjs"
+   },
+   "devDependencies": {
+     "@types/node": "^26.6.6",
++    "playwright": "^1.63.0",
+     "typescript": "^7.0.2",
+     "vitest": "^5.0.5"
+   }
+diff --git a/tsconfig.json b/tsconfig.json
+index dae7921..28c389b 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -20,6 +20,8 @@
+     "packages/*/src",
+     "packages/*/test",
+     "apps/*/src",
++    "apps/*/test",
++    "apps/*/vite.config.ts",
+     "scripts/**/*.ts",
+     "golden/**/*.ts",
+     "vitest.config.ts"
+diff --git a/vitest.config.ts b/vitest.config.ts
+index e7259b9..dbf5e46 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -5,6 +5,7 @@ export default defineConfig({
+   test: {
+     include: [
+       "packages/*/test/**/*.test.ts",
++      "apps/*/test/**/*.test.ts",
+       "scripts/**/*.test.ts",
+       "golden/**/*.test.ts",
+     ],

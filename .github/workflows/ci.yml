@@ -27,3 +27,6 @@ jobs:
           key: corpus-${{ hashFiles('data/corpus.json') }}
       - run: python3 scripts/fetch_corpus.py
       - run: npm test
+      # 画面の確認（ビルドした画面を Chromium で開く。CLAUDE.md §6.3）
+      - run: npx playwright install --with-deps chromium
+      - run: npm run web:e2e

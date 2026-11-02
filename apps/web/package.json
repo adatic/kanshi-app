@@ -1,0 +1,17 @@
+{
+  "name": "@kanshi/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "七言絶句の作詩を支援する Web アプリ（エディタ）",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/prepare-data.mjs",
+    "dev": "npm run data && vite",
+    "build": "npm run data && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@kanshi/engine": "*"
+  }
+}

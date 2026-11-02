@@ -5,3 +5,5 @@ coverage/
 .DS_Store
 __pycache__/
 .cache/
+apps/web/public/data/
+apps/web/dist/

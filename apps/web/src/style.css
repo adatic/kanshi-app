@@ -1,0 +1,428 @@
+/* 七言絶句の作業台：静かな紙面。墨・藍のアクセント。違反は朱、要確認は黄土、変格は緑青。色だけに頼らず記号を添える。
+   外部フォントは使わない（初回の静的ファイルの取得以外は通信しない。CLAUDE.md §6.3） */
+:root {
+  --paper: #f1f3f1;
+  --sheet: #fbfcfb;
+  --ink: #1d2326;
+  --muted: #5b666b;
+  --line: #d4dbd7;
+  --ai: #2b4a78;
+  --ai-soft: #e2e8f1;
+  --shu: #b0392b;
+  --shu-soft: #f6e2de;
+  --odo: #885900;
+  --odo-soft: #f5ead2;
+  --rokusho: #2c6d61;
+  --rokusho-soft: #dceee9;
+  --f-han: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif CJK JP", "Noto Serif JP", "Songti TC", serif;
+  --f-ui: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #151a1c;
+    --sheet: #1c2225;
+    --ink: #e5e9e7;
+    --muted: #9ba6aa;
+    --line: #2f383b;
+    --ai: #91b1e4;
+    --ai-soft: #233149;
+    --shu: #ec8f82;
+    --shu-soft: #3d231f;
+    --odo: #e0b05a;
+    --odo-soft: #3a2e17;
+    --rokusho: #7fc9b8;
+    --rokusho-soft: #1d3632;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-ui);
+  font-size: 15px;
+  line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.site,
+main,
+footer.site {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+header.site {
+  padding-block: 28px 8px;
+}
+h1 {
+  font-family: var(--f-han);
+  font-size: 1.8rem;
+  letter-spacing: 0.1em;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede {
+  color: var(--muted);
+  margin: 4px 0 0;
+  max-width: 62ch;
+}
+footer.site {
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding-block: 24px 40px;
+}
+.loading,
+.error {
+  color: var(--muted);
+}
+.error {
+  color: var(--shu);
+}
+
+/* 貼り付けモード：左に入力と設定、右に結果。狭い画面では縦に積む */
+.mode {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  padding-block: 16px;
+}
+@media (max-width: 760px) {
+  .mode {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.entry {
+  display: grid;
+  gap: 8px;
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 0;
+}
+h2 {
+  font-size: 1rem;
+  margin: 0 0 4px;
+}
+label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+textarea {
+  width: 100%;
+  font-family: var(--f-han);
+  font-size: 1.5rem;
+  line-height: 1.6;
+  letter-spacing: 0.18em;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  resize: vertical;
+}
+select {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  max-width: 100%;
+}
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--ai);
+  outline-offset: 2px;
+}
+.help {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+.buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+button.small {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+button.small:hover {
+  border-color: var(--ai);
+  color: var(--ai);
+}
+.options {
+  display: grid;
+  gap: 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 12px 0 0;
+  margin: 4px 0 0;
+  min-width: 0;
+}
+.options legend {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0;
+}
+.options label.check {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--ink);
+}
+
+/* 結果 */
+.result {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.form {
+  margin: 0;
+}
+.form .note {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.poem {
+  display: grid;
+  gap: 10px;
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.line {
+  display: grid;
+  grid-template-columns: 2.6em auto;
+  column-gap: 8px;
+  align-items: start;
+}
+.line-name {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-top: 0.6em;
+}
+.chars {
+  display: flex;
+  gap: 2px;
+}
+.pattern {
+  grid-column: 2;
+  display: flex;
+  gap: 2px;
+  color: var(--ai);
+}
+.pattern .pc {
+  width: 2.4rem;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.ch {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: 2.4rem;
+  padding: 2px 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.ch .glyph {
+  font-family: var(--f-han);
+  font-size: 1.6rem;
+  line-height: 1.3;
+}
+.ch .sym {
+  font-size: 1rem;
+  line-height: 1.2;
+  color: var(--muted);
+}
+.ch .mark {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.ch.sev-violation {
+  background: var(--shu-soft);
+  border-color: var(--shu);
+}
+.ch.sev-violation .mark {
+  color: var(--shu);
+}
+.ch.sev-check {
+  background: var(--odo-soft);
+  border-color: var(--odo);
+}
+.ch.sev-check .mark {
+  color: var(--odo);
+}
+.ch.sev-variant {
+  background: var(--rokusho-soft);
+}
+.ch.sev-variant .mark {
+  color: var(--rokusho);
+}
+.legend {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: -8px 0 0;
+}
+.result section {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+h3 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+h4 {
+  font-size: 0.9rem;
+  margin: 12px 0 4px;
+}
+.count {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+.none,
+.explain {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.findings li {
+  display: grid;
+  grid-template-columns: 1.4em auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+}
+.findings .mark {
+  font-weight: 700;
+}
+.findings.sev-violation .mark {
+  color: var(--shu);
+}
+.findings.sev-check .mark {
+  color: var(--odo);
+}
+.findings.sev-variant .mark {
+  color: var(--rokusho);
+}
+.findings .rule {
+  font-weight: 600;
+}
+.findings .where {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.findings .msg {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+.choice {
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.choice .cell {
+  margin: 0;
+  font-family: var(--f-han);
+}
+.choice ul {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+}
+.choice .label {
+  font-family: var(--f-han);
+  margin-right: 8px;
+}
+.choice > ul > li {
+  margin-top: 4px;
+}
+.choice .result.ok {
+  font-size: 0.85rem;
+  color: var(--rokusho);
+}
+.choice .always {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.choice .mark {
+  font-weight: 700;
+  margin-right: 6px;
+}
+.choice .mark.sev-violation {
+  color: var(--shu);
+}
+.choice .mark.sev-check {
+  color: var(--odo);
+}
+.choice .result {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.choice .sometimes {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.choice .sometimes summary {
+  cursor: pointer;
+}
+.choice .sometimes ul {
+  list-style: none;
+  margin: 2px 0 0;
+  padding-left: 1em;
+}
+.errors {
+  border-color: var(--shu) !important;
+}
+.errors ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ch {
+    transition: background-color 0.15s;
+  }
+}
