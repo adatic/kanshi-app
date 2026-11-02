@@ -16,8 +16,11 @@
     "test": "npm run typecheck && npm run data:unit && npm run data:verify && vitest run",
     "data:fetch": "python3 scripts/fetch_sources.py",
     "data:build": "python3 scripts/build_data.py",
-    "data:verify": "python3 scripts/build_data.py --check",
-    "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\""
+    "data:verify": "python3 scripts/build_data.py --check && python3 scripts/build_golden_input.py --check",
+    "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\"",
+    "golden:find": "python3 scripts/find_golden_sources.py",
+    "golden:fetch": "python3 scripts/fetch_golden_sources.py",
+    "golden:input": "python3 scripts/build_golden_input.py"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
