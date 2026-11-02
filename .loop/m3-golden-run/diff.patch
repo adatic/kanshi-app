@@ -1,0 +1,796 @@
+diff --git a/TASKS.md b/TASKS.md
+index 45ea8ee..f10cbba 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,17 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m3-golden-run — ゴールデンテストの実行・分類・スナップショット（M3）
++
++ブランチ: `task/m3-golden-run`
++
++完了条件:
++- [ ] `golden/input.json` の対象51首をエンジンに通し、結果を `data/reports/golden.md`（詩ごとの判定、違反・要確認の内訳）に出す
++- [ ] 判定結果のスナップショット `golden/snapshot.json` を保存し、`npm test` で結果がスナップショットと一致することを確かめる。更新は明示的なコマンドだけで行い、差分が出たら理由を説明する（一括更新は人間の承認が要る、CLAUDE.md §0）
++- [ ] 「明確な違反」が出た詩を全件分類する：データの誤りはデータを直し、ロジックの誤りはエンジンを直し、規則外として正当なものは理由をつけて `golden/exceptions.json` に記録する
++- [ ] 分類されていない違反判定がゼロであることを `npm test` で確かめる（例外の記録が実際の違反と過不足なく一致する）
++- [ ] 分類に自信がない詩（規則外として正当とする判断を含む）を `golden/needs-review.md` に集め、根拠（平仄データの読み、本文の版の違い）を添える
++- [ ] 平仄の判断を記憶で行わない。根拠は平水韻データ・本文の版・名詩の実例だけ（CLAUDE.md §0）
+ 
+ ## 完了
+ 
+diff --git a/data/reports/golden.md b/data/reports/golden.md
+new file mode 100644
+index 0000000..fa621e1
+--- /dev/null
++++ b/data/reports/golden.md
+@@ -0,0 +1,212 @@
++# ゴールデンテストの結果
++
++`golden/golden.test.ts` が生成する（`npm run golden:update`）。手で編集しない。
++
++- 対象：唐詩三百首の七言絶句51首（本文は `golden/input.json`。出典は DATA_SOURCES.md の 6）
++- 判定の重みは `data/rules.json` の既定値。読みが複数ある字は、全解釈に共通する指摘だけを「判定」に数える
++
++## 概要
++
++| 項目 | 件数 |
++|---|---|
++| 対象の詩 | 51首 |
++| 明確な違反なし（参考。目標ではない） | 47首 |
++| 明確な違反あり | 4首（すべて分類済み：規則外の候補（拗体）／規則外の候補（不粘）／規則外の候補（通韻）、または平仄データの不足） |
++| 人間の確認を求める詩（golden/needs-review.md） | 4首 |
++
++### 指摘の内訳（全解釈に共通するもの）
++
++| 重み・規則 | 件数 |
++|---|---|
++| 変格・ichisango-furon | 133 |
++| 要確認・douji | 47 |
++| 要確認・unknown-char | 18 |
++| 違反・pattern | 17 |
++| 要確認・supplement-reading | 16 |
++| 要確認・bou-in | 11 |
++| 変格・hasami-hei | 5 |
++| 要確認・youtai | 3 |
++| 違反・hanpo-nenpo | 3 |
++| 違反・niroku-tsui | 1 |
++| 違反・nishi-fudo | 1 |
++| 違反・rhyme-group | 1 |
++
++## 詩ごとの判定
++
++| ID | 題 | 作者 | 詩格 | 記号列 | 違反 | 要確認 | 変格 | 違反の分類 |
++|---|---|---|---|---|---|---|---|---|
++| q01 | 芙蓉樓送辛漸 | 王昌齡 | sokki-nyuin | ○●○○●●○／○○●●●○○／●○◎●◎◎●／●●○○●●○ | 0 | 0 | 2 | — |
++| q02 | 閨怨 | 王昌齡 | heiki-nyuin | ○◎●●◎○○／○●◎○●●○／●●●○○●●／●◎○□●◎○ | 0 | 3 | 0 | — |
++| q03 | 春宮曲 | 王昌齡 | sokki-nyuin | ●●○○●●○／●○○●●○○／○○○●○○●／○●○○●●○ | 0 | 0 | 4 | — |
++| q04 | 九月九日憶山東兄弟 | 王維 | sokki-funyuin | ●●●◎□●●／●○○●●◎◎／○○○●○○●／□●○○●●○ | 0 | 4 | 4 | — |
++| q05 | 涼州詞 | 王翰 | heiki-nyuin | □○●●●○○／●●○○●●○／●●○○○●●／●○◎●◎○◎ | 0 | 3 | 1 | — |
++| q06 | 後宮詞 | 白居易 | sokki-nyuin | ●●○○◎◎○／●◎○●●○○／○○●●○◎●／○●○◎●●○ | 0 | 1 | 3 | — |
++| q07 | 宮中詞 | 朱慶餘 | sokki-nyuin | ●●○○●●○／●○◎◎●○○／○○●●○◎●／○●○○◎●○ | 0 | 1 | 2 | — |
++| q08 | 近試上張水部 | 朱慶餘 | heiki-funyuin | ●○●●○○●／●●○○●●○／○◎○○●○□／●○◎●●○○ | 0 | 2 | 4 | — |
++| q09 | 逢入京使 | 岑參 | heiki-nyuin | ●○○◎●◎◎／○●◎○●◎○／●●◎○○●●／○○◎●●○○ | 0 | 1 | 3 | — |
++| q10 | 黃鶴樓送孟浩然之廣陵 | 李白 | heiki-nyuin | ●○○○○●○／○○◎●●○○／○◎●●●○●／◎●◎○○●○ | 14 | 1 | 6 | 規則外の候補（拗体） |
++| q11 | 早發白帝城 | 李白 | heiki-nyuin | ○○●●●○◎／○●○○●●○／●●□○□◎●／◎○●◎●◎○ | 0 | 2 | 1 | — |
++| q12 | 夜上受降城聞笛 | 李益 | sokki-funyuin | ◎●○○○●●／●◎○●●◎○／◎○○●◎○●／●●◎○●◎◎ | 0 | 0 | 3 | — |
++| q13 | 賈生 | 李商隱 | sokki-nyuin | ○●○○●●○／●○○◎◎○○／●○●●○○●／◎●◎○●●○ | 0 | 3 | 4 | — |
++| q14 | 隋宮 | 李商隱 | heiki-nyuin | ◎◎○○◎●○／●◎○●●○○／○○●●◎○●／●●◎◎●●◎ | 0 | 3 | 0 | — |
++| q15 | 瑤池 | 李商隱 | heiki-nyuin | ○○○◎●○○／○●○○●●○／●●●◎◎●●／●◎○●◎◎○ | 0 | 0 | 5 | — |
++| q16 | 嫦娥 | 李商隱 | heiki-nyuin | ○◎◎○●●◎／◎○◎●●○◎／○○◎●○○●／●●○○●●○ | 0 | 1 | 0 | — |
++| q17 | 夜雨寄北 | 李商隱 | sokki-nyuin | ○●○○●●○／○○●●◎○○／○◎◎●○○●／●●○○●●○ | 0 | 12 | 1 | — |
++| q18 | 寄令狐郎中 | 李商隱 | heiki-nyuin | ○○○●●◎○／○●○○●●○／○●○○●○●／●○○●●◎◎ | 0 | 1 | 6 | — |
++| q19 | 爲有 | 李商隱 | sokki-nyuin | □●○◎○●◎／●○○●●○○／○○●●○○□／○●○○●●○ | 0 | 4 | 3 | — |
++| q20 | 江南逢李龜年 | 杜甫 | heiki-funyuin | ○◎●●○○●／○●○○◎●◎／◎●○○●○●／●○○●●○○ | 0 | 0 | 0 | — |
++| q21 | 贈別·其一 | 杜牧 | heiki-nyuin | ◎◎●●●◎○／●●○○●●○／○○●●○○●／◎●○○●◎◎ | 1 | 5 | 0 | 規則外の候補（不粘） |
++| q22 | 贈別·其二 | 杜牧 | heiki-nyuin | ○○●●●○○／◎●○○●◎○／●●●○○●●／●○○●●○○ | 0 | 3 | 3 | — |
++| q23 | 金谷園 | 杜牧 | heiki-nyuin | ○◎●●●○○／○●○○●●○／●●○○◎□●／●○◎●◎○○ | 0 | 1 | 0 | — |
++| q24 | 寄揚州韓綽判官 | 杜牧 | heiki-nyuin | ○○●●●○○／○●○○●●○／●●●○○●●／●○○●◎◎○ | 0 | 4 | 4 | — |
++| q25 | 遣懷 | 杜牧 | sokki-nyuin | ●●○○●●◎／●○○●●◎◎／●○●●○○◎／○●○○●●○ | 0 | 2 | 4 | — |
++| q26 | 秋夕 | 杜牧 | sokki-nyuin | ○●○○●●◎／◎○●◎●○○／○○●●○◎●／●◎◎○●●○ | 0 | 1 | 1 | — |
++| q27 | 將赴吳興登樂遊原一絕 | 杜牧 | heiki-nyuin | ○○●●●○○／○●○○●●○／●●●○○●●／●○○●◎◎○ | 0 | 2 | 4 | — |
++| q28 | 赤壁 | 杜牧 | sokki-nyuin | ◎●◎○●●○／●◎◎●●○○／○○◎◎○○◎／○●○◎□●○ | 0 | 1 | 2 | — |
++| q29 | 泊秦淮 | 杜牧 | heiki-nyuin | ○◎○●●◎○／●●○○●●○／○●◎○○●●／●○◎●●◎○ | 0 | 1 | 0 | — |
++| q30 | 徵人怨 | 柳中庸 | sokki-nyuin | ●●○○●●○／○○●●◎○○／◎○●●○○◎／●●○○●●○ | 0 | 4 | 0 | — |
++| q31 | 金陵圖 | 韋莊 | sokki-nyuin | ○●○○●◎○／●○○●●○○／○◎●●○○●／●●○○●●○ | 0 | 5 | 3 | — |
++| q32 | 滁州西澗 | 韋應物 | heiki-nyuin | ●○○●●○○／●●○○◎●○／○○●●●○●／●●○○○●◎ | 7 | 1 | 7 | 規則外の候補（不粘） |
++| q33 | 桃花溪 | 張旭 | sokki-nyuin | ●●○○●●○／●○○●●○○／○○●●○○●／●●○○○●○ | 0 | 1 | 3 | — |
++| q34 | 寄人 | 張泌 | heiki-nyuin | ●◎○○●●○／●○□●●○○／○○◎●○◎●／◎□◎○●●○ | 0 | 3 | 0 | — |
++| q35 | 題金陵渡 | 張祜 | heiki-nyuin | ○○○●●○○／●●◎○●●○／○●●○○●●／●◎○●●○○ | 0 | 0 | 5 | — |
++| q36 | 贈內人 | 張祜 | heiki-nyuin | ◎○○●●○◎／●●◎◎●◎○／○●●○○●●／●○○●●○○ | 0 | 0 | 5 | — |
++| q37 | 集靈臺·其一 | 張祜 | heiki-nyuin | ●○○●●○○／○●○◎●●○／●●●○○●●／●○○●●○○ | 0 | 0 | 6 | — |
++| q38 | 集靈臺·其二 | 張祜 | sokki-nyuin | ●●○○○●○／○○◎●●○○／●○○●◎○●／●□○○○●○ | 0 | 2 | 4 | — |
++| q39 | 楓橋夜泊 | 張繼 | sokki-nyuin | ●●○□○●○／○○○●●○○／○○○●○○●／●●○○●●○ | 0 | 1 | 3 | — |
++| q40 | 隴西行 | 陳陶 | sokki-nyuin | ●□○○◎●○／●○○●◎○○／●○○●○○●／◎●○○◎●○ | 0 | 3 | 4 | — |
++| q41 | 雜詩 | 佚名 | heiki-nyuin | ●○●●●○○／●●○○●●○／●●●○○●●／●○○●●○□ | 0 | 3 | 4 | — |
++| q42 | 回鄉偶書·其一 | 賀知章 | sokki-nyuin | ●●◎○●●◎／◎○◎●●○○／◎○◎●◎◎●／●●●◎○●○ | 1 | 1 | 2 | 規則外の候補（通韻）、または平仄データの不足 |
++| q43 | 瑤瑟怨 | 溫庭筠 | sokki-nyuin | ○●○□◎◎○／●○◎●●○◎／●○●◎○○●／●●○◎●●○ | 0 | 3 | 3 | — |
++| q44 | 月夜 | 劉方平 | heiki-nyuin | ◎◎●●●○○／●●○◎○●○／○●○○○●●／○○○●●○○ | 0 | 2 | 0 | — |
++| q45 | 春怨 | 劉方平 | heiki-nyuin | ○○●●◎○○／○●○○●●○／●●◎◎○●●／○○●●◎○○ | 0 | 1 | 1 | — |
++| q46 | 烏衣巷 | 劉禹錫 | sokki-nyuin | ○●○○●●○／○◎●●●○○／●○◎●○○◎／○●○○●●○ | 0 | 0 | 3 | — |
++| q47 | 春詞 | 劉禹錫 | heiki-nyuin | ○○●●●○○／◎●○○●●○／◎●◎◎●○●／○◎○●●○○ | 0 | 1 | 2 | — |
++| q48 | 馬嵬坡 | 鄭畋 | heiki-funyuin | ○○◎●○◎●／○●○○●●○／○●●○○●●／●○○●●○○ | 0 | 0 | 5 | — |
++| q49 | 寒食 | 韓翃 | heiki-nyuin | ○○○●◎○○／○●○○●●○／●●◎○◎●●／◎○●●●○○ | 0 | 0 | 2 | — |
++| q50 | 已涼 | 韓偓 | heiki-nyuin | ●○◎●●○○／○●◎○●◎○／●●◎○○●●／●○○●●○○ | 0 | 0 | 4 | — |
++| q51 | 宮詞 | 顧況 | sokki-nyuin | ◎●○○●●○／●○○●●○○／○○●●○○●／◎●○○●●○ | 0 | 2 | 2 | — |
++
++## 明確な違反が出た詩
++
++### q10 黃鶴樓送孟浩然之廣陵（李白）
++
++```
++故人西辭黃鶴樓  ●○○○○●○
++煙花三月下揚州  ○○◎●●○○
++孤帆遠影碧山盡  ○◎●●●○●
++唯見長江天際流  ◎●◎○○●○
++```
++
++- 詩格：heiki-nyuin
++- 違反：起句の4字目は、定型（平起式・首句入韻）では仄です。
++- 違反：起句の5字目は、定型（平起式・首句入韻）では仄です。
++- 違反：起句の6字目は、定型（平起式・首句入韻）では平です。
++- 違反：起句の2字目と4字目がどちらも平です。二四不同では平仄を違えます。
++- 違反：起句の2字目（平）と6字目（仄）の平仄が違います。二六対では平仄をそろえます。
++- 違反：承句の2字目は、定型（平起式・首句入韻）では仄です。
++- 違反：承句の4字目は、定型（平起式・首句入韻）では平です。
++- 違反：承句の6字目は、定型（平起式・首句入韻）では仄です。
++- 違反：転句の4字目は、定型（平起式・首句入韻）では平です。
++- 違反：結句の2字目は、定型（平起式・首句入韻）では平です。
++- 違反：結句の4字目は、定型（平起式・首句入韻）では仄です。
++- 違反：結句の5字目は、定型（平起式・首句入韻）では仄です。
++- 違反：結句の6字目は、定型（平起式・首句入韻）では平です。
++- 違反：起句と承句の2字目がどちらも平です。反法では平仄を逆にします。
++- 分類：規則外の候補（拗体）（人間の確認を求める）
++- 理由：4句すべてに定型との不一致があり、起句と承句の2字目がどちらも平で反法も守られていない。違反の位置の字は、平仄データで平仄が一つに決まる字ばかりで、本文の版の違いもこれらの位置に関わらない。データやロジックの誤りは見つからず、原詩が律詩の平仄に従わない作り（拗体）である可能性が高い。
++  - 違反の位置の字の平仄データの読み：起句「辭」上平四支・「黃」下平七陽・「鶴」入声十藥、承句「花」下平六麻・「月」入声六月・「揚」下平七陽、転句「影」上声二十三梗、結句「見」去声十七霰・「江」上平三江・「天」下平一先・「際」去声八霽（いずれも読みは一つ）
++  - 起句の2字目「人」上平十一真（平）、承句の2字目「花」下平六麻（平）
++  - 本文の版の違い：唐詩三百首のファイルとは転句6字目（山／空。どちらも違反の位置ではない）、御定全唐詩とは違いなし
++
++### q21 贈別·其一（杜牧）
++
++```
++娉娉褭褭十三餘  ◎◎●●●◎○
++豆蔻梢頭二月初  ●●○○●●○
++春風十里揚州路  ○○●●○○●
++卷上珠簾總不如  ◎●○○●◎◎
++```
++
++- 詩格：heiki-nyuin（読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。）
++- 違反：承句（仄）と転句（平）の2字目の平仄が違います。粘法ではそろえます。
++- 分類：規則外の候補（不粘）（人間の確認を求める）
++- 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いもこの位置に関わらない。ほかの規則の違反はなく、原詩が不粘の作りである可能性が高い。
++  - 承句の2字目「蔻」去声二十六宥（仄。読みは一つ）、転句の2字目「風」上平一東（平。読みは一つ）
++  - 本文の版の違い：唐詩三百首のファイルとは起句3・4字目（褭／嫋）と転句4字目（里／裏）、御定全唐詩とは転句4字目（里／裏）。いずれも2字目ではない
++
++### q32 滁州西澗（韋應物）
++
++```
++獨憐幽草澗邊生  ●○○●●○○
++上有黃鸝深樹鳴  ●●○○◎●○
++春潮帶雨晚來急  ○○●●●○●
++野渡無人舟自橫  ●●○○○●◎
++```
++
++- 詩格：heiki-nyuin
++- 違反：転句の2字目は、定型（平起式・首句入韻）では仄です。
++- 違反：転句の4字目は、定型（平起式・首句入韻）では平です。
++- 違反：結句の2字目は、定型（平起式・首句入韻）では平です。
++- 違反：結句の4字目は、定型（平起式・首句入韻）では仄です。
++- 違反：結句の5字目は、定型（平起式・首句入韻）では仄です。
++- 違反：結句の6字目は、定型（平起式・首句入韻）では平です。
++- 違反：承句（仄）と転句（平）の2字目の平仄が違います。粘法ではそろえます。
++- 分類：規則外の候補（不粘）（人間の確認を求める）
++- 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。転句・結句の定型との不一致は、詩格（平起式・首句入韻）の後半の2句を逆の起式で作っていることから生じるもので、転句（挟み平を含む）と結句はそれぞれ単独では二四不同・二六対・下三連・孤平の違反がない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いはない。原詩が不粘の作りである可能性が高い。
++  - 承句の2字目「有」上声二十五有（仄。読みは一つ）、転句の2字目「潮」下平二蕭（平。読みは一つ）
++  - 転句・結句には、定型との不一致と反法・粘法のほかに違反がない（data/reports/golden.md）
++  - 本文の版の違い：唐詩三百首のファイル・御定全唐詩とも違いなし
++
++### q42 回鄉偶書·其一（賀知章）
++
++```
++少小離家老大回  ●●◎○●●◎
++鄉音難改鬢毛衰  ◎○◎●●○○
++兒童相見不相識  ◎○◎●◎◎●
++笑問客從何處來  ●●●◎○●○
++```
++
++- 詩格：sokki-nyuin（読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。）
++- 違反：結句の押韻字「來」（上平十灰）が、承句の押韻字（上平四支）と同じ韻目ではありません。
++- 分類：規則外の候補（通韻）、または平仄データの不足（人間の確認を求める）
++- 理由：押韻字は起句「回」・承句「衰」・結句「來」。平仄データでは「回」「來」は上平十灰、「衰」は上平四支だけで、承句だけが別の韻目になる（エンジンは結句を承句と比べて違反を出している）。手元のもう一つの資料（ウィキソース「平水韻」2006年版、2008年に差し替えられる前の別の一覧）でも「衰」は上平四支だけに載っている。手元の資料からは、データの誤りとは言えない。
++  - 押韻字の平仄データの読み：「回」上平十灰・去声十一隊、「衰」上平四支、「來」上平十灰
++  - ウィキソース「平水韻」版96365（2006年）：「衰」は「上平,四支」の一覧にだけある
++  - 本文の版の違い：唐詩三百首のファイルとは承句3字目（難／無）、御定全唐詩とは起句4字目（家／鄉）。押韻字ではない
++
++## 平仄データにない字（要確認）
++
++判定では要確認として扱い、その位置の平仄は問わない。データの抜けか異体字の対応の不足かは、M3 の範囲では直さず一覧にする。
++
++| 字 | 出てくる詩 |
++|---|---|
++| 壻 | q02、q08、q19 |
++| 爲 | q04、q19、q34 |
++| 遍 | q04 |
++| 葡 | q05 |
++| 猨 | q11 |
++| 啼 | q11、q23、q39、q41 |
++| 鏁 | q28 |
++| 迴 | q34 |
++| 掃 | q38、q40 |
++| 牀 | q43 |
++
++## 【詞】【辭】欄にだけある読みで判定した箇所（要確認）
++
++- q02：起句の1字目「閨」は、平仄データで【詞】【辭】欄にだけある読み（平・上平八齊）で判定しています。この読みでよいか確認してください。
++- q04：結句の3字目「茱」は、平仄データで【詞】【辭】欄にだけある読み（平・上平七虞）で判定しています。この読みでよいか確認してください。
++- q05：承句の3字目「琵」は、平仄データで【詞】【辭】欄にだけある読み（平・上平四支）で判定しています。この読みでよいか確認してください。
++- q06：起句の2字目「濕」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十四緝）で判定しています。この読みでよいか確認してください。
++- q14：起句の4字目「遊」は、平仄データで【詞】【辭】欄にだけある読み（平・下平十一尤）で判定しています。この読みでよいか確認してください。
++- q17：転句の4字目「剪」は、平仄データで【詞】【辭】欄にだけある読み（上・上声十六銑）で判定しています。この読みでよいか確認してください。
++- q17：結句の1字目「却」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十藥）で判定しています。この読みでよいか確認してください。
++- q22：起句の3字目「却」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十藥）で判定しています。この読みでよいか確認してください。
++- q25：結句の6字目「倖」は、平仄データで【詞】【辭】欄にだけある読み（上・上声二十三梗）で判定しています。この読みでよいか確認してください。
++- q26：承句の5字目「撲」は、平仄データで【詞】【辭】欄にだけある読み（入・入声一屋）で判定しています。この読みでよいか確認してください。
++- q27：結句の2字目「遊」は、平仄データで【詞】【辭】欄にだけある読み（平・下平十一尤）で判定しています。この読みでよいか確認してください。
++- q38：転句の1字目「却」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十藥）で判定しています。この読みでよいか確認してください。
++- q40：結句の4字目「閨」は、平仄データで【詞】【辭】欄にだけある読み（平・上平八齊）で判定しています。この読みでよいか確認してください。
++- q43：転句の1字目「雁」は、平仄データで【詞】【辭】欄にだけある読み（去・去声十六諫）で判定しています。この読みでよいか確認してください。
++- q44：転句の7字目「暖」は、平仄データで【詞】【辭】欄にだけある読み（上・上声十四旱）で判定しています。この読みでよいか確認してください。
++- q45：転句の2字目「寞」は、平仄データで【詞】【辭】欄にだけある読み（入・入声十藥）で判定しています。この読みでよいか確認してください。
+diff --git a/golden/exceptions.json b/golden/exceptions.json
+new file mode 100644
+index 0000000..6860e88
+--- /dev/null
++++ b/golden/exceptions.json
+@@ -0,0 +1,79 @@
++{
++  "description": "ゴールデンテストで「明確な違反」が出た詩の分類（CLAUDE.md §6.2）。データの誤りはデータを、ロジックの誤りはエンジンを直したうえで、残った違反を規則外として理由つきで記録する。findings は全解釈に共通する違反（規則:句:位置。句と位置は0始まり）。根拠は平水韻データ（data/chars.json）と本文の版の違い（golden/input.json の diffs）だけで、平仄を記憶で判断しない（CLAUDE.md §0）。",
++  "exceptions": [
++    {
++      "poem": "q10",
++      "findings": [
++        "hanpo-nenpo:1:1",
++        "niroku-tsui:0:1,5",
++        "nishi-fudo:0:1,3",
++        "pattern:0:3",
++        "pattern:0:4",
++        "pattern:0:5",
++        "pattern:1:1",
++        "pattern:1:3",
++        "pattern:1:5",
++        "pattern:2:3",
++        "pattern:3:1",
++        "pattern:3:3",
++        "pattern:3:4",
++        "pattern:3:5"
++      ],
++      "category": "規則外の候補（拗体）",
++      "reason": "4句すべてに定型との不一致があり、起句と承句の2字目がどちらも平で反法も守られていない。違反の位置の字は、平仄データで平仄が一つに決まる字ばかりで、本文の版の違いもこれらの位置に関わらない。データやロジックの誤りは見つからず、原詩が律詩の平仄に従わない作り（拗体）である可能性が高い。",
++      "evidence": [
++        "違反の位置の字の平仄データの読み：起句「辭」上平四支・「黃」下平七陽・「鶴」入声十藥、承句「花」下平六麻・「月」入声六月・「揚」下平七陽、転句「影」上声二十三梗、結句「見」去声十七霰・「江」上平三江・「天」下平一先・「際」去声八霽（いずれも読みは一つ）",
++        "起句の2字目「人」上平十一真（平）、承句の2字目「花」下平六麻（平）",
++        "本文の版の違い：唐詩三百首のファイルとは転句6字目（山／空。どちらも違反の位置ではない）、御定全唐詩とは違いなし"
++      ],
++      "needsReview": true,
++      "question": "この詩を拗体（律詩の平仄に従わない作り）として規則外と認めてよいか。"
++    },
++    {
++      "poem": "q21",
++      "findings": ["hanpo-nenpo:2:1"],
++      "category": "規則外の候補（不粘）",
++      "reason": "承句と転句の2字目の平仄が違い、粘法が守られていない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いもこの位置に関わらない。ほかの規則の違反はなく、原詩が不粘の作りである可能性が高い。",
++      "evidence": [
++        "承句の2字目「蔻」去声二十六宥（仄。読みは一つ）、転句の2字目「風」上平一東（平。読みは一つ）",
++        "本文の版の違い：唐詩三百首のファイルとは起句3・4字目（褭／嫋）と転句4字目（里／裏）、御定全唐詩とは転句4字目（里／裏）。いずれも2字目ではない"
++      ],
++      "needsReview": true,
++      "question": "この詩を不粘（拗体）として規則外と認めてよいか。"
++    },
++    {
++      "poem": "q32",
++      "findings": [
++        "hanpo-nenpo:2:1",
++        "pattern:2:1",
++        "pattern:2:3",
++        "pattern:3:1",
++        "pattern:3:3",
++        "pattern:3:4",
++        "pattern:3:5"
++      ],
++      "category": "規則外の候補（不粘）",
++      "reason": "承句と転句の2字目の平仄が違い、粘法が守られていない。転句・結句の定型との不一致は、詩格（平起式・首句入韻）の後半の2句を逆の起式で作っていることから生じるもので、転句（挟み平を含む）と結句はそれぞれ単独では二四不同・二六対・下三連・孤平の違反がない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いはない。原詩が不粘の作りである可能性が高い。",
++      "evidence": [
++        "承句の2字目「有」上声二十五有（仄。読みは一つ）、転句の2字目「潮」下平二蕭（平。読みは一つ）",
++        "転句・結句には、定型との不一致と反法・粘法のほかに違反がない（data/reports/golden.md）",
++        "本文の版の違い：唐詩三百首のファイル・御定全唐詩とも違いなし"
++      ],
++      "needsReview": true,
++      "question": "この詩を不粘（拗体）として規則外と認めてよいか。"
++    },
++    {
++      "poem": "q42",
++      "findings": ["rhyme-group:3:6"],
++      "category": "規則外の候補（通韻）、または平仄データの不足",
++      "reason": "押韻字は起句「回」・承句「衰」・結句「來」。平仄データでは「回」「來」は上平十灰、「衰」は上平四支だけで、承句だけが別の韻目になる（エンジンは結句を承句と比べて違反を出している）。手元のもう一つの資料（ウィキソース「平水韻」2006年版、2008年に差し替えられる前の別の一覧）でも「衰」は上平四支だけに載っている。手元の資料からは、データの誤りとは言えない。",
++      "evidence": [
++        "押韻字の平仄データの読み：「回」上平十灰・去声十一隊、「衰」上平四支、「來」上平十灰",
++        "ウィキソース「平水韻」版96365（2006年）：「衰」は「上平,四支」の一覧にだけある",
++        "本文の版の違い：唐詩三百首のファイルとは承句3字目（難／無）、御定全唐詩とは起句4字目（家／鄉）。押韻字ではない"
++      ],
++      "needsReview": true,
++      "question": "「衰」に上平十灰の読みがあるとする信頼できる韻書があれば、出典つきで平仄データに加える（data/corrections.json）。なければ、この詩を通韻として規則外と認めてよいか。"
++    }
++  ]
++}
+diff --git a/golden/golden.test.ts b/golden/golden.test.ts
+new file mode 100644
+index 0000000..07be5a4
+--- /dev/null
++++ b/golden/golden.test.ts
+@@ -0,0 +1,55 @@
++// ゴールデンテスト（CLAUDE.md §6.2）。`npm test` で走る。
++// GOLDEN_UPDATE=1 のときだけ、スナップショット・レポート・確認一覧を書き出す（`npm run golden:update`）。
++import { existsSync, readFileSync, writeFileSync } from "node:fs";
++import { describe, expect, it } from "vitest";
++import {
++  loadExceptions,
++  loadQuestions,
++  renderNeedsReview,
++  renderReport,
++  root,
++  runGolden,
++  toSnapshot,
++  violationsOf,
++} from "./golden";
++
++const UPDATE = process.env.GOLDEN_UPDATE === "1";
++const results = runGolden();
++const exceptions = loadExceptions();
++
++const outputs: Record<string, string> = {
++  "golden/snapshot.json": JSON.stringify(toSnapshot(results), null, 2) + "\n",
++  "data/reports/golden.md": renderReport(results, exceptions),
++  "golden/needs-review.md": renderNeedsReview(exceptions, loadQuestions(), results),
++};
++
++describe("ゴールデンテスト", () => {
++  it("対象は51首", () => {
++    expect(results).toHaveLength(51);
++  });
++
++  it("明確な違反はすべて分類されている（golden/exceptions.json と過不足なく一致）", () => {
++    const actual = Object.fromEntries(
++      results.map((r) => [r.poem.id, violationsOf(r.analysis)] as const).filter(([, v]) => v.length > 0),
++    );
++    const recorded = Object.fromEntries(exceptions.map((e) => [e.poem, [...e.findings].sort()]));
++    expect(recorded).toEqual(actual);
++  });
++
++  it("分類にはすべて理由と根拠がある", () => {
++    for (const e of exceptions) {
++      expect(e.reason.length, e.poem).toBeGreaterThan(0);
++      expect(e.evidence.length, e.poem).toBeGreaterThan(0);
++      if (e.needsReview) expect(e.question?.length ?? 0, e.poem).toBeGreaterThan(0);
++    }
++  });
++
++  for (const [path, content] of Object.entries(outputs)) {
++    it(`${path} が最新の判定結果と一致する`, () => {
++      const url = new URL(path, root);
++      if (UPDATE) writeFileSync(url, content);
++      expect(existsSync(url), `${path} がない。npm run golden:update で作る`).toBe(true);
++      expect(readFileSync(url, "utf-8")).toBe(content);
++    });
++  }
++});
+diff --git a/golden/golden.ts b/golden/golden.ts
+new file mode 100644
+index 0000000..9b9c46b
+--- /dev/null
++++ b/golden/golden.ts
+@@ -0,0 +1,195 @@
++// ゴールデンテスト（CLAUDE.md §6.2）：唐詩三百首の七言絶句をエンジンに通し、
++// スナップショット・レポート・人間の確認を求める一覧を作る。
++import { readFileSync } from "node:fs";
++import { analyze } from "../packages/engine/src/index";
++import type { Analysis, EngineData, Finding } from "../packages/engine/src/types";
++
++export const root = new URL("../", import.meta.url);
++const readJson = <T>(path: string): T => JSON.parse(readFileSync(new URL(path, root), "utf-8"));
++
++export type GoldenPoem = {
++  id: string;
++  group: string;
++  included: boolean;
++  title: string;
++  author: string;
++  lines: string[] | null;
++  source: { file: string; index: number; title: string; score: number } | null;
++  diffs: { selection: [number, string, string][] | null; crosscheck: [number, string, string][] | null };
++};
++
++export type Exception = {
++  poem: string;
++  /** 規則外として正当とする違反（「規則:句:位置」） */
++  findings: string[];
++  category: string;
++  reason: string;
++  evidence: string[];
++  needsReview: boolean;
++  question?: string;
++};
++
++export type Question = { title: string; detail: string; options: string[] };
++
++export function loadEngineData(): EngineData {
++  return {
++    chars: readJson("data/chars.json"),
++    variants: readJson("data/variants.json"),
++    kokuji: readJson("data/kokuji.json"),
++    forms: readJson("data/forms.json"),
++    rules: readJson("data/rules.json"),
++  };
++}
++
++export const loadInput = () => readJson<{ poems: GoldenPoem[] }>("golden/input.json").poems.filter((p) => p.included);
++export const loadExceptions = () => readJson<{ exceptions: Exception[] }>("golden/exceptions.json").exceptions;
++export const loadQuestions = () => readJson<{ questions: Question[] }>("golden/questions.json").questions;
++
++/** 指摘の鍵「規則:句:位置」 */
++export const keyOf = (f: Finding) => `${f.rule}:${f.line}:${f.positions.join(",")}`;
++const fullKey = (f: Finding) => `${f.severity}:${keyOf(f)}`;
++
++export type GoldenResult = { poem: GoldenPoem; analysis: Analysis };
++
++export function runGolden(): GoldenResult[] {
++  const data = loadEngineData();
++  return loadInput().map((poem) => ({ poem, analysis: analyze(poem.lines!.join("\n"), data) }));
++}
++
++/** 全解釈に共通する「明確な違反」の鍵 */
++export const violationsOf = (a: Analysis) => a.findings.filter((f) => f.severity === "violation").map(keyOf).sort();
++
++/** スナップショット：判定の結果だけ（文言は入れない。文言の変更はレポートの差分で見る） */
++export function toSnapshot(results: GoldenResult[]) {
++  return {
++    description:
++      "ゴールデンテストの判定結果のスナップショット（golden/golden.test.ts が GOLDEN_UPDATE=1 のときだけ書き出す）。差分が出たら理由を説明する。一括更新は人間の承認が要る（CLAUDE.md §0）。",
++    poems: results.map(({ poem, analysis: a }) => {
++      const common = new Set(a.findings.map(fullKey));
++      const someInterp = new Set(a.interpretations.flatMap((i) => i.findings.map(fullKey)));
++      return {
++        id: poem.id,
++        title: poem.title,
++        author: poem.author,
++        form: a.form,
++        symbols: a.symbols,
++        interpretations: a.interpretations.length,
++        independent: a.independent,
++        findings: a.findings.filter((f) => f.severity !== "ok").map(fullKey).sort(),
++        // 一部の解釈にだけ出る指摘（違反と要確認）。両韻字などの読み次第で変わる
++        readingDependent: [...someInterp].filter((k) => !common.has(k) && !k.startsWith("variant:") && !k.startsWith("ok:")).sort(),
++      };
++    }),
++  };
++}
++
++const SEVERITY_JA: Record<string, string> = { violation: "違反", check: "要確認", variant: "変格" };
++const count = (a: Analysis, severity: string) => a.findings.filter((f) => f.severity === severity).length;
++
++export function renderReport(results: GoldenResult[], exceptions: Exception[]): string {
++  const byPoem = new Map(exceptions.map((e) => [e.poem, e]));
++  const withViolation = results.filter((r) => count(r.analysis, "violation") > 0);
++  const ruleCounts = new Map<string, number>();
++  for (const { analysis } of results)
++    for (const f of analysis.findings)
++      if (f.severity !== "ok") ruleCounts.set(`${SEVERITY_JA[f.severity]}・${f.rule}`, (ruleCounts.get(`${SEVERITY_JA[f.severity]}・${f.rule}`) ?? 0) + 1);
++
++  const unknown = new Map<string, string[]>();
++  const supplement: string[] = [];
++  for (const { poem, analysis } of results) {
++    for (const f of analysis.findings) {
++      if (f.rule === "unknown-char") {
++        const c = analysis.chars[f.line]![f.positions[0]!]!.char;
++        unknown.set(c, [...(unknown.get(c) ?? []), poem.id]);
++      }
++      if (f.rule === "supplement-reading") supplement.push(`${poem.id}：${f.message}`);
++    }
++  }
++
++  const out = [
++    "# ゴールデンテストの結果",
++    "",
++    "`golden/golden.test.ts` が生成する（`npm run golden:update`）。手で編集しない。",
++    "",
++    "- 対象：唐詩三百首の七言絶句51首（本文は `golden/input.json`。出典は DATA_SOURCES.md の 6）",
++    "- 判定の重みは `data/rules.json` の既定値。読みが複数ある字は、全解釈に共通する指摘だけを「判定」に数える",
++    "",
++    "## 概要",
++    "",
++    "| 項目 | 件数 |",
++    "|---|---|",
++    `| 対象の詩 | ${results.length}首 |`,
++    `| 明確な違反なし（参考。目標ではない） | ${results.length - withViolation.length}首 |`,
++    `| 明確な違反あり | ${withViolation.length}首（すべて分類済み：${[...new Set(withViolation.map((r) => byPoem.get(r.poem.id)?.category ?? "未分類"))].join("／")}） |`,
++    `| 人間の確認を求める詩（golden/needs-review.md） | ${exceptions.filter((e) => e.needsReview).length}首 |`,
++    "",
++    "### 指摘の内訳（全解釈に共通するもの）",
++    "",
++    "| 重み・規則 | 件数 |",
++    "|---|---|",
++    ...[...ruleCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `| ${k} | ${n} |`),
++    "",
++    "## 詩ごとの判定",
++    "",
++    "| ID | 題 | 作者 | 詩格 | 記号列 | 違反 | 要確認 | 変格 | 違反の分類 |",
++    "|---|---|---|---|---|---|---|---|---|",
++    ...results.map(({ poem, analysis: a }) => {
++      const v = count(a, "violation");
++      return `| ${poem.id} | ${poem.title} | ${poem.author} | ${a.form.id ?? "未定"} | ${a.symbols.join("／")} | ${v} | ${count(a, "check")} | ${count(a, "variant")} | ${v > 0 ? (byPoem.get(poem.id)?.category ?? "**未分類**") : "—"} |`;
++    }),
++    "",
++    "## 明確な違反が出た詩",
++    "",
++  ];
++  for (const { poem, analysis: a } of withViolation) {
++    const e = byPoem.get(poem.id);
++    out.push(`### ${poem.id} ${poem.title}（${poem.author}）`, "", "```", ...poem.lines!.map((l, i) => `${l}  ${a.symbols[i]}`), "```", "");
++    out.push(`- 詩格：${a.form.id ?? "未定"}${a.form.note ? `（${a.form.note}）` : ""}`);
++    for (const f of a.findings.filter((f) => f.severity === "violation")) out.push(`- 違反：${f.message}`);
++    out.push(`- 分類：${e?.category ?? "**未分類**"}${e?.needsReview ? "（人間の確認を求める）" : ""}`);
++    if (e) out.push(`- 理由：${e.reason}`, ...e.evidence.map((x) => `  - ${x}`));
++    out.push("");
++  }
++  out.push(
++    "## 平仄データにない字（要確認）",
++    "",
++    "判定では要確認として扱い、その位置の平仄は問わない。データの抜けか異体字の対応の不足かは、M3 の範囲では直さず一覧にする。",
++    "",
++    "| 字 | 出てくる詩 |",
++    "|---|---|",
++    ...[...unknown].map(([c, ids]) => `| ${c} | ${ids.join("、")} |`),
++    "",
++    "## 【詞】【辭】欄にだけある読みで判定した箇所（要確認）",
++    "",
++    ...supplement.map((s) => `- ${s}`),
++    "",
++  );
++  return out.join("\n");
++}
++
++export function renderNeedsReview(exceptions: Exception[], questions: Question[], results: GoldenResult[]): string {
++  const byId = new Map(results.map((r) => [r.poem.id, r]));
++  const out = [
++    "# 人間の確認を求める事項（M3）",
++    "",
++    "`golden/golden.test.ts` が `golden/exceptions.json` と `golden/questions.json` から生成する（`npm run golden:update`）。手で編集しない。",
++    "",
++    "Claude Code は平仄・韻の正誤を記憶で判断しない（CLAUDE.md §0）。以下は、平水韻データと本文の版の違いからは分類を確定できない、または判断が仕様・データの出どころに関わる事項。",
++    "",
++    "## 詩の分類",
++    "",
++  ];
++  for (const e of exceptions.filter((x) => x.needsReview)) {
++    const r = byId.get(e.poem);
++    out.push(`### ${e.poem} ${r?.poem.title ?? ""}（${r?.poem.author ?? ""}）`, "");
++    if (r) out.push("```", ...r.poem.lines!.map((l, i) => `${l}  ${r.analysis.symbols[i]}`), "```", "");
++    out.push(`- 仮の分類：${e.category}`, `- 理由：${e.reason}`, ...e.evidence.map((x) => `  - ${x}`));
++    if (e.question) out.push(`- 確認したいこと：${e.question}`);
++    out.push("");
++  }
++  out.push("## そのほかの判断事項", "");
++  for (const q of questions) {
++    out.push(`### ${q.title}`, "", q.detail, "", ...q.options.map((o) => `- ${o}`), "");
++  }
++  return out.join("\n");
++}
+diff --git a/golden/needs-review.md b/golden/needs-review.md
+new file mode 100644
+index 0000000..9b51d6c
+--- /dev/null
++++ b/golden/needs-review.md
+@@ -0,0 +1,93 @@
++# 人間の確認を求める事項（M3）
++
++`golden/golden.test.ts` が `golden/exceptions.json` と `golden/questions.json` から生成する（`npm run golden:update`）。手で編集しない。
++
++Claude Code は平仄・韻の正誤を記憶で判断しない（CLAUDE.md §0）。以下は、平水韻データと本文の版の違いからは分類を確定できない、または判断が仕様・データの出どころに関わる事項。
++
++## 詩の分類
++
++### q10 黃鶴樓送孟浩然之廣陵（李白）
++
++```
++故人西辭黃鶴樓  ●○○○○●○
++煙花三月下揚州  ○○◎●●○○
++孤帆遠影碧山盡  ○◎●●●○●
++唯見長江天際流  ◎●◎○○●○
++```
++
++- 仮の分類：規則外の候補（拗体）
++- 理由：4句すべてに定型との不一致があり、起句と承句の2字目がどちらも平で反法も守られていない。違反の位置の字は、平仄データで平仄が一つに決まる字ばかりで、本文の版の違いもこれらの位置に関わらない。データやロジックの誤りは見つからず、原詩が律詩の平仄に従わない作り（拗体）である可能性が高い。
++  - 違反の位置の字の平仄データの読み：起句「辭」上平四支・「黃」下平七陽・「鶴」入声十藥、承句「花」下平六麻・「月」入声六月・「揚」下平七陽、転句「影」上声二十三梗、結句「見」去声十七霰・「江」上平三江・「天」下平一先・「際」去声八霽（いずれも読みは一つ）
++  - 起句の2字目「人」上平十一真（平）、承句の2字目「花」下平六麻（平）
++  - 本文の版の違い：唐詩三百首のファイルとは転句6字目（山／空。どちらも違反の位置ではない）、御定全唐詩とは違いなし
++- 確認したいこと：この詩を拗体（律詩の平仄に従わない作り）として規則外と認めてよいか。
++
++### q21 贈別·其一（杜牧）
++
++```
++娉娉褭褭十三餘  ◎◎●●●◎○
++豆蔻梢頭二月初  ●●○○●●○
++春風十里揚州路  ○○●●○○●
++卷上珠簾總不如  ◎●○○●◎◎
++```
++
++- 仮の分類：規則外の候補（不粘）
++- 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いもこの位置に関わらない。ほかの規則の違反はなく、原詩が不粘の作りである可能性が高い。
++  - 承句の2字目「蔻」去声二十六宥（仄。読みは一つ）、転句の2字目「風」上平一東（平。読みは一つ）
++  - 本文の版の違い：唐詩三百首のファイルとは起句3・4字目（褭／嫋）と転句4字目（里／裏）、御定全唐詩とは転句4字目（里／裏）。いずれも2字目ではない
++- 確認したいこと：この詩を不粘（拗体）として規則外と認めてよいか。
++
++### q32 滁州西澗（韋應物）
++
++```
++獨憐幽草澗邊生  ●○○●●○○
++上有黃鸝深樹鳴  ●●○○◎●○
++春潮帶雨晚來急  ○○●●●○●
++野渡無人舟自橫  ●●○○○●◎
++```
++
++- 仮の分類：規則外の候補（不粘）
++- 理由：承句と転句の2字目の平仄が違い、粘法が守られていない。転句・結句の定型との不一致は、詩格（平起式・首句入韻）の後半の2句を逆の起式で作っていることから生じるもので、転句（挟み平を含む）と結句はそれぞれ単独では二四不同・二六対・下三連・孤平の違反がない。2字目の字は平仄データで読みが一つに決まり、本文の版の違いはない。原詩が不粘の作りである可能性が高い。
++  - 承句の2字目「有」上声二十五有（仄。読みは一つ）、転句の2字目「潮」下平二蕭（平。読みは一つ）
++  - 転句・結句には、定型との不一致と反法・粘法のほかに違反がない（data/reports/golden.md）
++  - 本文の版の違い：唐詩三百首のファイル・御定全唐詩とも違いなし
++- 確認したいこと：この詩を不粘（拗体）として規則外と認めてよいか。
++
++### q42 回鄉偶書·其一（賀知章）
++
++```
++少小離家老大回  ●●◎○●●◎
++鄉音難改鬢毛衰  ◎○◎●●○○
++兒童相見不相識  ◎○◎●◎◎●
++笑問客從何處來  ●●●◎○●○
++```
++
++- 仮の分類：規則外の候補（通韻）、または平仄データの不足
++- 理由：押韻字は起句「回」・承句「衰」・結句「來」。平仄データでは「回」「來」は上平十灰、「衰」は上平四支だけで、承句だけが別の韻目になる（エンジンは結句を承句と比べて違反を出している）。手元のもう一つの資料（ウィキソース「平水韻」2006年版、2008年に差し替えられる前の別の一覧）でも「衰」は上平四支だけに載っている。手元の資料からは、データの誤りとは言えない。
++  - 押韻字の平仄データの読み：「回」上平十灰・去声十一隊、「衰」上平四支、「來」上平十灰
++  - ウィキソース「平水韻」版96365（2006年）：「衰」は「上平,四支」の一覧にだけある
++  - 本文の版の違い：唐詩三百首のファイルとは承句3字目（難／無）、御定全唐詩とは起句4字目（家／鄉）。押韻字ではない
++- 確認したいこと：「衰」に上平十灰の読みがあるとする信頼できる韻書があれば、出典つきで平仄データに加える（data/corrections.json）。なければ、この詩を通韻として規則外と認めてよいか。
++
++## そのほかの判断事項
++
++### 1. 本文の取得元（全唐诗 poet.tang）でよいか
++
++唐詩三百首のファイルの本文は簡体字からの機械変換の誤りを含むため、chinese-poetry の繁体字の全唐詩から照合して本文を取った。2種類の全唐詩を比べると、御定全唐詩には変換の誤りに見える字が5か所あり（乾→幹、闌干→闌幹 ×2、御柳→禦柳、鬚→須）、全唐诗/poet.tang ではすべて正しい字だった。そこで本文は全唐诗/poet.tang から取った（詳しくは DATA_SOURCES.md の 6、data/reports/golden-input.md）。
++
++- このままでよい
++- 別の資料を使う（資料を指定してください）
++
++### 2. 唐詩三百首の「樂府」の4句×7字の詩をゴールデンに含めるか
++
++唐詩三百首のファイルの分類「樂府」に、4句×7字の詩が8首ある（王之渙「涼州詞」、王昌齡「出塞」、王維「渭城曲」「秋夜曲」、李白「清平調」三首、無名氏「金縷衣」）。今は分類「七言絕句」の51首だけをゴールデンにしている。8首のうち2首は照合先が決まらない（王維「秋夜曲」は全唐詩では王涯の作、李白「清平調 其三」は本文の違う候補が同点）。また王維「渭城曲」は全唐诗/poet.tang の本文に「謂城」の誤字がある。
++
++- 含めない（今のまま）
++- 照合先が決まった6首を含める（渭城曲の誤字の扱いも決める）
++
++### 3. 平仄データにない字を、Unihan の異体字でさらに補うか
++
++ゴールデンの51首で、平仄データにない字が10種類あった（data/reports/golden.md）。このうち6字（壻→婿、爲→為、猨→猿、鏁→鎖、掃→埽、牀→床）は、Unihan の kSemanticVariant（意味が同じで置き換えられる字）をたどると平仄データの字につながる。M1 の判断 (c) では、Unihan で補うのは OpenCC の対応表に載っている字に限ったため、これらは補われていない。残りの4字（啼・遍・葡・迴）は、どうたどっても平仄データにない。補うと、q08（朱慶餘「近試上張水部」）の転句末「壻」が仄（婿：去声八霽）として判定でき、挟み平が確定する。
++
++- 補わない（今のまま。データにない字は要確認）
++- OpenCC の表にない字にも、Unihan の同じ3つの欄で補う（M4 の前に小さなタスクとして行う）
+diff --git a/golden/questions.json b/golden/questions.json
+new file mode 100644
+index 0000000..4b950ac
+--- /dev/null
++++ b/golden/questions.json
+@@ -0,0 +1,29 @@
++{
++  "description": "M3 で、詩の分類のほかに人間の判断を求める事項。golden/needs-review.md に載る。",
++  "questions": [
++    {
++      "title": "1. 本文の取得元（全唐诗 poet.tang）でよいか",
++      "detail": "唐詩三百首のファイルの本文は簡体字からの機械変換の誤りを含むため、chinese-poetry の繁体字の全唐詩から照合して本文を取った。2種類の全唐詩を比べると、御定全唐詩には変換の誤りに見える字が5か所あり（乾→幹、闌干→闌幹 ×2、御柳→禦柳、鬚→須）、全唐诗/poet.tang ではすべて正しい字だった。そこで本文は全唐诗/poet.tang から取った（詳しくは DATA_SOURCES.md の 6、data/reports/golden-input.md）。",
++      "options": [
++        "このままでよい",
++        "別の資料を使う（資料を指定してください）"
++      ]
++    },
++    {
++      "title": "2. 唐詩三百首の「樂府」の4句×7字の詩をゴールデンに含めるか",
++      "detail": "唐詩三百首のファイルの分類「樂府」に、4句×7字の詩が8首ある（王之渙「涼州詞」、王昌齡「出塞」、王維「渭城曲」「秋夜曲」、李白「清平調」三首、無名氏「金縷衣」）。今は分類「七言絕句」の51首だけをゴールデンにしている。8首のうち2首は照合先が決まらない（王維「秋夜曲」は全唐詩では王涯の作、李白「清平調 其三」は本文の違う候補が同点）。また王維「渭城曲」は全唐诗/poet.tang の本文に「謂城」の誤字がある。",
++      "options": [
++        "含めない（今のまま）",
++        "照合先が決まった6首を含める（渭城曲の誤字の扱いも決める）"
++      ]
++    },
++    {
++      "title": "3. 平仄データにない字を、Unihan の異体字でさらに補うか",
++      "detail": "ゴールデンの51首で、平仄データにない字が10種類あった（data/reports/golden.md）。このうち6字（壻→婿、爲→為、猨→猿、鏁→鎖、掃→埽、牀→床）は、Unihan の kSemanticVariant（意味が同じで置き換えられる字）をたどると平仄データの字につながる。M1 の判断 (c) では、Unihan で補うのは OpenCC の対応表に載っている字に限ったため、これらは補われていない。残りの4字（啼・遍・葡・迴）は、どうたどっても平仄データにない。補うと、q08（朱慶餘「近試上張水部」）の転句末「壻」が仄（婿：去声八霽）として判定でき、挟み平が確定する。",
++      "options": [
++        "補わない（今のまま。データにない字は要確認）",
++        "OpenCC の表にない字にも、Unihan の同じ3つの欄で補う（M4 の前に小さなタスクとして行う）"
++      ]
++    }
++  ]
++}
+diff --git a/package.json b/package.json
+index 8a4b28c..4624c61 100644
+--- a/package.json
++++ b/package.json
+@@ -20,7 +20,8 @@
+     "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\"",
+     "golden:find": "python3 scripts/find_golden_sources.py",
+     "golden:fetch": "python3 scripts/fetch_golden_sources.py",
+-    "golden:input": "python3 scripts/build_golden_input.py"
++    "golden:input": "python3 scripts/build_golden_input.py",
++    "golden:update": "GOLDEN_UPDATE=1 vitest run golden"
+   },
+   "devDependencies": {
+     "@types/node": "^26.6.6",
+diff --git a/packages/engine/src/rules.ts b/packages/engine/src/rules.ts
+index e6a482d..e329089 100644
+--- a/packages/engine/src/rules.ts
++++ b/packages/engine/src/rules.ts
+@@ -69,15 +69,20 @@ function evaluateLines(grid: CellState[][], form: FormDef | null, ctx: RuleConte
+     const at = (p: number) => pz(l, p);
+ 
+     // 挟み平：押韻しない句で、律句の5〜7字目 ○●● が ●○● になっている
++    // 7字目が決まらない（未入力・データにない字）ときは、仄なら挟み平になりうるので、違反を断定しない
+     const hasami =
+       def !== undefined &&
+       !rhymeLines.includes(l) &&
+       def.base.slice(4) === HASAMI_BASE &&
+       at(4) === "仄" &&
+       at(5) === "平" &&
+-      at(6) === "仄";
++      at(6) !== "平";
+     if (hasami) {
+-      out.push(finding(ctx, "hasami-hei", l, [4, 5, 6], `${name}の5〜7字目が「仄平仄」です。挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`));
++      const message =
++        at(6) === "仄"
++          ? `${name}の5〜7字目が「仄平仄」です。挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`
++          : `${name}の5・6字目が「仄平」です。7字目が決まらないため、7字目が仄なら挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`;
++      out.push(finding(ctx, "hasami-hei", l, [4, 5, 6], message));
+     }
+     const hasamiPositions = hasami ? [4, 5] : [];
+ 
+diff --git a/packages/engine/test/rules.test.ts b/packages/engine/test/rules.test.ts
+index 3a0ab29..cc379a3 100644
+--- a/packages/engine/test/rules.test.ts
++++ b/packages/engine/test/rules.test.ts
+@@ -123,6 +123,28 @@ describe("hasami-hei（挟み平）", () => {
+     expect(issues(run(lines))).toEqual(["variant:hasami-hei:2:4,5,6"]);
+   });
+ 
++  it("7字目が決まらないときは、仄なら挟み平になりうるので、定型の違反を断定しない", () => {
++    // 転句 ●●○○○●● → ●●○○●○＿（7字目が未入力）
++    const lines = replaceAt(replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○"), 2, 6, "＿");
++    expect(issues(run(lines))).toEqual(["variant:hasami-hei:2:4,5,6"]);
++  });
++
++  it("7字目がデータにない字でも同じ（データにない字の要確認は別に出る）", () => {
++    const lines = replaceAt(replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○"), 2, 6, UNKNOWN);
++    expect(issues(run(lines))).toEqual(["check:unknown-char:2:6", "variant:hasami-hei:2:4,5,6"]);
++  });
++
++  it("7字目が平と決まっていれば挟み平ではなく、定型と二六対の違反", () => {
++    // 転句 ●●○○●○○（5〜7字目が仄平平）
++    const lines = replaceAt(replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○"), 2, 6, "○");
++    expect(issues(run(lines))).toEqual([
++      "violation:niroku-tsui:2:1,5",
++      "violation:pattern:2:4",
++      "violation:pattern:2:5",
++      "violation:pattern:2:6",
++    ]);
++  });
++
+   it("句末が ○○● の句を ●○● にしても挟み平ではない（5字目の一三五不論）", () => {
+     const HF = baseLines("heiki-funyuin"); // 起句 ○○●●○○●
+     expect(issues(run(replaceAt(HF, 0, 4, "●")))).toEqual(["variant:ichisango-furon:0:4"]);
