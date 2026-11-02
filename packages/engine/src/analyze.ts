@@ -1,6 +1,6 @@
 // 詩全体の判定（CLAUDE.md §4.1）。読みが複数ある字は、読みの組み合わせ（解釈）ごとに判定する。
 import { charInfo, pzOf, symbolOf } from "./chars";
-import { detectForm } from "./form";
+import { detectForms } from "./form";
 import { parseInput } from "./input";
 import type { CellState, RuleContext } from "./rules";
 import { evaluate, evaluateGlobal } from "./rules";
@@ -66,7 +66,7 @@ export function analyze(input: string | readonly string[], data: EngineData, opt
     ? open.flatMap(([l, p], i) => choices[l]![p]!.map((_, c) => open.map((__, j) => (j === i ? c : -1))))
     : cartesian(open.map(([l, p]) => choices[l]![p]!.length));
 
-  const interpretations: Interpretation[] = picks.map((pick) => {
+  const interpretations: Interpretation[] = picks.flatMap((pick) => {
     // 句と位置の組で引く（8字目以降のマスと次の句のマスを取り違えないため）
     const chosen = new Map(open.map(([l, p], i) => [`${l}:${p}`, pick[i]!]));
     const grid: CellState[][] = choices.map((row, l) =>
@@ -82,10 +82,12 @@ export function analyze(input: string | readonly string[], data: EngineData, opt
       const r = grid[l]![p]!.reading;
       if (pick[i] !== -1 && r !== null) readings[l * 7 + p] = r;
     });
-    const form = detectForm((l, p) => grid[l]?.[p]?.pz ?? null, options.form);
-    const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
-    const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));
-    return { readings, form, findings };
+    // 詩格が一つに決まらない（起句の末字が未入力など）ときは、候補の詩格ごとに解釈を分ける
+    return detectForms((l, p) => grid[l]?.[p]?.pz ?? null, options.form).map((form) => {
+      const def = form.id === null ? null : data.forms.forms.find((f) => f.id === form.id) ?? null;
+      const findings = evaluate(grid, chars, def, ctx).map((f) => withInterpretation(f, readings));
+      return { readings, form, findings };
+    });
   });
 
   // すべての解釈に共通する指摘は全体の findings に入れる
@@ -122,7 +124,7 @@ function overallForm(interpretations: Interpretation[]): FormResult {
   const first = interpretations[0]!.form;
   const ids = new Set(interpretations.map((i) => i.form.id));
   if (ids.size === 1) return first;
-  const note = "読みによって詩格が変わります（解釈ごとの結果を見てください）。";
+  const note = "読みや未入力のマスによって詩格が変わります（解釈ごとの結果を見てください）。";
   return { ...first, note: first.note !== undefined ? `${first.note}${note}` : note };
 }
 

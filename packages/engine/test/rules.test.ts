@@ -293,11 +293,18 @@ describe("未入力のマス（＿）", () => {
     expect(issues(a)).toEqual([]);
   });
 
-  it("首句の末字が未入力なら、入韻かどうかは決めず不入韻として判定する", () => {
+  it("首句の末字が未入力なら、入韻・不入韻の両方の詩格で判定する", () => {
     const a = run(replaceAt(HN, 0, 6, "＿"));
-    expect(a.form.id).toBe("heiki-funyuin");
+    expect(a.interpretations.map((i) => i.form.id).sort()).toEqual(["heiki-funyuin", "heiki-nyuin"]);
     expect(a.form.note).toMatch(/入韻/);
   });
+
+  for (const id of ["heiki-nyuin", "heiki-funyuin", "sokki-nyuin", "sokki-funyuin"] as FormId[]) {
+    it(`${id} の律句どおりの詩で首句の末字だけ未入力にしても、違反を断定しない`, () => {
+      const a = run(replaceAt(baseLines(id), 0, 6, "＿"));
+      expect(issues(a).filter((s) => s.startsWith("violation:"))).toEqual([]);
+    });
+  }
 
   it("どの句の2字目も未入力なら詩格は決めず、定型に依存する規則は判定しない", () => {
     let lines = HN;
