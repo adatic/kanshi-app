@@ -15,6 +15,7 @@ const isRhymeSlot = (line: number, pos: number) => pos === 6 && (line === 0 || l
 /**
  * マスの読みを、判定に効く違いごとにまとめる（一つのまとまりが、解釈の一つの選択肢になる）。
  * - 押韻しうる位置では韻目ごと、それ以外では平仄ごとにまとめる
+ * - 異体字の対応で別の字として引いた読みは、候補の字ごとに分ける（どの候補で判定したかを残す）
  * - まとまりの代表には、本体の読み（【詞】【辭】欄でない読み）を優先する
  */
 function choicesOf(info: CharInfo, line: number, pos: number, options: Options): CellState[] {
@@ -24,7 +25,7 @@ function choicesOf(info: CharInfo, line: number, pos: number, options: Options):
   if (info.readings.length === 0) return [{ pz: null, reading: null, supplementOnly: false }];
   const groups = new Map<string, Reading[]>();
   for (const r of info.readings) {
-    const key = isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone);
+    const key = `${r.via ?? ""}|${isRhymeSlot(line, pos) ? r.rhyme : pzOf(r.tone)}`;
     groups.set(key, [...(groups.get(key) ?? []), r]);
   }
   return [...groups.values()].map((rs) => {
@@ -46,10 +47,11 @@ export function analyze(input: string | readonly string[], data: EngineData, opt
   const chars = lines.map((row) => row.map((cell) => charInfo(cell, data, kokuji)));
   const symbols = chars.map((row) => row.map(symbolOf).join(""));
 
-  // マスごとの選択肢と、選択肢が2つ以上あるマス
+  // マスごとの選択肢と、選択肢が2つ以上あるマス。読みを組み合わせるのは、判定の対象になる4句×7字の中だけ
+  // （それより外のマスは字数・句数の違反として扱い、最初の選択肢で埋める）
   const choices = chars.map((row, l) => row.map((info, p) => choicesOf(info, l, p, options)));
   const open: [number, number][] = [];
-  choices.forEach((row, l) => row.forEach((cs, p) => cs.length > 1 && open.push([l, p])));
+  choices.forEach((row, l) => row.forEach((cs, p) => l < 4 && p < 7 && cs.length > 1 && open.push([l, p])));
   const total = open.reduce((n, [l, p]) => n * choices[l]![p]!.length, 1);
   const independent = total > MAX_COMBINATIONS;
 

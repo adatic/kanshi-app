@@ -39,6 +39,8 @@ export const SUPP_MIX = String.fromCodePoint(0x6402);
 export const VAR_ONE = String.fromCodePoint(0x6500);
 /** 異体字の対応で、平の字 P[31] と仄の字 Z[31] の両方につながる字（自身はデータにない） */
 export const VAR_TWO = String.fromCodePoint(0x6501);
+/** 異体字の対応で、平の字 P[29] と P[30] の両方につながる字（同じ平仄の候補が2つ。自身はデータにない） */
+export const VAR_SAME = String.fromCodePoint(0x6502);
 /** データにない字 */
 export const UNKNOWN = String.fromCodePoint(0x6600);
 /** 国字（テストデータで国字として登録する字） */
@@ -59,7 +61,7 @@ chars[SUPP_MIX] = [
 
 export const fixtureData: EngineData = {
   chars,
-  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!] },
+  variants: { [VAR_ONE]: [R[7]!], [VAR_TWO]: [P[31]!, Z[31]!], [VAR_SAME]: [P[29]!, P[30]!] },
   kokuji: { chars: [{ char: KOKUJI }] },
   forms: realForms,
   rules: realRules,

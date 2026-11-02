@@ -153,12 +153,14 @@ export function evaluate(
     out.push(finding(ctx, "rhyme-group", 3, [6], `結句の押韻字「${charAt(3, 6)}」（${r3}）が、承句の押韻字（${r1}）と同じ韻目ではありません。`));
   }
   const ref = r1 ?? r3;
+  const refLine = r1 !== null ? 1 : 3;
   const r0 = rhymeLines.includes(0) ? rhymeOf(0) : null;
   if (r0 !== null && ref !== null && r0 !== ref) {
-    if (r1 !== null && r3 !== null && r1 !== r3) {
-      out.push(finding(ctx, "rhyme-group", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）が、承句の押韻字（${r1}）と同じ韻目ではありません。`));
-    } else {
+    // 孤雁入群格は、承句・結句の韻目が両方決まって一致しているときだけ（DECISIONS.md）
+    if (r1 !== null && r3 !== null && r1 === r3) {
       out.push(finding(ctx, "kogan-nyugun", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）だけが、承句・結句の韻目（${ref}）と違います。孤雁入群格として意図したものかどうか、作者が判断してください。`));
+    } else {
+      out.push(finding(ctx, "rhyme-group", 0, [6], `起句の押韻字「${charAt(0, 6)}」（${r0}）が、${lineName(refLine)}の押韻字（${ref}）と同じ韻目ではありません。`));
     }
   }
 

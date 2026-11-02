@@ -12,6 +12,7 @@ import {
   RYO,
   UNKNOWN,
   VAR_ONE,
+  VAR_SAME,
   VAR_TWO,
   Z,
   baseLines,
@@ -97,6 +98,30 @@ describe("異体字の対応", () => {
     expect(info.readings.map((r) => r.via)).toEqual([P[31], Z[31]]);
     const byVia = Object.fromEntries(a.interpretations.map((i) => [i.readings[3]!.via, nonOk(i.findings).length > 0]));
     expect(byVia).toEqual({ [P[31]!]: true, [Z[31]!]: false });
+  });
+});
+
+describe("異体字の候補が同じ平仄のとき", () => {
+  it("候補の字ごとに解釈を分け、どの候補で判定したかを残す", () => {
+    const a = run(replaceAt(HN, 2, 2, VAR_SAME)); // 転句3字目（平）
+    expect(a.chars[2]![2]!.status).toBe("undetermined");
+    expect(a.interpretations.map((i) => i.readings[16]!.via)).toEqual([P[29], P[30]]);
+    expect(nonOk(a.findings)).toEqual([]);
+  });
+});
+
+describe("8字目以降のマス", () => {
+  it("字数が多い句に両韻字があっても止まらず、字数の違反を返す（読みは4句×7字の中だけで組み合わせる）", () => {
+    const lines = [...HN];
+    lines[0] = lines[0] + RYO[0]!;
+    const a = run(lines);
+    expect(nonOk(a.findings)).toContain("violation:length:0:");
+    expect(a.interpretations).toHaveLength(1);
+  });
+
+  it("未入力の句の8字目に両韻字があっても止まらない", () => {
+    const a = analyze("＿＿＿＿＿＿＿" + RYO[0]!, fixtureData);
+    expect(nonOk(a.findings)).toContain("violation:length:0:");
   });
 });
 

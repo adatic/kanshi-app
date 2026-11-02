@@ -142,6 +142,16 @@ describe("rhyme-tone・rhyme-group・kogan-nyugun（押韻）", () => {
   it("首句の押韻字だけ別の韻目なら孤雁入群格の可能性（要確認）", () => {
     expect(issues(run(replaceAt(HN, 0, 6, R2[0]!)))).toEqual(["check:kogan-nyugun:0:6"]);
   });
+
+  it("結句の押韻字が未入力なら、承句・結句の一致を確かめられないので孤雁入群格にはせず、韻目の違反", () => {
+    const lines = replaceAt(replaceAt(HN, 0, 6, R2[0]!), 3, 6, "＿");
+    expect(issues(run(lines))).toEqual(["violation:rhyme-group:0:6"]);
+  });
+
+  it("承句の押韻字がデータにない字でも、孤雁入群格にはしない", () => {
+    const lines = replaceAt(replaceAt(HN, 0, 6, R2[0]!), 1, 6, UNKNOWN);
+    expect(issues(run(lines))).toEqual(["check:unknown-char:1:6", "violation:rhyme-group:0:6"]);
+  });
 });
 
 describe("bou-in（冒韻）", () => {
@@ -158,6 +168,27 @@ describe("douji（同字重出）", () => {
     text[3] = first + [...text[3]!].slice(1).join("");
     const a = analyze(text.join("\n"), fixtureData);
     expect(issues(a)).toEqual(["check:douji:0:0", "check:douji:3:0"]);
+  });
+
+  it("「々」の直前が未入力なら、「々」も未入力として扱う（離れた字は繰り返さない）", () => {
+    const text = build(...HN).split("\n");
+    text[0] = [...text[0]!].map((c, i) => (i === 1 ? "＿" : i === 2 ? "々" : c)).join("");
+    const a = analyze(text.join("\n"), fixtureData);
+    expect(a.chars[0]![2]!.status).toBe("blank");
+    expect(a.errors).toEqual([]);
+    expect(issues(a)).toEqual([]);
+  });
+
+  it("句頭の「々」と、漢字以外の直後の「々」はエラー", () => {
+    const text = build(...HN).split("\n");
+    text[1] = "々" + [...text[1]!].slice(1).join("");
+    text[2] = [...text[2]!].map((c, i) => (i === 1 ? "・" : i === 2 ? "々" : c)).join("");
+    const a = analyze(text.join("\n"), fixtureData);
+    expect(a.errors.map((e) => [e.line, e.position, e.char])).toEqual([
+      [1, 0, "々"],
+      [2, 1, "・"],
+      [2, 2, "々"],
+    ]);
   });
 
   it("「々」は直前の字として扱い、同字重出として出す", () => {
@@ -224,9 +255,18 @@ describe("length（句数・字数）と入力エラー", () => {
     expect(a.symbols[0]!.at(-1)).toBe("×");
   });
 
-  it("行の前後の空白と、前後の空行は無視する", () => {
-    const text = "\n  " + build(...HN).replaceAll("\n", "  \n") + "\n\n";
-    expect(issues(analyze(text, fixtureData))).toEqual([]);
+  it("行の前後の空白も、漢字以外の文字として位置つきのエラーにする", () => {
+    const text = build(...HN).split("\n");
+    text[1] = " " + text[1]!;
+    const a = analyze(text.join("\n"), fixtureData);
+    expect(a.errors.map((e) => [e.line, e.position, e.char])).toEqual([[1, 0, " "]]);
+  });
+
+  it("テキストの前後の空行（字のない行）は無視する", () => {
+    const text = "\n" + build(...HN) + "\n\n";
+    const a = analyze(text, fixtureData);
+    expect(issues(a)).toEqual([]);
+    expect(a.errors).toEqual([]);
   });
 
   it("28マスの配列でも入力できる", () => {
