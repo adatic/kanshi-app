@@ -1,23 +1,19 @@
-// 画面の起動。いまは misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
+// 画面の起動。マス目で作るモードと、misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
 import { analyze } from "@kanshi/engine";
 import type { EngineData, FormId, Options } from "@kanshi/engine";
 import { loadEngineData } from "./data";
-import { h, resultView } from "./render";
-import { buildView } from "./view";
+import { BLANK, emptyGrid, gridToText, textToGrid } from "./grid";
+import { gridEditor } from "./gridEditor";
+import { cellPanel, h, resultParts, resultView } from "./render";
+import { buildView, cellDetail } from "./view";
 
-/** 最初に表示する例（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
+/** 例の詩（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
 const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞新承寵", "簾外春寒賜錦袍"].join("\n");
 
-function pasteMode(data: EngineData): HTMLElement {
-  const input = h("textarea", {
-    id: "poem-input",
-    rows: "4",
-    spellcheck: "false",
-    autocomplete: "off",
-    "aria-describedby": "poem-help",
-  }) as HTMLTextAreaElement;
-  input.value = SAMPLE;
+type Mode = "grid" | "paste";
 
+/** 設定（マス目と貼り付けモードで共通） */
+function settingsPanel(data: EngineData, onChange: () => void) {
   const formSelect = h(
     "select",
     { id: "form-select" },
@@ -33,21 +29,110 @@ function pasteMode(data: EngineData): HTMLElement {
   ) as HTMLSelectElement;
   const kokuji = h("input", { id: "allow-kokuji", type: "checkbox" }) as HTMLInputElement;
   const pattern = h("input", { id: "show-pattern", type: "checkbox", checked: "" }) as HTMLInputElement;
-  const output = h("div", { id: "result" });
+  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", onChange);
 
-  const update = () => {
-    const options: Options = {};
-    if (formSelect.value) options.form = formSelect.value as FormId;
-    if (unknownSelect.value) options.unknownAs = unknownSelect.value as "平" | "仄";
-    if (kokuji.checked) options.allowKokuji = true;
-    const view = buildView(analyze(input.value, data, options), data);
-    output.replaceChildren(resultView(view, pattern.checked));
+  const el = h(
+    "details",
+    { class: "settings" },
+    h("summary", {}, "設定"),
+    h(
+      "div",
+      { class: "options" },
+      h("label", { for: "form-select" }, "詩格"),
+      formSelect,
+      h("label", { for: "unknown-select" }, "平仄データにない字"),
+      unknownSelect,
+      h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
+      h("label", { class: "check" }, pattern, "平仄図式（定型）を表示する"),
+    ),
+  ) as HTMLDetailsElement;
+  // 広い画面では開いておく。スマホ幅では畳んで、詩を先に見せる
+  el.open = !window.matchMedia("(max-width: 760px)").matches;
+
+  return {
+    el,
+    options(): Options {
+      const o: Options = {};
+      if (formSelect.value) o.form = formSelect.value as FormId;
+      if (unknownSelect.value) o.unknownAs = unknownSelect.value as "平" | "仄";
+      if (kokuji.checked) o.allowKokuji = true;
+      return o;
+    },
+    showPattern: () => pattern.checked,
   };
-  for (const el of [input, formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("input", update);
-  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", update);
-  update();
+}
 
-  const sample = h("button", { type: "button", class: "small" }, "例の詩を入れる");
+function app(data: EngineData): HTMLElement {
+  let mode: Mode = "grid";
+  let grid = emptyGrid();
+  let selected: number | null = null;
+  /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
+  let gridEdited = false;
+
+  const settings = settingsPanel(data, () => update());
+
+  // ---- マス目で作る ----
+  const editor = gridEditor({
+    initial: grid,
+    onChange(next) {
+      grid = next;
+      gridEdited = true;
+      syncNote.textContent = "";
+      update();
+    },
+    onSelect(i) {
+      selected = i;
+      update();
+    },
+  });
+  const syncNote = h("p", { class: "sync-note", role: "status" });
+  const panel = h("div", { id: "cell-panel" });
+  const gridResult = h("div", { id: "grid-result", class: "result" });
+  const hasPoem = () => grid.some((c) => c !== BLANK);
+  const replaceGrid = (next: string[], question: string) => {
+    if (hasPoem() && !window.confirm(question)) return;
+    grid = next;
+    gridEdited = true;
+    editor.setGrid(grid);
+    syncNote.textContent = "";
+    update();
+    editor.focus(0);
+  };
+  const gridSample = h("button", { type: "button", class: "small", id: "grid-sample" }, "例の詩を入れる");
+  gridSample.addEventListener("click", () => {
+    const r = textToGrid(SAMPLE);
+    if ("grid" in r) replaceGrid(r.grid, "マス目の詩を、例の詩で置き換えますか？");
+  });
+  const gridClear = h("button", { type: "button", class: "small", id: "grid-clear" }, "すべて消す");
+  gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "マス目の字をすべて消しますか？"));
+
+  const gridMode = h(
+    "section",
+    { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
+    h(
+      "div",
+      { class: "poem-area" },
+      h("h2", {}, "作詩"),
+      h("p", { class: "help" }, "1マスに1字。漢字はふだんどおり変換して入れてください。2字以上を確定すると続くマスに入ります。矢印キーで移動できます。"),
+      editor.el,
+      syncNote,
+      h("div", { class: "buttons" }, gridSample, gridClear),
+    ),
+    h("aside", { class: "cell-panel", "aria-labelledby": "cell-panel-title" }, h("h2", { id: "cell-panel-title" }, "選択中のマス"), panel),
+    h("div", { class: "grid-results" }, h("h2", {}, "検査結果"), gridResult),
+  );
+
+  // ---- 貼り付けて判定する ----
+  const input = h("textarea", {
+    id: "poem-input",
+    rows: "4",
+    spellcheck: "false",
+    autocomplete: "off",
+    "aria-describedby": "poem-help",
+  }) as HTMLTextAreaElement;
+  input.addEventListener("input", () => update());
+  const output = h("div", { id: "result" });
+  const sample = h("button", { type: "button", class: "small", id: "paste-sample" }, "例の詩を入れる");
   sample.addEventListener("click", () => {
     input.value = SAMPLE;
     update();
@@ -58,41 +143,92 @@ function pasteMode(data: EngineData): HTMLElement {
     update();
     input.focus();
   });
-
-  return h(
+  const pasteMode = h(
     "section",
-    { class: "mode paste", "aria-labelledby": "paste-title" },
+    { id: "paste-mode", class: "paste-mode", role: "tabpanel", "aria-labelledby": "tab-paste", hidden: "" },
     h(
       "div",
       { class: "entry" },
-      h("h2", { id: "paste-title" }, "貼り付けて判定する"),
+      h("h2", {}, "貼り付けて判定する"),
       h("label", { for: "poem-input" }, "詩の本文（1句1行、7字×4行）"),
       input,
       h("p", { id: "poem-help", class: "help" }, "未入力のマスは「＿」、繰り返しは「々」で書けます。句読点や空白は漢字以外の文字として位置つきで知らせます。"),
       h("div", { class: "buttons" }, sample, clear),
-      h(
-        "fieldset",
-        { class: "options" },
-        h("legend", {}, "設定"),
-        h("label", { for: "form-select" }, "詩格"),
-        formSelect,
-        h("label", { for: "unknown-select" }, "平仄データにない字"),
-        unknownSelect,
-        h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
-        h("label", { class: "check" }, pattern, "平仄図式を表示する"),
-      ),
     ),
     output,
+  );
+
+  // ---- 切り替え ----
+  const tabs: Record<Mode, HTMLElement> = {
+    grid: h("button", { type: "button", role: "tab", id: "tab-grid", "aria-controls": "grid-mode" }, "マス目で作る"),
+    paste: h("button", { type: "button", role: "tab", id: "tab-paste", "aria-controls": "paste-mode" }, "貼り付けて判定する"),
+  };
+  const setMode = (next: Mode) => {
+    if (next === mode) return;
+    if (next === "grid") {
+      const r = textToGrid(input.value);
+      if ("grid" in r) {
+        grid = r.grid;
+        editor.setGrid(grid);
+        syncNote.textContent = "";
+      } else {
+        syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
+      }
+      gridEdited = false;
+    } else if (gridEdited || "grid" in textToGrid(input.value)) {
+      input.value = gridToText(grid);
+    }
+    mode = next;
+    for (const m of ["grid", "paste"] as const) {
+      tabs[m].setAttribute("aria-selected", String(m === mode));
+      tabs[m].tabIndex = m === mode ? 0 : -1;
+    }
+    gridMode.hidden = mode !== "grid";
+    pasteMode.hidden = mode !== "paste";
+    update();
+  };
+  for (const m of ["grid", "paste"] as const) {
+    tabs[m].setAttribute("aria-selected", String(m === mode));
+    tabs[m].tabIndex = m === mode ? 0 : -1;
+    tabs[m].addEventListener("click", () => setMode(m));
+    tabs[m].addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const other = m === "grid" ? "paste" : "grid";
+      setMode(other);
+      tabs[other].focus();
+    });
+  }
+
+  function update() {
+    const options = settings.options();
+    const showPattern = settings.showPattern();
+    if (mode === "grid") {
+      const a = analyze(grid, data, options);
+      const v = buildView(a, data);
+      editor.refresh(v, showPattern);
+      gridResult.replaceChildren(...resultParts(v, showPattern));
+      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)));
+    } else {
+      output.replaceChildren(resultView(buildView(analyze(input.value, data, options), data), showPattern));
+    }
+  }
+  update();
+
+  return h(
+    "div",
+    { class: "app" },
+    h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
+    h("div", { class: "workbench" }, settings.el, gridMode, pasteMode),
   );
 }
 
 async function start() {
-  const app = document.getElementById("app")!;
+  const root = document.getElementById("app")!;
   try {
     const data = await loadEngineData();
-    app.replaceChildren(pasteMode(data));
+    root.replaceChildren(app(data));
   } catch (e) {
-    app.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
+    root.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
   }
 }
 

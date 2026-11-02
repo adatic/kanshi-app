@@ -1,7 +1,8 @@
 // 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
 import { describe, expect, it } from "vitest";
 import { analyze } from "@kanshi/engine";
-import { buildView } from "../src/view";
+import type { Options } from "@kanshi/engine";
+import { buildView, cellDetail } from "../src/view";
 import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
 
 const HN = baseLines("heiki-nyuin");
@@ -129,5 +130,78 @@ describe("buildView", () => {
     const v = view(lines);
     expect(v.form.name).toBeNull();
     expect(v.lines.every((l) => l.pattern === null)).toBe(true);
+  });
+});
+
+describe("cellDetail（選択中のマス）", () => {
+  const detail = (lines: string[], index: number) => {
+    const a = analyze(build(...lines), fixtureData);
+    return cellDetail(a, buildView(a, fixtureData), fixtureData, index);
+  };
+
+  it("場所、字、読み（平仄つき）、定型が求める平仄を示す", () => {
+    const d = detail(HN, 1); // 起句2字目（定型は○）
+    expect(d.where).toBe("起句の2字目");
+    expect(d.char).toBe(build(...HN)[1]);
+    expect(d.status).toBe("known");
+    expect(d.readings).toEqual([{ label: "平・上平二冬", pz: "平" }]);
+    expect(d.required).toEqual([{ formName: "平起式・首句入韻", symbol: "○", text: "平" }]);
+    expect([d.findings, d.choice]).toEqual([[], null]);
+  });
+
+  it("押韻の位置は、平声で押韻することを示す。◐は平仄を問わない", () => {
+    expect(detail(HN, 6).required[0]).toMatchObject({ symbol: "◎", text: "平声で押韻" });
+    expect(detail(HN, 0).required[0]).toMatchObject({ symbol: "◐", text: "平仄を問わない" });
+  });
+
+  it("そのマスに出ている指摘（どの読みでも出るもの）を示す", () => {
+    const d = detail(replaceAt(HN, 0, 3, "○"), 3); // 起句4字目を平に
+    expect(d.findings.map((f) => f.ruleName)).toEqual(["定型との不一致", "二四不同", "孤平"]);
+  });
+
+  it("両韻字は、読みごとの結果を示す", () => {
+    const d = detail(replaceAt(HN, 0, 3, RYO[0]!), 3);
+    expect(d.readings.map((r) => r.pz)).toEqual(["平", "仄"]);
+    expect(d.choice!.map((o) => [o.label, o.clean])).toEqual([
+      ["平・上平二冬", false],
+      ["去・去声二宋", true],
+    ]);
+  });
+
+  it("未入力のマスは字を null にし、定型が求める平仄は示す", () => {
+    const d = detail(replaceAt(HN, 1, 2, "＿"), 9);
+    expect([d.char, d.status, d.readings]).toEqual([null, "blank", []]);
+    expect(d.required[0]).toMatchObject({ symbol: "◐" });
+  });
+
+  it("データにない字・国字は状態を返す", () => {
+    expect(detail(replaceAt(HN, 2, 0, UNKNOWN), 14).status).toBe("unknown");
+    expect(detail(replaceAt(HN, 2, 0, KOKUJI), 14).status).toBe("kokuji");
+  });
+
+  it("データにない字・国字の説明は、いまの設定での扱いを書く", () => {
+    const withOptions = (ch: string, options: Options) => {
+      const a = analyze(build(...replaceAt(HN, 2, 0, ch)), fixtureData, options);
+      return cellDetail(a, buildView(a, fixtureData), fixtureData, 14, options).statusText;
+    };
+    expect(withOptions(UNKNOWN, {})).toContain("判定していません");
+    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).toContain("仄として扱って判定しています");
+    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).not.toContain("判定していません");
+    expect(withOptions(KOKUJI, {})).toContain("使えません");
+    expect(withOptions(KOKUJI, { allowKokuji: true })).toContain("要確認として続けています");
+  });
+
+  it("詩格の候補が複数なら、候補ごとに定型が求める平仄を示す", () => {
+    const d = detail(replaceAt(HN, 0, 6, "＿"), 4); // 起句5字目：入韻型は●、不入韻型は◐
+    expect(d.required).toEqual([
+      { formName: "平起式・首句入韻", symbol: "●", text: "仄" },
+      { formName: "平起式・首句不入韻", symbol: "◐", text: "平仄を問わない" },
+    ]);
+  });
+
+  it("詩格が決まらないときは、定型が求める平仄を示さない", () => {
+    let lines = HN;
+    for (let i = 0; i < 4; i++) lines = replaceAt(lines, i, 1, "＿");
+    expect(detail(lines, 0).required).toEqual([]);
   });
 });

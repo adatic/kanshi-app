@@ -1,5 +1,5 @@
 // エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
-import type { Analysis, CharStatus, EngineData, Finding, Reading, Severity } from "@kanshi/engine";
+import type { Analysis, CharStatus, EngineData, Finding, Options, PZ, Reading, Severity } from "@kanshi/engine";
 
 const LINE_NAMES = ["起句", "承句", "転句", "結句"];
 export const lineName = (l: number) => LINE_NAMES[l] ?? `第${l + 1}句`;
@@ -46,6 +46,8 @@ export type ReadingOptionView = {
 };
 
 export type ReadingChoiceView = {
+  /** マスの番号（句×7＋位置） */
+  index: number;
   /** 「起句の1字目「娉」」 */
   cell: string;
   options: ReadingOptionView[];
@@ -131,6 +133,7 @@ function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
     const p = n % 7;
     const labels = [...new Set(rows.flatMap((r) => (r.readings[n] ? [readingLabel(r.readings[n]!)] : [])))];
     return {
+      index: n,
       cell: `${lineName(l)}の${p + 1}字目「${a.chars[l]![p]!.char}」`,
       options: labels.map((label) => {
         const { always, sometimes } = splitBy(rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings));
@@ -181,5 +184,71 @@ export function buildView(a: Analysis, data: EngineData): PoemView {
     formChoices: formChoices(a, data),
     independent: a.independent,
     errors: a.errors.map((e) => e.message),
+  };
+}
+
+/** 選択中のマス（右の列）。CLAUDE.md §4.5「選択中の字」 */
+export type CellDetailView = {
+  /** 「起句の4字目」 */
+  where: string;
+  /** 入力どおりの字。未入力なら null */
+  char: string | null;
+  status: CharStatus;
+  /** 字の状態と、いまの設定での扱いの説明 */
+  statusText: string;
+  /** 字の読み（声調・韻目）と平仄 */
+  readings: { label: string; pz: PZ }[];
+  /** 詩格の候補ごとに、定型がこのマスに求めるもの。詩格が決まらなければ空 */
+  required: { formName: string; symbol: string; text: string }[];
+  /** このマスに出ている指摘（どの読みでも出るもの） */
+  findings: FindingView[];
+  /** 読みが複数ある字なら、読みごとの結果 */
+  choice: ReadingOptionView[] | null;
+};
+
+const PATTERN_TEXT: Record<string, string> = { "○": "平", "●": "仄", "◐": "平仄を問わない", "◎": "平声で押韻" };
+
+/** 字の状態の説明。データにない字と国字は、設定によって扱いが変わるので、いまの扱いを書く */
+export function statusText(status: CharStatus, options: Options): string {
+  switch (status) {
+    case "known":
+      return "平仄データにある字です。";
+    case "undetermined":
+      return "異体字の対応で候補の字が複数あり、どの字か一つに決まりません。候補の字の読みをすべて示します。";
+    case "unknown":
+      return options.unknownAs !== undefined
+        ? `平仄データにない字です。設定により、${options.unknownAs}として扱って判定しています。`
+        : "平仄データにない字です。平仄は判定していません（設定で平・仄のどちらかとして扱えます）。";
+    case "kokuji":
+      return options.allowKokuji
+        ? "国字（日本で作られた字）です。設定により、違反ではなく要確認として続けています。"
+        : "国字（日本で作られた字）です。漢詩には使えません（設定で続けることもできます）。";
+    case "blank":
+      return "未入力のマスです。";
+    case "invalid":
+      return "漢字ではありません。";
+  }
+}
+
+export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: number, options: Options = {}): CellDetailView {
+  const l = Math.floor(index / 7);
+  const p = index % 7;
+  const info = a.chars[l]?.[p];
+  const formIds = [...new Set(a.interpretations.map((i) => i.form.id))].filter((id) => id !== null);
+  const required = formIds.flatMap((id) => {
+    const f = data.forms.forms.find((x) => x.id === id);
+    const symbol = f?.lines[l]?.pattern[p];
+    return f && symbol ? [{ formName: f.name, symbol, text: PATTERN_TEXT[symbol] ?? symbol }] : [];
+  });
+  const view = toFindingView(data);
+  return {
+    where: `${lineName(l)}の${p + 1}字目`,
+    char: info === undefined || info.status === "blank" ? null : (info.input ?? info.char),
+    status: info?.status ?? "blank",
+    statusText: statusText(info?.status ?? "blank", options),
+    readings: (info?.readings ?? []).map((r) => ({ label: readingLabel(r), pz: r.tone === "平" ? "平" : "仄" })),
+    required,
+    findings: a.findings.filter((f) => f.line === l && f.positions.includes(p) && f.severity !== "ok").map(view),
+    choice: v.readingChoices.find((c) => c.index === index)?.options ?? null,
   };
 }

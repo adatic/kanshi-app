@@ -56,7 +56,7 @@ body {
 header.site,
 main,
 footer.site {
-  max-width: 1080px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 header.site {
@@ -87,16 +87,285 @@ footer.site {
   color: var(--shu);
 }
 
-/* 貼り付けモード：左に入力と設定、右に結果。狭い画面では縦に積む */
-.mode {
+/* 入力のしかたの切り替え */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-top: 12px;
+}
+.tabs [role="tab"] {
+  font: inherit;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+.tabs [role="tab"][aria-selected="true"] {
+  background: var(--sheet);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* 作業台：左に設定、右に作業の場。狭い画面では設定を上に畳む */
+.workbench {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
   padding-block: 16px;
 }
+@media (max-width: 1100px) {
+  .workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.settings {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+.settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.settings .options {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.settings label.check {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--ink);
+}
+[hidden] {
+  display: none !important;
+}
+
+/* マス目で作る：中央に作詩と検査結果、右に選択中のマス */
+.grid-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-areas: "poem panel" "results panel";
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+}
+.poem-area {
+  grid-area: poem;
+}
+.cell-panel {
+  grid-area: panel;
+}
+.grid-results {
+  grid-area: results;
+  min-width: 0;
+}
+@media (min-width: 761px) {
+  .cell-panel {
+    position: sticky;
+    top: 12px;
+  }
+}
 @media (max-width: 760px) {
-  .mode {
+  .grid-mode {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "poem" "panel" "results";
+  }
+}
+.poem-area,
+.cell-panel {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.grid-poem {
+  display: grid;
+  gap: 14px;
+}
+.gline {
+  display: grid;
+  grid-template-columns: 2.6em repeat(7, minmax(0, 3rem));
+  column-gap: 4px;
+  row-gap: 2px;
+  align-items: center;
+}
+.gline .line-name {
+  padding-top: 0;
+}
+.gcells {
+  display: contents;
+}
+.gcell {
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  aspect-ratio: 1;
+  min-width: 0;
+}
+.gin {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: center;
+  font-family: var(--f-han);
+  font-size: 1.6rem;
+  padding: 0;
+  border-radius: 8px;
+  caret-color: var(--ai);
+}
+.gin:focus-visible {
+  outline: 2px solid var(--ai);
+  outline-offset: 1px;
+}
+.gin::selection {
+  background: var(--ai-soft);
+}
+.gcell .mark {
+  position: absolute;
+  top: 0;
+  right: 3px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+.gcell.sev-violation {
+  background: var(--shu-soft);
+  border-color: var(--shu);
+}
+.gcell.sev-violation .mark {
+  color: var(--shu);
+}
+.gcell.sev-check {
+  background: var(--odo-soft);
+  border-color: var(--odo);
+}
+.gcell.sev-check .mark {
+  color: var(--odo);
+}
+.gcell.sev-variant {
+  background: var(--rokusho-soft);
+}
+.gcell.sev-variant .mark {
+  color: var(--rokusho);
+}
+.grow {
+  display: contents;
+}
+.grow .row-label {
+  grid-column: 1;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.grow .gsym {
+  text-align: center;
+  line-height: 1.2;
+}
+.grow.gpat .gsym {
+  color: var(--ai);
+}
+.grow.gact .gsym {
+  color: var(--muted);
+}
+.grid-note,
+.sync-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--odo);
+}
+.grid-note:empty,
+.sync-note:empty {
+  display: none;
+}
+
+/* 選択中のマス */
+.cell-detail {
+  display: grid;
+  gap: 4px;
+}
+.cell-detail .where {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.cell-detail .big-char {
+  margin: 0;
+  font-family: var(--f-han);
+  font-size: 2.6rem;
+  line-height: 1.2;
+}
+.cell-detail .big-char.blank {
+  color: var(--line);
+}
+.cell-detail .status {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.cell-detail h3 {
+  margin: 10px 0 2px;
+  font-size: 0.9rem;
+}
+.plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+.plain .mark {
+  font-weight: 700;
+  margin-right: 6px;
+}
+.plain .mark.sev-violation {
+  color: var(--shu);
+}
+.plain .mark.sev-check {
+  color: var(--odo);
+}
+.pz {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.8rem;
+  background: var(--ai-soft);
+  color: var(--ai);
+}
+.req-sym {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--ai);
+}
+
+/* 貼り付けて判定する：左に入力、右に結果 */
+.paste-mode {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .paste-mode {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -170,27 +439,6 @@ button.small:hover {
   border-color: var(--ai);
   color: var(--ai);
 }
-.options {
-  display: grid;
-  gap: 4px;
-  border: 0;
-  border-top: 1px solid var(--line);
-  padding: 12px 0 0;
-  margin: 4px 0 0;
-  min-width: 0;
-}
-.options legend {
-  font-size: 0.8rem;
-  color: var(--muted);
-  padding: 0;
-}
-.options label.check {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  color: var(--ink);
-}
-
 /* 結果 */
 .result {
   display: grid;

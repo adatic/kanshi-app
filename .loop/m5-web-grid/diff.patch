@@ -1,0 +1,1502 @@
+diff --git a/TASKS.md b/TASKS.md
+index 6a07d38..a6f705f 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,6 +4,20 @@
+ 
+ ## 進行中
+ 
++### m5-web-grid — マス目エディタ（M5）
++
++ブランチ: `task/m5-web-grid`
++
++完了条件:
++- [ ] 1画面3列（設定／作詩エリア／選択中のマス）。スマホ幅では縦に積み、横にはみ出さない（CLAUDE.md §4.5・§6.3）
++- [ ] 作詩エリアは 7字×4句のマス目。各句に定型（○●◐◎）と実際（misima 互換の記号）を並べる。1字入れるたびに全体を判定し直す（§4.5）
++- [ ] 違反・要確認・変格のマスを色で示し、色だけに頼らず記号（✕！△）と、マスの説明（読み上げ用の文）を付ける（§4.5）
++- [ ] 漢字の入力は OS の変換に任せる。変換中（IME の未確定）は判定せず、確定した文字だけを入れる。2字以上を確定・貼り付けしたら、その句の続くマスに順に入れる（句の末を越えない。改行があれば次の句へ）。漢字以外（かな・記号）はマスに入れず、理由を知らせる
++- [ ] 矢印キーでマスを移動できる。空のマスで Backspace を押すと前のマスに戻る
++- [ ] マスを選ぶと、右の列にその字の声調・韻目（読みが複数あれば読みごとの結果）、定型が求める平仄、そのマスに出ている指摘を出す。未入力のマスはそうと示す
++- [ ] 設定（詩格の自動／固定、データにない字の扱い、国字、平仄図式の表示）はマス目と貼り付けモードで共通。貼り付けモードとマス目を切り替えても、詩の本文は引き継ぐ（7字×4句の漢字にならない本文は、マス目に移さずに理由を示す）
++- [ ] マス目の編集（字の配置、移動）と、選択中のマスの表示を組み立てる処理は純関数にして単体テストする。Playwright で、マス目への入力（変換の確定を含む）、判定の更新、レイアウトを確かめる
++
+ ## 完了
+ 
+ ### m5-web-paste — Web アプリの土台と、misima 互換の貼り付けモード（M5）
+diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
+index ea9bcce..d63a15f 100644
+--- a/apps/web/e2e/smoke.mjs
++++ b/apps/web/e2e/smoke.mjs
+@@ -52,14 +52,93 @@ try {
+     });
+     const errors = [];
+     page.on("pageerror", (e) => errors.push(String(e)));
++    page.on("dialog", (d) => d.accept());
+     await page.goto(`${ORIGIN}/`);
+-    await page.waitForSelector("#result .poem");
++    await page.waitForSelector("#grid-mode .gin");
++    const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
++    const focused = () => page.evaluate(() => Number(document.activeElement?.getAttribute("data-index") ?? -1));
++    const actualSymbols = () =>
++      page.$$eval("#grid-mode .grow.gact", (rows) => rows.map((r) => [...r.querySelectorAll(".gsym")].map((s) => s.textContent || "＿").join("")));
+ 
+-    // 例の詩（q03 と同じ本文）の記号列が、スナップショットと一致する
++    // ---- マス目で作る（最初の画面） ----
++    if (label === "desktop") {
++      // 3列：設定・作詩・選択中のマスが左から並ぶ
++      const xs = await Promise.all([".settings", ".poem-area", ".cell-panel"].map((s) => page.locator(s).boundingBox().then((b) => b.x)));
++      check(xs[0] < xs[1] && xs[1] < xs[2], `${label}: 設定・作詩・選択中のマスが3列に並ぶ（x=${xs.map(Math.round).join(", ")}）`);
++    } else {
++      const ys = await Promise.all([".settings", ".poem-area", ".cell-panel", ".grid-results"].map((s) => page.locator(s).boundingBox().then((b) => b.y)));
++      check(ys.every((y, k) => k === 0 || ys[k - 1] < y), `${label}: 設定・作詩・選択中のマス・検査結果が縦に積まれる`);
++    }
++
++    // 1句ずつ確定して入れると、続くマスに入り、次の句の頭へ進む。記号列がスナップショット q03 と一致する
++    const q03 = poem("q03").lines;
++    await cell(0).click();
++    for (const line of q03) await page.keyboard.insertText(line);
++    check((await focused()) === 27, `${label}: 1句ずつの確定で最後のマスまで進む（いま ${await focused()}）`);
++    check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: マス目の記号列がスナップショット q03 と一致`);
++
++    // 変換中（未確定）は判定せず、確定した字だけを入れる
++    const cdp = await page.context().newCDPSession(page);
++    await cell(0).click();
++    const before = await actualSymbols();
++    await cdp.send("Input.imeSetComposition", { text: "かな", selectionStart: 2, selectionEnd: 2 });
++    // 変換中に確定扱いすると、かなは漢字でないとして消され、理由が出る
++    const composingNote = await page.locator(".grid-note").textContent();
++    const preedit = await cell(0).inputValue();
++    check(
++      JSON.stringify(await actualSymbols()) === JSON.stringify(before) && composingNote === "" && preedit === "かな",
++      `${label}: 変換中は確定扱いせず、判定し直さない（入力欄「${preedit}」、知らせ「${composingNote}」）`,
++    );
++    await cdp.send("Input.insertText", { text: q03[1].slice(0, 2) });
++    await page.waitForFunction(() => document.activeElement?.getAttribute("data-index") === "2");
++    const two = await Promise.all([cell(0).inputValue(), cell(1).inputValue()]);
++    check(two.join("") === q03[1].slice(0, 2), `${label}: 2字の確定が続く2マスに入る（${two.join("")}）`);
++    // 元に戻す
++    await cell(0).click();
++    await page.keyboard.insertText(q03[0].slice(0, 2));
++
++    // かなはマスに入れず、理由を示す
++    await cell(5).click();
++    await page.keyboard.insertText("か");
++    const note = await page.locator(".grid-note").textContent();
++    check(note.includes("漢字ではない") && (await cell(5).inputValue()) === q03[0][5], `${label}: かなは入れずに理由を示す`);
++
++    // 矢印キーで移動し、選んだマスを右の列に示す
++    await cell(8).click();
++    await page.keyboard.press("ArrowDown");
++    check((await focused()) === 15, `${label}: 下矢印で次の句の同じ位置へ`);
++    const where = await page.locator("#cell-panel .where").textContent();
++    check(where === "転句の2字目", `${label}: 選んだマスの場所を示す（${where}）`);
++    const big = await page.locator("#cell-panel .big-char").textContent();
++    check(big === q03[2][1], `${label}: 選んだマスの字を示す`);
++
++    // 空のマスで Backspace を押すと前のマスに戻る
++    await cell(20).click();
++    await page.keyboard.press("Backspace");
++    check((await cell(20).inputValue()) === "", `${label}: Backspace で字を消す`);
++    await page.keyboard.press("Backspace");
++    check((await focused()) === 19, `${label}: 空のマスで Backspace を押すと前のマスへ`);
++    await cell(20).click();
++    await page.keyboard.insertText(q03[2][6]);
++
++    // 詩全体（改行つき）の貼り付けは、句ごとに分けて入る
++    await page.locator("#grid-clear").click();
++    await cell(0).click();
++    await page.evaluate((text) => {
++      const dt = new DataTransfer();
++      dt.setData("text/plain", text);
++      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
++    }, q03.join("\n"));
++    check(JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 詩全体の貼り付けが句ごとに入る`);
++    if (shots) await page.screenshot({ path: `${shots}/${label}-grid.png`, fullPage: true });
++
++    // ---- 貼り付けモード。マス目の詩を引き継ぐ ----
++    await page.locator("#tab-paste").click();
++    check((await page.inputValue("#poem-input")) === q03.join("\n"), `${label}: 貼り付けモードへマス目の詩を引き継ぐ`);
+     const symbols = await page.$$eval("#result .line", (lines) =>
+       lines.map((l) => [...l.querySelectorAll(".ch .sym")].map((s) => s.textContent).join("")),
+     );
+-    check(JSON.stringify(symbols) === JSON.stringify(snap("q03").symbols), `${label}: 例の詩の記号列がスナップショット q03 と一致`);
++    check(JSON.stringify(symbols) === JSON.stringify(snap("q03").symbols), `${label}: 貼り付けモードの記号列がスナップショット q03 と一致`);
+ 
+     // 違反のある詩（q10）を入れると、明確な違反の件数がスナップショットと一致する
+     await page.fill("#poem-input", poem("q10").lines.join("\n"));
+@@ -69,20 +148,32 @@ try {
+     if (shots) await page.screenshot({ path: `${shots}/${label}-q10.png`, fullPage: true });
+ 
+     // 入力の誤り（句読点）は位置つきで知らせる
+-    await page.fill("#poem-input", poem("q03").lines.join("，\n"));
++    await page.fill("#poem-input", q03.join("，\n"));
+     const inputErrors = await page.$$eval("#result .errors li", (li) => li.length);
+     check(inputErrors === 3, `${label}: 句読点3つを入力の誤りとして知らせる（${inputErrors}件）`);
+ 
+-    // 横にはみ出さない
++    // 7字×4句の漢字にならない本文は、マス目に移さずに理由を示す
++    await page.locator("#tab-grid").click();
++    const sync = await page.locator(".sync-note").textContent();
++    check(sync.includes("マス目に移していません") && JSON.stringify(await actualSymbols()) === JSON.stringify(snap("q03").symbols), `${label}: 移せない本文は理由を示し、マス目は前のまま`);
++    await page.locator("#tab-paste").click();
++    check((await page.inputValue("#poem-input")) === q03.join("，\n"), `${label}: マス目を編集していなければ、貼り付けた本文はそのまま`);
++
++    // 貼り付けモードで横にはみ出さない
+     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+-    check(overflow <= 0, `${label}: 横にはみ出さない（はみ出し ${overflow}px）`);
++    check(overflow <= 0, `${label}: 貼り付けモードで横にはみ出さない（はみ出し ${overflow}px）`);
+ 
+     check(outside.length === 0, `${label}: ページの外への通信がない${outside.length ? `（${outside.join(", ")}）` : ""}`);
+     check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
+-    if (shots) {
+-      await page.fill("#poem-input", poem("q03").lines.join("\n"));
+-      await page.screenshot({ path: `${shots}/${label}-sample.png`, fullPage: true });
+-    }
++    // マス目モードでも、選択中のマスと検査結果を出した状態で、横にはみ出さない
++    await page.locator("#tab-grid").click();
++    await page.locator("#grid-sample").click();
++    await cell(10).click();
++    const panelShown = await page.locator("#cell-panel .big-char").isVisible();
++    const resultsShown = await page.locator("#grid-result .findings, #grid-result .none").first().isVisible();
++    const gridOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    check(panelShown && resultsShown && gridOverflow <= 0, `${label}: マス目モード（選択中のマスと検査結果を表示）で横にはみ出さない（はみ出し ${gridOverflow}px）`);
++    if (shots) await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
+     await page.close();
+   }
+ } finally {
+diff --git a/apps/web/index.html b/apps/web/index.html
+index 64eae68..2870d0f 100644
+--- a/apps/web/index.html
++++ b/apps/web/index.html
+@@ -12,7 +12,7 @@
+       <h1>七言絶句の作業台</h1>
+       <p class="lede">平仄・押韻・禁則を、平水韻のデータで機械的に判定します。詩の良し悪しは作者が決めます。</p>
+     </header>
+-    <main id="app" aria-live="polite">
++    <main id="app">
+       <p class="loading">データを読み込んでいます…</p>
+     </main>
+     <footer class="site">
+diff --git a/apps/web/src/grid.ts b/apps/web/src/grid.ts
+new file mode 100644
+index 0000000..4a46b14
+--- /dev/null
++++ b/apps/web/src/grid.ts
+@@ -0,0 +1,99 @@
++// マス目（7字×4句＝28マス）の編集。純関数で、DOM には触れない（CLAUDE.md §4.5）。
++// マスには漢字1字、「々」、または未入力の「＿」が入る。
++
++export const BLANK = "＿";
++export const LINES = 4;
++export const WIDTH = 7;
++export const CELLS = LINES * WIDTH;
++
++const LINE_NAMES = ["起句", "承句", "転句", "結句"];
++
++const isHan = (c: string) => /^\p{Script=Han}$/u.test(c); // 「々」も含む
++const isSpace = (c: string) => /^\s$/u.test(c);
++
++export function emptyGrid(): string[] {
++  return Array.from({ length: CELLS }, () => BLANK);
++}
++
++export type WriteResult = {
++  grid: string[];
++  /** 入れたあとに選ぶマス */
++  next: number;
++  /** 漢字でないため入れなかった文字（重複なし） */
++  rejected: string[];
++  /** 句の末（または4句）を越えたため入れなかった字 */
++  overflow: string[];
++};
++
++/**
++ * index のマスから text の字を入れる。
++ * - 2字以上は同じ句の続くマスに順に入れ、句の末を越える字は入れない。改行があれば次の句の頭へ移る
++ * - 漢字・「々」・「＿」だけを入れる。空白は飛ばし、ほかの文字は入れずに返す
++ * - 空の文字列なら、そのマスを空にする
++ */
++export function writeAt(grid: readonly string[], index: number, text: string): WriteResult {
++  const out = [...grid];
++  if (text === "") {
++    out[index] = BLANK;
++    return { grid: out, next: index, rejected: [], overflow: [] };
++  }
++  const rejected = new Set<string>();
++  const overflow: string[] = [];
++  let pos = index;
++  let lineEnd = (Math.floor(index / WIDTH) + 1) * WIDTH;
++  let wrote = false;
++  for (const c of text.replace(/\r\n?/g, "\n")) {
++    if (c === "\n") {
++      pos = lineEnd;
++      lineEnd += WIDTH;
++      continue;
++    }
++    if (isSpace(c)) continue;
++    if (!isHan(c) && c !== BLANK) {
++      rejected.add(c);
++      continue;
++    }
++    if (pos >= lineEnd || pos >= CELLS) {
++      overflow.push(c);
++      continue;
++    }
++    out[pos++] = c;
++    wrote = true;
++  }
++  return { grid: out, next: wrote ? Math.min(pos, CELLS - 1) : index, rejected: [...rejected], overflow };
++}
++
++/** 1句1行のテキスト。全部が未入力なら空の文字列 */
++export function gridToText(grid: readonly string[]): string {
++  if (grid.every((c) => c === BLANK)) return "";
++  return Array.from({ length: LINES }, (_, l) => grid.slice(l * WIDTH, (l + 1) * WIDTH).join("")).join("\n");
++}
++
++/** 1句1行のテキストをマス目にする。7字×4句の漢字（と「々」「＿」）でなければ、理由を返す */
++export function textToGrid(text: string): { grid: string[] } | { reasons: string[] } {
++  const rows = text.split(/\r?\n/).map((l) => l.replace(/\s+$/u, ""));
++  while (rows.length > 0 && rows[0] === "") rows.shift();
++  while (rows.length > 0 && rows[rows.length - 1] === "") rows.pop();
++  if (rows.length === 0) return { grid: emptyGrid() };
++  if (rows.length !== LINES) return { reasons: [`${LINES}句ではありません（${rows.length}句）。`] };
++
++  const reasons: string[] = [];
++  const grid: string[] = [];
++  rows.forEach((row, l) => {
++    const chars = [...row];
++    if (chars.length !== WIDTH) reasons.push(`${LINE_NAMES[l]}が${WIDTH}字ではありません（${chars.length}字）。`);
++    chars.forEach((c, p) => {
++      if (!isHan(c) && c !== BLANK) reasons.push(`${LINE_NAMES[l]}の${p + 1}字目「${c}」は漢字ではありません。`);
++    });
++    grid.push(...chars);
++  });
++  return reasons.length > 0 ? { reasons } : { grid };
++}
++
++export type MoveKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown";
++
++/** 矢印キーで移る先のマス。端では留まる */
++export function moveFrom(index: number, key: MoveKey): number {
++  const to = { ArrowLeft: index - 1, ArrowRight: index + 1, ArrowUp: index - WIDTH, ArrowDown: index + WIDTH }[key];
++  return to >= 0 && to < CELLS ? to : index;
++}
+diff --git a/apps/web/src/gridEditor.ts b/apps/web/src/gridEditor.ts
+new file mode 100644
+index 0000000..5018ce2
+--- /dev/null
++++ b/apps/web/src/gridEditor.ts
+@@ -0,0 +1,170 @@
++// マス目エディタ（DOM）。編集の規則は grid.ts の純関数にあり、ここは入力の受け取りと表示の更新だけを持つ。
++// 漢字の入力は OS の変換に任せる。変換中（未確定）は何もせず、確定した文字だけをマスに入れる（CLAUDE.md §4.5）。
++import { BLANK, CELLS, WIDTH, moveFrom, writeAt, type MoveKey } from "./grid";
++import { SEVERITY_MARK, SEVERITY_NAME, h } from "./render";
++import type { PoemView } from "./view";
++
++export type GridEditor = {
++  el: HTMLElement;
++  /** マス目の字を差し替える（表示だけ。onChange は呼ばない） */
++  setGrid(grid: readonly string[]): void;
++  /** 判定結果を表示に反映する */
++  refresh(view: PoemView, showPattern: boolean): void;
++  focus(index: number): void;
++};
++
++const LINE_NAMES = ["起句", "承句", "転句", "結句"];
++const MOVE_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
++
++export function gridEditor(opts: {
++  initial: readonly string[];
++  onChange(grid: string[]): void;
++  onSelect(index: number): void;
++}): GridEditor {
++  let grid = [...opts.initial];
++  const note = h("p", { class: "grid-note", role: "status" });
++  const inputs: HTMLInputElement[] = [];
++  const cells: HTMLElement[] = [];
++  const marks: HTMLElement[] = [];
++  const patternRows: HTMLElement[] = [];
++  const actualRows: HTMLElement[] = [];
++
++  const valueOf = (i: number) => (grid[i] === BLANK ? "" : grid[i]!);
++
++  const focus = (i: number) => {
++    const el = inputs[i]!;
++    el.focus();
++    el.select();
++  };
++
++  const commit = (i: number) => {
++    const value = inputs[i]!.value;
++    if (value === valueOf(i)) return; // 同じ確定を二度受けたとき（ブラウザによってイベントの順が違う）
++    write(i, value);
++  };
++
++  const write = (i: number, value: string) => {
++    const r = writeAt(grid, i, value);
++    const messages: string[] = [];
++    if (r.rejected.length > 0) messages.push(`「${r.rejected.join("」「")}」は漢字ではないので、マスに入れていません。`);
++    if (r.overflow.length > 0) messages.push(`句の末を越えた「${r.overflow.join("")}」は入れていません。`);
++    note.textContent = messages.join("");
++    grid = r.grid;
++    for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
++    opts.onChange([...grid]);
++    focus(r.next);
++  };
++
++  const lines = Array.from({ length: CELLS / WIDTH }, (_, l) => {
++    const rowCells = Array.from({ length: WIDTH }, (_, p) => {
++      const i = l * WIDTH + p;
++      const input = h("input", {
++        class: "gin",
++        type: "text",
++        lang: "zh-Hant",
++        autocomplete: "off",
++        autocapitalize: "off",
++        spellcheck: "false",
++        enterkeyhint: "next",
++        "aria-label": `${LINE_NAMES[l]}の${p + 1}字目`,
++        "data-index": String(i),
++      }) as HTMLInputElement;
++      input.value = valueOf(i);
++      let composing = false;
++      input.addEventListener("compositionstart", () => {
++        composing = true;
++        note.textContent = "";
++      });
++      input.addEventListener("compositionend", () => {
++        composing = false;
++        // 確定のあとに来る input イベントとの順はブラウザによって違うので、一拍おいて受ける
++        setTimeout(() => commit(i), 0);
++      });
++      input.addEventListener("input", (e) => {
++        if (composing || (e as InputEvent).isComposing) return;
++        commit(i);
++      });
++      // 1行の入力欄は貼り付けた改行を消すので、貼り付けは自分で受けて、改行で次の句へ移れるようにする
++      input.addEventListener("paste", (e) => {
++        const text = e.clipboardData?.getData("text/plain");
++        if (text === undefined) return;
++        e.preventDefault();
++        write(i, text);
++      });
++      input.addEventListener("focus", () => {
++        input.select();
++        opts.onSelect(i);
++      });
++      // クリックでカーソルが字の前後に入ると、打った字が前後に挟まるので、常に字全体を選んだ状態にする
++      input.addEventListener("mouseup", (e) => e.preventDefault());
++      input.addEventListener("mousedown", (e) => {
++        if (document.activeElement === input) e.preventDefault();
++      });
++      input.addEventListener("keydown", (e) => {
++        // Safari は変換を確定する Enter を isComposing なしで送るので、keyCode 229 も変換中とみなす
++        if (composing || e.isComposing || e.keyCode === 229) return;
++        if (MOVE_KEYS.has(e.key)) {
++          e.preventDefault();
++          focus(moveFrom(i, e.key as MoveKey));
++        } else if (e.key === "Backspace" && input.value === "" && i > 0) {
++          e.preventDefault();
++          focus(i - 1);
++        } else if (e.key === "Enter") {
++          e.preventDefault();
++          focus(Math.min((l + 1) * WIDTH, CELLS - 1));
++        }
++      });
++      const mark = h("span", { class: "mark", "aria-hidden": "true" });
++      const cell = h("div", { class: "gcell" }, input, mark);
++      inputs.push(input);
++      cells.push(cell);
++      marks.push(mark);
++      return cell;
++    });
++    const symRow = (cls: string, label: string) => {
++      const row = h("div", { class: `grow ${cls}` }, h("span", { class: "row-label" }, label));
++      for (let p = 0; p < WIDTH; p++) row.append(h("span", { class: "gsym" }));
++      return row;
++    };
++    const pattern = symRow("gpat", "定型");
++    const actual = symRow("gact", "実際");
++    patternRows.push(pattern);
++    actualRows.push(actual);
++    return h(
++      "div",
++      { class: "gline" },
++      h("span", { class: "line-name" }, LINE_NAMES[l]!),
++      h("div", { class: "gcells" }, ...rowCells),
++      pattern,
++      actual,
++    );
++  });
++
++  const el = h("div", { class: "grid-editor" }, h("div", { class: "grid-poem", role: "group", "aria-label": "詩のマス目（7字×4句）" }, ...lines), note);
++
++  return {
++    el,
++    setGrid(next) {
++      grid = [...next];
++      for (let k = 0; k < CELLS; k++) inputs[k]!.value = valueOf(k);
++      note.textContent = "";
++    },
++    refresh(view, showPattern) {
++      view.lines.forEach((line, l) => {
++        const syms = actualRows[l]!.querySelectorAll(".gsym");
++        line.cells.forEach((c, p) => {
++          const i = l * WIDTH + p;
++          const sev = c.severity !== null && c.severity !== "ok" ? c.severity : null;
++          cells[i]!.className = `gcell ${sev ? `sev-${sev}` : ""}`;
++          marks[i]!.textContent = sev ? SEVERITY_MARK[sev] : "";
++          inputs[i]!.setAttribute("aria-label", `${LINE_NAMES[l]}の${p + 1}字目${sev ? `（${SEVERITY_NAME[sev]}）` : ""}`);
++          syms[p]!.textContent = c.symbol === BLANK ? "" : c.symbol;
++        });
++        const pat = patternRows[l]!;
++        pat.hidden = !showPattern || line.pattern === null;
++        pat.querySelectorAll(".gsym").forEach((s, p) => (s.textContent = line.pattern?.[p] ?? ""));
++      });
++    },
++    focus,
++  };
++}
+diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
+index 39a9dce..baafdd6 100644
+--- a/apps/web/src/main.ts
++++ b/apps/web/src/main.ts
+@@ -1,23 +1,19 @@
+-// 画面の起動。いまは misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
++// 画面の起動。マス目で作るモードと、misima 互換の貼り付けモード（CLAUDE.md §4.2・§4.5）。
+ import { analyze } from "@kanshi/engine";
+ import type { EngineData, FormId, Options } from "@kanshi/engine";
+ import { loadEngineData } from "./data";
+-import { h, resultView } from "./render";
+-import { buildView } from "./view";
++import { BLANK, emptyGrid, gridToText, textToGrid } from "./grid";
++import { gridEditor } from "./gridEditor";
++import { cellPanel, h, resultParts, resultView } from "./render";
++import { buildView, cellDetail } from "./view";
+ 
+-/** 最初に表示する例（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
++/** 例の詩（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
+ const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞新承寵", "簾外春寒賜錦袍"].join("\n");
+ 
+-function pasteMode(data: EngineData): HTMLElement {
+-  const input = h("textarea", {
+-    id: "poem-input",
+-    rows: "4",
+-    spellcheck: "false",
+-    autocomplete: "off",
+-    "aria-describedby": "poem-help",
+-  }) as HTMLTextAreaElement;
+-  input.value = SAMPLE;
++type Mode = "grid" | "paste";
+ 
++/** 設定（マス目と貼り付けモードで共通） */
++function settingsPanel(data: EngineData, onChange: () => void) {
+   const formSelect = h(
+     "select",
+     { id: "form-select" },
+@@ -33,21 +29,110 @@ function pasteMode(data: EngineData): HTMLElement {
+   ) as HTMLSelectElement;
+   const kokuji = h("input", { id: "allow-kokuji", type: "checkbox" }) as HTMLInputElement;
+   const pattern = h("input", { id: "show-pattern", type: "checkbox", checked: "" }) as HTMLInputElement;
+-  const output = h("div", { id: "result" });
++  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", onChange);
++
++  const el = h(
++    "details",
++    { class: "settings" },
++    h("summary", {}, "設定"),
++    h(
++      "div",
++      { class: "options" },
++      h("label", { for: "form-select" }, "詩格"),
++      formSelect,
++      h("label", { for: "unknown-select" }, "平仄データにない字"),
++      unknownSelect,
++      h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
++      h("label", { class: "check" }, pattern, "平仄図式（定型）を表示する"),
++    ),
++  ) as HTMLDetailsElement;
++  // 広い画面では開いておく。スマホ幅では畳んで、詩を先に見せる
++  el.open = !window.matchMedia("(max-width: 760px)").matches;
+ 
+-  const update = () => {
+-    const options: Options = {};
+-    if (formSelect.value) options.form = formSelect.value as FormId;
+-    if (unknownSelect.value) options.unknownAs = unknownSelect.value as "平" | "仄";
+-    if (kokuji.checked) options.allowKokuji = true;
+-    const view = buildView(analyze(input.value, data, options), data);
+-    output.replaceChildren(resultView(view, pattern.checked));
++  return {
++    el,
++    options(): Options {
++      const o: Options = {};
++      if (formSelect.value) o.form = formSelect.value as FormId;
++      if (unknownSelect.value) o.unknownAs = unknownSelect.value as "平" | "仄";
++      if (kokuji.checked) o.allowKokuji = true;
++      return o;
++    },
++    showPattern: () => pattern.checked,
+   };
+-  for (const el of [input, formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("input", update);
+-  for (const el of [formSelect, unknownSelect, kokuji, pattern]) el.addEventListener("change", update);
+-  update();
++}
++
++function app(data: EngineData): HTMLElement {
++  let mode: Mode = "grid";
++  let grid = emptyGrid();
++  let selected: number | null = null;
++  /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
++  let gridEdited = false;
++
++  const settings = settingsPanel(data, () => update());
++
++  // ---- マス目で作る ----
++  const editor = gridEditor({
++    initial: grid,
++    onChange(next) {
++      grid = next;
++      gridEdited = true;
++      syncNote.textContent = "";
++      update();
++    },
++    onSelect(i) {
++      selected = i;
++      update();
++    },
++  });
++  const syncNote = h("p", { class: "sync-note", role: "status" });
++  const panel = h("div", { id: "cell-panel" });
++  const gridResult = h("div", { id: "grid-result", class: "result" });
++  const hasPoem = () => grid.some((c) => c !== BLANK);
++  const replaceGrid = (next: string[], question: string) => {
++    if (hasPoem() && !window.confirm(question)) return;
++    grid = next;
++    gridEdited = true;
++    editor.setGrid(grid);
++    syncNote.textContent = "";
++    update();
++    editor.focus(0);
++  };
++  const gridSample = h("button", { type: "button", class: "small", id: "grid-sample" }, "例の詩を入れる");
++  gridSample.addEventListener("click", () => {
++    const r = textToGrid(SAMPLE);
++    if ("grid" in r) replaceGrid(r.grid, "マス目の詩を、例の詩で置き換えますか？");
++  });
++  const gridClear = h("button", { type: "button", class: "small", id: "grid-clear" }, "すべて消す");
++  gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "マス目の字をすべて消しますか？"));
++
++  const gridMode = h(
++    "section",
++    { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
++    h(
++      "div",
++      { class: "poem-area" },
++      h("h2", {}, "作詩"),
++      h("p", { class: "help" }, "1マスに1字。漢字はふだんどおり変換して入れてください。2字以上を確定すると続くマスに入ります。矢印キーで移動できます。"),
++      editor.el,
++      syncNote,
++      h("div", { class: "buttons" }, gridSample, gridClear),
++    ),
++    h("aside", { class: "cell-panel", "aria-labelledby": "cell-panel-title" }, h("h2", { id: "cell-panel-title" }, "選択中のマス"), panel),
++    h("div", { class: "grid-results" }, h("h2", {}, "検査結果"), gridResult),
++  );
+ 
+-  const sample = h("button", { type: "button", class: "small" }, "例の詩を入れる");
++  // ---- 貼り付けて判定する ----
++  const input = h("textarea", {
++    id: "poem-input",
++    rows: "4",
++    spellcheck: "false",
++    autocomplete: "off",
++    "aria-describedby": "poem-help",
++  }) as HTMLTextAreaElement;
++  input.addEventListener("input", () => update());
++  const output = h("div", { id: "result" });
++  const sample = h("button", { type: "button", class: "small", id: "paste-sample" }, "例の詩を入れる");
+   sample.addEventListener("click", () => {
+     input.value = SAMPLE;
+     update();
+@@ -58,41 +143,92 @@ function pasteMode(data: EngineData): HTMLElement {
+     update();
+     input.focus();
+   });
+-
+-  return h(
++  const pasteMode = h(
+     "section",
+-    { class: "mode paste", "aria-labelledby": "paste-title" },
++    { id: "paste-mode", class: "paste-mode", role: "tabpanel", "aria-labelledby": "tab-paste", hidden: "" },
+     h(
+       "div",
+       { class: "entry" },
+-      h("h2", { id: "paste-title" }, "貼り付けて判定する"),
++      h("h2", {}, "貼り付けて判定する"),
+       h("label", { for: "poem-input" }, "詩の本文（1句1行、7字×4行）"),
+       input,
+       h("p", { id: "poem-help", class: "help" }, "未入力のマスは「＿」、繰り返しは「々」で書けます。句読点や空白は漢字以外の文字として位置つきで知らせます。"),
+       h("div", { class: "buttons" }, sample, clear),
+-      h(
+-        "fieldset",
+-        { class: "options" },
+-        h("legend", {}, "設定"),
+-        h("label", { for: "form-select" }, "詩格"),
+-        formSelect,
+-        h("label", { for: "unknown-select" }, "平仄データにない字"),
+-        unknownSelect,
+-        h("label", { class: "check" }, kokuji, "国字があっても続ける（違反ではなく要確認にする）"),
+-        h("label", { class: "check" }, pattern, "平仄図式を表示する"),
+-      ),
+     ),
+     output,
+   );
++
++  // ---- 切り替え ----
++  const tabs: Record<Mode, HTMLElement> = {
++    grid: h("button", { type: "button", role: "tab", id: "tab-grid", "aria-controls": "grid-mode" }, "マス目で作る"),
++    paste: h("button", { type: "button", role: "tab", id: "tab-paste", "aria-controls": "paste-mode" }, "貼り付けて判定する"),
++  };
++  const setMode = (next: Mode) => {
++    if (next === mode) return;
++    if (next === "grid") {
++      const r = textToGrid(input.value);
++      if ("grid" in r) {
++        grid = r.grid;
++        editor.setGrid(grid);
++        syncNote.textContent = "";
++      } else {
++        syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
++      }
++      gridEdited = false;
++    } else if (gridEdited || "grid" in textToGrid(input.value)) {
++      input.value = gridToText(grid);
++    }
++    mode = next;
++    for (const m of ["grid", "paste"] as const) {
++      tabs[m].setAttribute("aria-selected", String(m === mode));
++      tabs[m].tabIndex = m === mode ? 0 : -1;
++    }
++    gridMode.hidden = mode !== "grid";
++    pasteMode.hidden = mode !== "paste";
++    update();
++  };
++  for (const m of ["grid", "paste"] as const) {
++    tabs[m].setAttribute("aria-selected", String(m === mode));
++    tabs[m].tabIndex = m === mode ? 0 : -1;
++    tabs[m].addEventListener("click", () => setMode(m));
++    tabs[m].addEventListener("keydown", (e) => {
++      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
++      const other = m === "grid" ? "paste" : "grid";
++      setMode(other);
++      tabs[other].focus();
++    });
++  }
++
++  function update() {
++    const options = settings.options();
++    const showPattern = settings.showPattern();
++    if (mode === "grid") {
++      const a = analyze(grid, data, options);
++      const v = buildView(a, data);
++      editor.refresh(v, showPattern);
++      gridResult.replaceChildren(...resultParts(v, showPattern));
++      panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)));
++    } else {
++      output.replaceChildren(resultView(buildView(analyze(input.value, data, options), data), showPattern));
++    }
++  }
++  update();
++
++  return h(
++    "div",
++    { class: "app" },
++    h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
++    h("div", { class: "workbench" }, settings.el, gridMode, pasteMode),
++  );
+ }
+ 
+ async function start() {
+-  const app = document.getElementById("app")!;
++  const root = document.getElementById("app")!;
+   try {
+     const data = await loadEngineData();
+-    app.replaceChildren(pasteMode(data));
++    root.replaceChildren(app(data));
+   } catch (e) {
+-    app.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
++    root.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
+   }
+ }
+ 
+diff --git a/apps/web/src/render.ts b/apps/web/src/render.ts
+index 5452ee1..29bc229 100644
+--- a/apps/web/src/render.ts
++++ b/apps/web/src/render.ts
+@@ -1,6 +1,6 @@
+ // 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
+ import type { Severity } from "@kanshi/engine";
+-import type { FindingView, PoemView, ReadingFindingView } from "./view";
++import type { CellDetailView, FindingView, PoemView, ReadingFindingView, ReadingOptionView } from "./view";
+ 
+ type Attrs = Record<string, string>;
+ 
+@@ -67,6 +67,34 @@ const choiceItem = (f: ReadingFindingView) =>
+ 
+ /** 判定結果（詩格、記号列、指摘の一覧、作者が判断すること） */
+ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
++  const [formLine, legend, ...sections] = resultParts(v, showPattern);
++  return h("div", { class: "result" }, formLine!, poemTable(v, showPattern), legend!, ...sections);
++}
++
++/** 読みごとの結果の1件分（読み・必ず出る指摘・読みによって出る指摘） */
++function readingOption(o: ReadingOptionView): HTMLElement {
++  const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
++  return h(
++    "li",
++    {},
++    h("span", { class: "label" }, o.label),
++    nothingAdded
++      ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
++      : null,
++    o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(choiceItem)) : null,
++    o.sometimes.length > 0
++      ? h(
++          "details",
++          { class: "sometimes" },
++          h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
++          h("ul", {}, ...o.sometimes.map(choiceItem)),
++        )
++      : null,
++  );
++}
++
++/** 詩格の行、凡例、指摘の一覧（明確な違反・作者が判断すること・許容される変格）。マス目の下と貼り付けモードで共通 */
++export function resultParts(v: PoemView, showPattern: boolean): HTMLElement[] {
+   const formLine = h(
+     "p",
+     { class: "form" },
+@@ -112,26 +140,7 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
+           h(
+             "ul",
+             {},
+-            ...c.options.map((o) => {
+-              const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
+-              return h(
+-                "li",
+-                {},
+-                h("span", { class: "label" }, o.label),
+-                nothingAdded
+-                  ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
+-                  : null,
+-                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(choiceItem)) : null,
+-                o.sometimes.length > 0
+-                  ? h(
+-                      "details",
+-                      { class: "sometimes" },
+-                      h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
+-                      h("ul", {}, ...o.sometimes.map(choiceItem)),
+-                    )
+-                  : null,
+-              );
+-            }),
++            ...c.options.map(readingOption),
+           ),
+         ),
+       ),
+@@ -178,5 +187,48 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
+     ),
+   );
+ 
+-  return h("div", { class: "result" }, formLine, poemTable(v, showPattern), legend, ...sections);
++  return [formLine, legend, ...sections];
++}
++
++
++/** 右の列：選択中のマスの字、声調・韻目、定型が求めるもの、指摘、読みごとの結果 */
++export function cellPanel(d: CellDetailView | null): HTMLElement {
++  if (d === null) return h("div", { class: "cell-detail" }, h("p", { class: "none" }, "マスを選ぶと、ここにその字の声調・韻目と、定型が求める平仄を示します。"));
++  const parts: (HTMLElement | null)[] = [
++    h("p", { class: "where" }, d.where),
++    h("p", { class: `big-char ${d.char === null ? "blank" : ""}`, lang: "zh-Hant" }, d.char ?? "＿"),
++    h("p", { class: "status" }, d.statusText),
++  ];
++  if (d.readings.length > 0) {
++    parts.push(
++      h("h3", {}, "声調・韻目"),
++      h("ul", { class: "plain" }, ...d.readings.map((r) => h("li", {}, h("span", { class: `pz pz-${r.pz === "平" ? "hei" : "soku"}` }, r.pz), r.label))),
++    );
++  }
++  parts.push(
++    h("h3", {}, "定型が求めるもの"),
++    d.required.length === 0
++      ? h("p", { class: "none" }, "詩格が決まらないため、示せません。")
++      : h(
++          "ul",
++          { class: "plain" },
++          ...d.required.map((r) =>
++            h("li", {}, h("span", { class: "req-sym", "aria-hidden": "true" }, r.symbol), d.required.length > 1 ? `${r.formName}：${r.text}` : r.text),
++          ),
++        ),
++  );
++  if (d.findings.length > 0) {
++    parts.push(
++      h("h3", {}, "このマスの指摘"),
++      h("ul", { class: "plain" }, ...d.findings.map((f) => h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`))),
++    );
++  }
++  if (d.choice !== null) {
++    parts.push(
++      h("h3", {}, "読みごとの結果"),
++      h("p", { class: "explain" }, "どの読みが正しいかは文脈で決まるので、機械は決めません。"),
++      h("div", { class: "choice" }, h("ul", {}, ...d.choice.map(readingOption))),
++    );
++  }
++  return h("div", { class: "cell-detail" }, ...parts.filter((x): x is HTMLElement => x !== null));
+ }
+diff --git a/apps/web/src/style.css b/apps/web/src/style.css
+index a36c4da..9ffa90e 100644
+--- a/apps/web/src/style.css
++++ b/apps/web/src/style.css
+@@ -56,7 +56,7 @@ body {
+ header.site,
+ main,
+ footer.site {
+-  max-width: 1080px;
++  max-width: 1280px;
+   margin: 0 auto;
+ }
+ header.site {
+@@ -87,16 +87,285 @@ footer.site {
+   color: var(--shu);
+ }
+ 
+-/* 貼り付けモード：左に入力と設定、右に結果。狭い画面では縦に積む */
+-.mode {
++/* 入力のしかたの切り替え */
++.tabs {
++  display: flex;
++  gap: 4px;
++  border-bottom: 1px solid var(--line);
++  margin-top: 12px;
++}
++.tabs [role="tab"] {
++  font: inherit;
++  padding: 6px 14px;
++  border: 1px solid transparent;
++  border-bottom: 0;
++  border-radius: 8px 8px 0 0;
++  background: transparent;
++  color: var(--muted);
++  cursor: pointer;
++  margin-bottom: -1px;
++}
++.tabs [role="tab"][aria-selected="true"] {
++  background: var(--sheet);
++  border-color: var(--line);
++  color: var(--ink);
++  font-weight: 600;
++}
++
++/* 作業台：左に設定、右に作業の場。狭い画面では設定を上に畳む */
++.workbench {
+   display: grid;
+-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+-  gap: 24px;
++  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
++  gap: 20px;
+   align-items: start;
+   padding-block: 16px;
+ }
++@media (max-width: 1100px) {
++  .workbench {
++    grid-template-columns: minmax(0, 1fr);
++  }
++}
++.settings {
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  padding: 10px 14px;
++  min-width: 0;
++}
++.settings summary {
++  cursor: pointer;
++  font-weight: 600;
++}
++.settings .options {
++  display: grid;
++  gap: 4px;
++  margin-top: 8px;
++}
++.settings label.check {
++  display: flex;
++  gap: 6px;
++  align-items: baseline;
++  color: var(--ink);
++}
++[hidden] {
++  display: none !important;
++}
++
++/* マス目で作る：中央に作詩と検査結果、右に選択中のマス */
++.grid-mode {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
++  grid-template-areas: "poem panel" "results panel";
++  gap: 20px;
++  align-items: start;
++  min-width: 0;
++}
++.poem-area {
++  grid-area: poem;
++}
++.cell-panel {
++  grid-area: panel;
++}
++.grid-results {
++  grid-area: results;
++  min-width: 0;
++}
++@media (min-width: 761px) {
++  .cell-panel {
++    position: sticky;
++    top: 12px;
++  }
++}
+ @media (max-width: 760px) {
+-  .mode {
++  .grid-mode {
++    grid-template-columns: minmax(0, 1fr);
++    grid-template-areas: "poem" "panel" "results";
++  }
++}
++.poem-area,
++.cell-panel {
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  padding: 16px;
++  min-width: 0;
++  display: grid;
++  gap: 8px;
++}
++.grid-poem {
++  display: grid;
++  gap: 14px;
++}
++.gline {
++  display: grid;
++  grid-template-columns: 2.6em repeat(7, minmax(0, 3rem));
++  column-gap: 4px;
++  row-gap: 2px;
++  align-items: center;
++}
++.gline .line-name {
++  padding-top: 0;
++}
++.gcells {
++  display: contents;
++}
++.gcell {
++  position: relative;
++  border-radius: 8px;
++  border: 1px solid var(--line);
++  background: var(--paper);
++  aspect-ratio: 1;
++  min-width: 0;
++}
++.gin {
++  width: 100%;
++  height: 100%;
++  border: 0;
++  background: transparent;
++  color: var(--ink);
++  text-align: center;
++  font-family: var(--f-han);
++  font-size: 1.6rem;
++  padding: 0;
++  border-radius: 8px;
++  caret-color: var(--ai);
++}
++.gin:focus-visible {
++  outline: 2px solid var(--ai);
++  outline-offset: 1px;
++}
++.gin::selection {
++  background: var(--ai-soft);
++}
++.gcell .mark {
++  position: absolute;
++  top: 0;
++  right: 3px;
++  font-size: 0.7rem;
++  font-weight: 700;
++  pointer-events: none;
++}
++.gcell.sev-violation {
++  background: var(--shu-soft);
++  border-color: var(--shu);
++}
++.gcell.sev-violation .mark {
++  color: var(--shu);
++}
++.gcell.sev-check {
++  background: var(--odo-soft);
++  border-color: var(--odo);
++}
++.gcell.sev-check .mark {
++  color: var(--odo);
++}
++.gcell.sev-variant {
++  background: var(--rokusho-soft);
++}
++.gcell.sev-variant .mark {
++  color: var(--rokusho);
++}
++.grow {
++  display: contents;
++}
++.grow .row-label {
++  grid-column: 1;
++  font-size: 0.7rem;
++  color: var(--muted);
++}
++.grow .gsym {
++  text-align: center;
++  line-height: 1.2;
++}
++.grow.gpat .gsym {
++  color: var(--ai);
++}
++.grow.gact .gsym {
++  color: var(--muted);
++}
++.grid-note,
++.sync-note {
++  margin: 0;
++  font-size: 0.85rem;
++  color: var(--odo);
++}
++.grid-note:empty,
++.sync-note:empty {
++  display: none;
++}
++
++/* 選択中のマス */
++.cell-detail {
++  display: grid;
++  gap: 4px;
++}
++.cell-detail .where {
++  margin: 0;
++  color: var(--muted);
++  font-size: 0.85rem;
++}
++.cell-detail .big-char {
++  margin: 0;
++  font-family: var(--f-han);
++  font-size: 2.6rem;
++  line-height: 1.2;
++}
++.cell-detail .big-char.blank {
++  color: var(--line);
++}
++.cell-detail .status {
++  margin: 0;
++  font-size: 0.85rem;
++}
++.cell-detail h3 {
++  margin: 10px 0 2px;
++  font-size: 0.9rem;
++}
++.plain {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: grid;
++  gap: 2px;
++  font-size: 0.9rem;
++}
++.plain .mark {
++  font-weight: 700;
++  margin-right: 6px;
++}
++.plain .mark.sev-violation {
++  color: var(--shu);
++}
++.plain .mark.sev-check {
++  color: var(--odo);
++}
++.pz {
++  display: inline-block;
++  min-width: 1.6em;
++  margin-right: 6px;
++  padding: 0 4px;
++  border-radius: 4px;
++  text-align: center;
++  font-size: 0.8rem;
++  background: var(--ai-soft);
++  color: var(--ai);
++}
++.req-sym {
++  display: inline-block;
++  width: 1.4em;
++  color: var(--ai);
++}
++
++/* 貼り付けて判定する：左に入力、右に結果 */
++.paste-mode {
++  display: grid;
++  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
++  gap: 20px;
++  align-items: start;
++  min-width: 0;
++}
++@media (max-width: 760px) {
++  .paste-mode {
+     grid-template-columns: minmax(0, 1fr);
+   }
+ }
+@@ -170,27 +439,6 @@ button.small:hover {
+   border-color: var(--ai);
+   color: var(--ai);
+ }
+-.options {
+-  display: grid;
+-  gap: 4px;
+-  border: 0;
+-  border-top: 1px solid var(--line);
+-  padding: 12px 0 0;
+-  margin: 4px 0 0;
+-  min-width: 0;
+-}
+-.options legend {
+-  font-size: 0.8rem;
+-  color: var(--muted);
+-  padding: 0;
+-}
+-.options label.check {
+-  display: flex;
+-  gap: 6px;
+-  align-items: baseline;
+-  color: var(--ink);
+-}
+-
+ /* 結果 */
+ .result {
+   display: grid;
+diff --git a/apps/web/src/view.ts b/apps/web/src/view.ts
+index 5c1e7a8..ee598e2 100644
+--- a/apps/web/src/view.ts
++++ b/apps/web/src/view.ts
+@@ -1,5 +1,5 @@
+ // エンジンの判定結果（Analysis）を、画面に出す形に組み立てる純関数（CLAUDE.md §4.2）。DOM には触れない。
+-import type { Analysis, CharStatus, EngineData, Finding, Reading, Severity } from "@kanshi/engine";
++import type { Analysis, CharStatus, EngineData, Finding, Options, PZ, Reading, Severity } from "@kanshi/engine";
+ 
+ const LINE_NAMES = ["起句", "承句", "転句", "結句"];
+ export const lineName = (l: number) => LINE_NAMES[l] ?? `第${l + 1}句`;
+@@ -46,6 +46,8 @@ export type ReadingOptionView = {
+ };
+ 
+ export type ReadingChoiceView = {
++  /** マスの番号（句×7＋位置） */
++  index: number;
+   /** 「起句の1字目「娉」」 */
+   cell: string;
+   options: ReadingOptionView[];
+@@ -131,6 +133,7 @@ function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
+     const p = n % 7;
+     const labels = [...new Set(rows.flatMap((r) => (r.readings[n] ? [readingLabel(r.readings[n]!)] : [])))];
+     return {
++      index: n,
+       cell: `${lineName(l)}の${p + 1}字目「${a.chars[l]![p]!.char}」`,
+       options: labels.map((label) => {
+         const { always, sometimes } = splitBy(rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings));
+@@ -183,3 +186,69 @@ export function buildView(a: Analysis, data: EngineData): PoemView {
+     errors: a.errors.map((e) => e.message),
+   };
+ }
++
++/** 選択中のマス（右の列）。CLAUDE.md §4.5「選択中の字」 */
++export type CellDetailView = {
++  /** 「起句の4字目」 */
++  where: string;
++  /** 入力どおりの字。未入力なら null */
++  char: string | null;
++  status: CharStatus;
++  /** 字の状態と、いまの設定での扱いの説明 */
++  statusText: string;
++  /** 字の読み（声調・韻目）と平仄 */
++  readings: { label: string; pz: PZ }[];
++  /** 詩格の候補ごとに、定型がこのマスに求めるもの。詩格が決まらなければ空 */
++  required: { formName: string; symbol: string; text: string }[];
++  /** このマスに出ている指摘（どの読みでも出るもの） */
++  findings: FindingView[];
++  /** 読みが複数ある字なら、読みごとの結果 */
++  choice: ReadingOptionView[] | null;
++};
++
++const PATTERN_TEXT: Record<string, string> = { "○": "平", "●": "仄", "◐": "平仄を問わない", "◎": "平声で押韻" };
++
++/** 字の状態の説明。データにない字と国字は、設定によって扱いが変わるので、いまの扱いを書く */
++export function statusText(status: CharStatus, options: Options): string {
++  switch (status) {
++    case "known":
++      return "平仄データにある字です。";
++    case "undetermined":
++      return "異体字の対応で候補の字が複数あり、どの字か一つに決まりません。候補の字の読みをすべて示します。";
++    case "unknown":
++      return options.unknownAs !== undefined
++        ? `平仄データにない字です。設定により、${options.unknownAs}として扱って判定しています。`
++        : "平仄データにない字です。平仄は判定していません（設定で平・仄のどちらかとして扱えます）。";
++    case "kokuji":
++      return options.allowKokuji
++        ? "国字（日本で作られた字）です。設定により、違反ではなく要確認として続けています。"
++        : "国字（日本で作られた字）です。漢詩には使えません（設定で続けることもできます）。";
++    case "blank":
++      return "未入力のマスです。";
++    case "invalid":
++      return "漢字ではありません。";
++  }
++}
++
++export function cellDetail(a: Analysis, v: PoemView, data: EngineData, index: number, options: Options = {}): CellDetailView {
++  const l = Math.floor(index / 7);
++  const p = index % 7;
++  const info = a.chars[l]?.[p];
++  const formIds = [...new Set(a.interpretations.map((i) => i.form.id))].filter((id) => id !== null);
++  const required = formIds.flatMap((id) => {
++    const f = data.forms.forms.find((x) => x.id === id);
++    const symbol = f?.lines[l]?.pattern[p];
++    return f && symbol ? [{ formName: f.name, symbol, text: PATTERN_TEXT[symbol] ?? symbol }] : [];
++  });
++  const view = toFindingView(data);
++  return {
++    where: `${lineName(l)}の${p + 1}字目`,
++    char: info === undefined || info.status === "blank" ? null : (info.input ?? info.char),
++    status: info?.status ?? "blank",
++    statusText: statusText(info?.status ?? "blank", options),
++    readings: (info?.readings ?? []).map((r) => ({ label: readingLabel(r), pz: r.tone === "平" ? "平" : "仄" })),
++    required,
++    findings: a.findings.filter((f) => f.line === l && f.positions.includes(p) && f.severity !== "ok").map(view),
++    choice: v.readingChoices.find((c) => c.index === index)?.options ?? null,
++  };
++}
+diff --git a/apps/web/test/grid.test.ts b/apps/web/test/grid.test.ts
+new file mode 100644
+index 0000000..296d093
+--- /dev/null
++++ b/apps/web/test/grid.test.ts
+@@ -0,0 +1,119 @@
++// マス目の編集（apps/web/src/grid.ts）。字はどれも架空の扱いで、平仄には関わらない。
++import { describe, expect, it } from "vitest";
++import { BLANK, emptyGrid, gridToText, moveFrom, textToGrid, writeAt } from "../src/grid";
++import { P } from "../../../packages/engine/test/fixture";
++
++const row = (n: number) => P.slice(n * 7, n * 7 + 7).join("");
++const full = () => [row(0), row(1), row(2), row(3)].join("\n");
++
++describe("writeAt", () => {
++  it("1字なら、そのマスに入れて次のマスへ進む", () => {
++    const r = writeAt(emptyGrid(), 3, P[0]!);
++    expect(r.grid[3]).toBe(P[0]);
++    expect(r.grid.filter((c) => c !== BLANK)).toHaveLength(1);
++    expect(r.next).toBe(4);
++    expect([r.rejected, r.overflow]).toEqual([[], []]);
++  });
++
++  it("2字以上は、同じ句の続くマスに順に入れる", () => {
++    const r = writeAt(emptyGrid(), 7, P[0]! + P[1]! + P[2]!);
++    expect(r.grid.slice(7, 10)).toEqual([P[0], P[1], P[2]]);
++    expect(r.next).toBe(10);
++  });
++
++  it("句の末を越える字は入れずに overflow で返す", () => {
++    const r = writeAt(emptyGrid(), 5, P[0]! + P[1]! + P[2]!);
++    expect(r.grid.slice(5, 7)).toEqual([P[0], P[1]]);
++    expect(r.grid[7]).toBe(BLANK); // 次の句には入れない
++    expect(r.overflow).toEqual([P[2]]);
++  });
++
++  it("句の末のマスを埋めたら、次の句の頭へ進む（最後の句の末ならそこに留まる）", () => {
++    expect(writeAt(emptyGrid(), 6, P[0]!).next).toBe(7);
++    expect(writeAt(emptyGrid(), 27, P[0]!).next).toBe(27);
++  });
++
++  it("改行があれば次の句の頭へ移る（詩全体の貼り付け）", () => {
++    const r = writeAt(emptyGrid(), 0, full());
++    expect(gridToText(r.grid)).toBe(full());
++    expect([r.rejected, r.overflow]).toEqual([[], []]);
++  });
++
++  it("4句を越える行は overflow で返す", () => {
++    const r = writeAt(emptyGrid(), 21, `${row(3)}\n${P[0]}`);
++    expect(r.overflow).toEqual([P[0]]);
++  });
++
++  it("漢字以外（かな・記号）はマスに入れず rejected で返す。空白は黙って飛ばす", () => {
++    const r = writeAt(emptyGrid(), 0, `あ${P[0]} ，${P[1]}　`);
++    expect(r.grid.slice(0, 3)).toEqual([P[0], P[1], BLANK]);
++    expect(r.rejected).toEqual(["あ", "，"]);
++  });
++
++  it("「々」と「＿」（未入力）は入れられる", () => {
++    const r = writeAt(writeAt(emptyGrid(), 0, P[0]! + "々").grid, 0, BLANK);
++    expect(r.grid.slice(0, 2)).toEqual([BLANK, "々"]);
++  });
++
++  it("空の文字列はマスを空にし、その場に留まる", () => {
++    const g = writeAt(emptyGrid(), 4, P[0]!).grid;
++    const r = writeAt(g, 4, "");
++    expect(r.grid[4]).toBe(BLANK);
++    expect(r.next).toBe(4);
++  });
++
++  it("漢字が一つもなければ、マスを変えない", () => {
++    const g = writeAt(emptyGrid(), 4, P[0]!).grid;
++    const r = writeAt(g, 4, "あ");
++    expect(r.grid).toEqual(g);
++    expect(r.next).toBe(4);
++  });
++
++  it("元のマス目は変えない（純関数）", () => {
++    const g = emptyGrid();
++    writeAt(g, 0, P[0]!);
++    expect(g.every((c) => c === BLANK)).toBe(true);
++  });
++});
++
++describe("gridToText と textToGrid", () => {
++  it("往復して同じになる（未入力は＿）", () => {
++    const g = writeAt(emptyGrid(), 0, full()).grid;
++    g[9] = BLANK;
++    expect(textToGrid(gridToText(g))).toEqual({ grid: g });
++  });
++
++  it("全部が未入力なら空の文字列。空の文字列は全部が未入力のマス目", () => {
++    expect(gridToText(emptyGrid())).toBe("");
++    expect(textToGrid("")).toEqual({ grid: emptyGrid() });
++    expect(textToGrid("\n\n")).toEqual({ grid: emptyGrid() });
++  });
++
++  it("前後の空行と、行末の空白は無視する", () => {
++    expect(textToGrid(`\n${full().replaceAll("\n", " \n")}\n`)).toEqual(textToGrid(full()));
++  });
++
++  it("4句でない本文はマス目にせず、理由を返す", () => {
++    expect(textToGrid([row(0), row(1), row(2)].join("\n"))).toEqual({ reasons: ["4句ではありません（3句）。"] });
++  });
++
++  it("7字でない句、漢字以外の字は、句と位置を示して理由を返す", () => {
++    const text = [row(0).slice(0, 6), row(1), `${row(2).slice(0, 2)}，${row(2).slice(3)}`, row(3)].join("\n");
++    expect(textToGrid(text)).toEqual({
++      reasons: ["起句が7字ではありません（6字）。", "転句の3字目「，」は漢字ではありません。"],
++    });
++  });
++});
++
++describe("moveFrom", () => {
++  it("左右は前後のマス、上下は前後の句の同じ位置。端では留まる", () => {
++    expect(moveFrom(8, "ArrowRight")).toBe(9);
++    expect(moveFrom(8, "ArrowLeft")).toBe(7);
++    expect(moveFrom(8, "ArrowDown")).toBe(15);
++    expect(moveFrom(8, "ArrowUp")).toBe(1);
++    expect(moveFrom(0, "ArrowLeft")).toBe(0);
++    expect(moveFrom(27, "ArrowRight")).toBe(27);
++    expect(moveFrom(3, "ArrowUp")).toBe(3);
++    expect(moveFrom(24, "ArrowDown")).toBe(24);
++  });
++});
+diff --git a/apps/web/test/view.test.ts b/apps/web/test/view.test.ts
+index 5e9072e..a6d2718 100644
+--- a/apps/web/test/view.test.ts
++++ b/apps/web/test/view.test.ts
+@@ -1,7 +1,8 @@
+ // 画面の表示の組み立て（apps/web/src/view.ts）。平仄は架空のデータで与える（CLAUDE.md §0）。
+ import { describe, expect, it } from "vitest";
+ import { analyze } from "@kanshi/engine";
+-import { buildView } from "../src/view";
++import type { Options } from "@kanshi/engine";
++import { buildView, cellDetail } from "../src/view";
+ import { KOKUJI, RHY2, RYO, UNKNOWN, baseLines, build, fixtureData, form, replaceAt } from "../../../packages/engine/test/fixture";
+ 
+ const HN = baseLines("heiki-nyuin");
+@@ -131,3 +132,76 @@ describe("buildView", () => {
+     expect(v.lines.every((l) => l.pattern === null)).toBe(true);
+   });
+ });
++
++describe("cellDetail（選択中のマス）", () => {
++  const detail = (lines: string[], index: number) => {
++    const a = analyze(build(...lines), fixtureData);
++    return cellDetail(a, buildView(a, fixtureData), fixtureData, index);
++  };
++
++  it("場所、字、読み（平仄つき）、定型が求める平仄を示す", () => {
++    const d = detail(HN, 1); // 起句2字目（定型は○）
++    expect(d.where).toBe("起句の2字目");
++    expect(d.char).toBe(build(...HN)[1]);
++    expect(d.status).toBe("known");
++    expect(d.readings).toEqual([{ label: "平・上平二冬", pz: "平" }]);
++    expect(d.required).toEqual([{ formName: "平起式・首句入韻", symbol: "○", text: "平" }]);
++    expect([d.findings, d.choice]).toEqual([[], null]);
++  });
++
++  it("押韻の位置は、平声で押韻することを示す。◐は平仄を問わない", () => {
++    expect(detail(HN, 6).required[0]).toMatchObject({ symbol: "◎", text: "平声で押韻" });
++    expect(detail(HN, 0).required[0]).toMatchObject({ symbol: "◐", text: "平仄を問わない" });
++  });
++
++  it("そのマスに出ている指摘（どの読みでも出るもの）を示す", () => {
++    const d = detail(replaceAt(HN, 0, 3, "○"), 3); // 起句4字目を平に
++    expect(d.findings.map((f) => f.ruleName)).toEqual(["定型との不一致", "二四不同", "孤平"]);
++  });
++
++  it("両韻字は、読みごとの結果を示す", () => {
++    const d = detail(replaceAt(HN, 0, 3, RYO[0]!), 3);
++    expect(d.readings.map((r) => r.pz)).toEqual(["平", "仄"]);
++    expect(d.choice!.map((o) => [o.label, o.clean])).toEqual([
++      ["平・上平二冬", false],
++      ["去・去声二宋", true],
++    ]);
++  });
++
++  it("未入力のマスは字を null にし、定型が求める平仄は示す", () => {
++    const d = detail(replaceAt(HN, 1, 2, "＿"), 9);
++    expect([d.char, d.status, d.readings]).toEqual([null, "blank", []]);
++    expect(d.required[0]).toMatchObject({ symbol: "◐" });
++  });
++
++  it("データにない字・国字は状態を返す", () => {
++    expect(detail(replaceAt(HN, 2, 0, UNKNOWN), 14).status).toBe("unknown");
++    expect(detail(replaceAt(HN, 2, 0, KOKUJI), 14).status).toBe("kokuji");
++  });
++
++  it("データにない字・国字の説明は、いまの設定での扱いを書く", () => {
++    const withOptions = (ch: string, options: Options) => {
++      const a = analyze(build(...replaceAt(HN, 2, 0, ch)), fixtureData, options);
++      return cellDetail(a, buildView(a, fixtureData), fixtureData, 14, options).statusText;
++    };
++    expect(withOptions(UNKNOWN, {})).toContain("判定していません");
++    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).toContain("仄として扱って判定しています");
++    expect(withOptions(UNKNOWN, { unknownAs: "仄" })).not.toContain("判定していません");
++    expect(withOptions(KOKUJI, {})).toContain("使えません");
++    expect(withOptions(KOKUJI, { allowKokuji: true })).toContain("要確認として続けています");
++  });
++
++  it("詩格の候補が複数なら、候補ごとに定型が求める平仄を示す", () => {
++    const d = detail(replaceAt(HN, 0, 6, "＿"), 4); // 起句5字目：入韻型は●、不入韻型は◐
++    expect(d.required).toEqual([
++      { formName: "平起式・首句入韻", symbol: "●", text: "仄" },
++      { formName: "平起式・首句不入韻", symbol: "◐", text: "平仄を問わない" },
++    ]);
++  });
++
++  it("詩格が決まらないときは、定型が求める平仄を示さない", () => {
++    let lines = HN;
++    for (let i = 0; i < 4; i++) lines = replaceAt(lines, i, 1, "＿");
++    expect(detail(lines, 0).required).toEqual([]);
++  });
++});

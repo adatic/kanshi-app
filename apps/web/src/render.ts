@@ -1,6 +1,6 @@
 // 判定結果の表示（DOM）。利用者の入力は textContent でだけ置き、HTML として解釈させない。
 import type { Severity } from "@kanshi/engine";
-import type { FindingView, PoemView, ReadingFindingView } from "./view";
+import type { CellDetailView, FindingView, PoemView, ReadingFindingView, ReadingOptionView } from "./view";
 
 type Attrs = Record<string, string>;
 
@@ -67,6 +67,34 @@ const choiceItem = (f: ReadingFindingView) =>
 
 /** 判定結果（詩格、記号列、指摘の一覧、作者が判断すること） */
 export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
+  const [formLine, legend, ...sections] = resultParts(v, showPattern);
+  return h("div", { class: "result" }, formLine!, poemTable(v, showPattern), legend!, ...sections);
+}
+
+/** 読みごとの結果の1件分（読み・必ず出る指摘・読みによって出る指摘） */
+function readingOption(o: ReadingOptionView): HTMLElement {
+  const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
+  return h(
+    "li",
+    {},
+    h("span", { class: "label" }, o.label),
+    nothingAdded
+      ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
+      : null,
+    o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(choiceItem)) : null,
+    o.sometimes.length > 0
+      ? h(
+          "details",
+          { class: "sometimes" },
+          h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
+          h("ul", {}, ...o.sometimes.map(choiceItem)),
+        )
+      : null,
+  );
+}
+
+/** 詩格の行、凡例、指摘の一覧（明確な違反・作者が判断すること・許容される変格）。マス目の下と貼り付けモードで共通 */
+export function resultParts(v: PoemView, showPattern: boolean): HTMLElement[] {
   const formLine = h(
     "p",
     { class: "form" },
@@ -112,26 +140,7 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
           h(
             "ul",
             {},
-            ...c.options.map((o) => {
-              const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
-              return h(
-                "li",
-                {},
-                h("span", { class: "label" }, o.label),
-                nothingAdded
-                  ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
-                  : null,
-                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(choiceItem)) : null,
-                o.sometimes.length > 0
-                  ? h(
-                      "details",
-                      { class: "sometimes" },
-                      h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
-                      h("ul", {}, ...o.sometimes.map(choiceItem)),
-                    )
-                  : null,
-              );
-            }),
+            ...c.options.map(readingOption),
           ),
         ),
       ),
@@ -178,5 +187,48 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
     ),
   );
 
-  return h("div", { class: "result" }, formLine, poemTable(v, showPattern), legend, ...sections);
+  return [formLine, legend, ...sections];
+}
+
+
+/** 右の列：選択中のマスの字、声調・韻目、定型が求めるもの、指摘、読みごとの結果 */
+export function cellPanel(d: CellDetailView | null): HTMLElement {
+  if (d === null) return h("div", { class: "cell-detail" }, h("p", { class: "none" }, "マスを選ぶと、ここにその字の声調・韻目と、定型が求める平仄を示します。"));
+  const parts: (HTMLElement | null)[] = [
+    h("p", { class: "where" }, d.where),
+    h("p", { class: `big-char ${d.char === null ? "blank" : ""}`, lang: "zh-Hant" }, d.char ?? "＿"),
+    h("p", { class: "status" }, d.statusText),
+  ];
+  if (d.readings.length > 0) {
+    parts.push(
+      h("h3", {}, "声調・韻目"),
+      h("ul", { class: "plain" }, ...d.readings.map((r) => h("li", {}, h("span", { class: `pz pz-${r.pz === "平" ? "hei" : "soku"}` }, r.pz), r.label))),
+    );
+  }
+  parts.push(
+    h("h3", {}, "定型が求めるもの"),
+    d.required.length === 0
+      ? h("p", { class: "none" }, "詩格が決まらないため、示せません。")
+      : h(
+          "ul",
+          { class: "plain" },
+          ...d.required.map((r) =>
+            h("li", {}, h("span", { class: "req-sym", "aria-hidden": "true" }, r.symbol), d.required.length > 1 ? `${r.formName}：${r.text}` : r.text),
+          ),
+        ),
+  );
+  if (d.findings.length > 0) {
+    parts.push(
+      h("h3", {}, "このマスの指摘"),
+      h("ul", { class: "plain" }, ...d.findings.map((f) => h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`))),
+    );
+  }
+  if (d.choice !== null) {
+    parts.push(
+      h("h3", {}, "読みごとの結果"),
+      h("p", { class: "explain" }, "どの読みが正しいかは文脈で決まるので、機械は決めません。"),
+      h("div", { class: "choice" }, h("ul", {}, ...d.choice.map(readingOption))),
+    );
+  }
+  return h("div", { class: "cell-detail" }, ...parts.filter((x): x is HTMLElement => x !== null));
 }
