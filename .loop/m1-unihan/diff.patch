@@ -1,0 +1,427 @@
+diff --git a/DATA_SOURCES.md b/DATA_SOURCES.md
+index 363374a..8e1e0db 100644
+--- a/DATA_SOURCES.md
++++ b/DATA_SOURCES.md
+@@ -13,7 +13,7 @@
+ | `data/rhymes.json` | 平水韻の106韻目 | ウィキソース「平水韻」 | CC BY 4.0（元データはパブリックドメイン） |
+ | `data/chars.json` | 字ごとの声調・韻目 | ウィキソース「平水韻」＋ `data/corrections.json` | CC BY 4.0（元データはパブリックドメイン） |
+ | `data/corrections.json` | 元データの誤りの修正（根拠つき） | このプロジェクトで作成 | CC BY 4.0 |
+-| `data/variants.json` | 新字体・簡体字から、データ上の字への対応 | OpenCC の対応表 | **Apache-2.0**（上流に従う） |
++| `data/variants.json` | 新字体・簡体字から、データ上の字への対応 | OpenCC の対応表＋Unicode Unihan | **Apache-2.0**（OpenCC に従う。Unihan 由来の部分は Unicode License V3 の表示も必要） |
+ | `data/kokuji.json` | 国字の一覧 | ウィキペディア「和製漢字」 | **CC BY-SA 4.0**（上流に従う） |
+ | `data/reports/*` | 生成時のレポート | 上記すべて | 元データのライセンスに従う |
+ 
+@@ -71,9 +71,33 @@ CLAUDE.md §3 の方針（データは CC BY 4.0、不可なら上流に従う
+ 
+ - 1字→1字以上の対応だけを使いました（語単位の対応は使っていません）。
+ - 入力字ごとに、候補を「その字自身（平仄データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に集め、平仄データにある候補だけを `data/variants.json` に載せました。**順序に優先の意味はありません。**
+-- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（395字）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（175字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データにない字（1,472字）は `data/reports/unmapped.txt` に出しています。後者のうち、新字体由来の字（並・艶・渓・炉・汚 など19字）を先頭に並べています。平仄データ側が別の異体字で載せているためと考えられますが、まだ対応していません。
++- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（485字。Unihan で補った候補を含む）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（265字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データになく、次節の Unihan でも補えなかった字（1,378字）は `data/reports/unmapped.txt` に出しています。新字体由来の字（13字）を先頭に並べています。
+ 
+-## 3. ウィキペディア日本語版「和製漢字」
++## 3. Unicode Unihan データベース（異体字）
++
++人間の判断（`DECISIONS.md` (c)）により、OpenCC の対応では平仄データにつながらない字を補うために使っています。
++
++| 項目 | 内容 |
++|---|---|
++| 入手元 | https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip （SHA-256 `4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e`） |
++| 版 | Unicode 18.0.0（`Unihan_Variants.txt` の日付 2026-07-31） |
++| 保存先 | `data/raw/unicode-18.0.0/Unihan_Variants.txt`（zip から取り出した1ファイル）、`data/raw/unicode-18.0.0/license.txt` |
++| ライセンス | Unicode License V3（https://www.unicode.org/license.txt） |
++| 再配布 | 可（著作権表示と許諾表示の同梱が条件。`data/raw/unicode-18.0.0/license.txt`） |
++
++### 加工内容
++
++- 使う欄は3つだけです：`kZVariant`（同じ字の字形違い）、`kSemanticVariant`（意味が同じで置き換えられる字）、`kJapaneseOldVariant`（日本の新字体に対する旧字体）。
++- 使わない欄：`kSpecializedSemanticVariant`（特定の文脈でだけ置き換えられる）、`kSpoofingVariant`（見た目が似ているだけ）、`kSimplifiedVariant`・`kTraditionalVariant`（簡繁は OpenCC で扱う）、`kJapaneseNewVariant`（旧字体→新字体で向きが逆）。
++- OpenCC の候補がどれも平仄データにない字についてだけ、入力字そのものと OpenCC の候補から Unihan の異体字を**1段だけ**たどり、平仄データにある字を候補に足しました（2段たどっても、新字体由来の字で増える対応はありませんでした）。OpenCC でつながる字には使いません。
++- 足した対応（98件）は、欄名とたどった字を添えて `data/reports/unihan-supplemented.txt` に出しています。例：艶→豔（艶の kSemanticVariant）、鉱→礦（鑛の kSemanticVariant）、为→為（爲の kSemanticVariant）。
++
++### 限界
++
++- 平仄データの字と、よく使う形とを Unihan がつないでいない組があります。例：平仄データは「谿」「鑪」で載せているが、Unihan は「溪」「爐」とこれらをつないでいない。根拠となる資料がないため、つないでいません。
++- 「竈」「蔥」のように、平仄データにどの形でも載っていない字もあります。これらは入力すると「平仄データにない字」（要確認）になります。
++
++## 4. ウィキペディア日本語版「和製漢字」
+ 
+ | 項目 | 内容 |
+ |---|---|
+diff --git a/TASKS.md b/TASKS.md
+index 75b7d46..cafb4cd 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,7 +4,17 @@
+ 
+ ## 進行中
+ 
+-（なし）
++### m1-unihan — 平仄データにつながらない字を Unihan の異体字情報で補う（DECISIONS.md (c)）
++
++ブランチ: `task/m1-unihan`
++
++完了条件:
++- [ ] Unicode 18.0.0 の `Unihan_Variants.txt` とライセンス文を、ハッシュで検証して `data/raw/unicode-18.0.0/` に取得するスクリプトがある
++- [ ] OpenCC の対応で平仄データにつながらなかった字にだけ、Unihan の `kZVariant`・`kSemanticVariant`・`kJapaneseOldVariant` を1段たどって、平仄データにある字を候補として足す（入力字そのものと、OpenCC の候補の両方からたどる）。OpenCC でつながる字には足さない
++- [ ] 使わない欄（`kSpecializedSemanticVariant`・`kSpoofingVariant`・`kSimplifiedVariant`・`kTraditionalVariant`・`kJapaneseNewVariant`）を使っていないことがテストで確かめられている
++- [ ] Unihan で補った字は、根拠（欄名と経由した字）とともに `data/reports/unihan-supplemented.txt` に出る。候補が2字以上なら、今までどおり `ambiguous.txt` にも出る
++- [ ] それでもつながらない字は `unmapped.txt` に残る
++- [ ] `npm test` が緑で、`DATA_SOURCES.md` に Unihan の出典・ライセンス・加工内容が書かれている
+ 
+ ## 完了
+ 
+diff --git a/scripts/build_data.py b/scripts/build_data.py
+index 7af5f49..5c2ffd2 100644
+--- a/scripts/build_data.py
++++ b/scripts/build_data.py
+@@ -6,7 +6,7 @@
+ 生成物:
+   data/rhymes.json        平水韻106韻目の一覧（元データの見出し順）
+   data/chars.json         字 → 読み（声調・韻目）の一覧
+-  data/variants.json      入力字（新字体・簡体字）→ データ上の字の候補
++  data/variants.json      入力字（新字体・簡体字）→ データ上の字の候補（OpenCC、足りない字は Unihan で補う）
+   data/kokuji.json        国字の一覧（出典つき）
+   data/reports/*.txt|md   生成時のレポート
+ 
+@@ -34,6 +34,7 @@ WASEI = RAW / "wikipedia-ja-wasei-kanji-109822326.wiki"
+ OPENCC_DIR = RAW / "opencc-ver.1.4.2"
+ ST_CHARS = OPENCC_DIR / "STCharacters.txt"
+ JP_SHINJITAI = OPENCC_DIR / "JPShinjitaiCharacters.txt"
++UNIHAN_VARIANTS = RAW / "unicode-18.0.0" / "Unihan_Variants.txt"
+ CORRECTIONS = OUT / "corrections.json"
+ 
+ # 元データの見出し（上平聲・下平聲・上聲・去聲・入聲）→ 韻目名の接頭辞と声調。
+@@ -187,6 +188,37 @@ def parse_opencc(text: str) -> dict[str, list[str]]:
+     return table
+ 
+ 
++# Unihan の異体字の欄のうち、使うもの（DECISIONS.md (c)）。
++#   kZVariant           同じ字の字形違い
++#   kSemanticVariant    意味が同じで置き換えられる字
++#   kJapaneseOldVariant 日本の新字体に対する旧字体
++# 使わないもの: kSpecializedSemanticVariant（特定の文脈でだけ置き換えられる）、
++#   kSpoofingVariant（見た目が似ているだけ）、kSimplifiedVariant・kTraditionalVariant（OpenCC で扱う）、
++#   kJapaneseNewVariant（旧字体→新字体で、向きが逆）
++UNIHAN_FIELDS = ("kZVariant", "kSemanticVariant", "kJapaneseOldVariant")
++
++
++def parse_unihan_variants(text: str) -> dict[str, list[tuple[str, str]]]:
++    """Unihan_Variants.txt → 字 → [(欄名, 異体字)...]（ファイルの順）。使う欄だけを読む。"""
++    table: dict[str, list[tuple[str, str]]] = {}
++    for line_no, raw in enumerate(text.splitlines(), 1):
++        if not raw or raw.startswith("#"):
++            continue
++        parts = raw.split("\t")
++        if len(parts) != 3:
++            raise BuildError(f"Unihan {line_no}行目: 形式が想定と違う: {raw!r}")
++        code, field, value = parts
++        if field not in UNIHAN_FIELDS:
++            continue
++        ch = chr(int(code.removeprefix("U+"), 16))
++        for token in value.split(" "):
++            target = token.split("<", 1)[0]  # "U+4E94<kMatthews" の出典タグは外す
++            if not target.startswith("U+"):
++                raise BuildError(f"Unihan {line_no}行目: 字の書き方が想定と違う: {token!r}")
++            table.setdefault(ch, []).append((field, chr(int(target[2:], 16))))
++    return table
++
++
+ def _collect_variant_candidates(key, chars, jp, st):
+     """候補の出現順を保ち、同じ候補の由来をすべて残す。"""
+     sources: dict[str, list[str]] = {}
+@@ -203,20 +235,41 @@ def _collect_variant_candidates(key, chars, jp, st):
+     return list(sources), sources
+ 
+ 
+-def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
++def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]], unihan):
+     """入力字 → データにある字の候補。
+ 
+     候補は「その字自身（データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に並べる。
++    OpenCC の候補がどれも平仄データにないときだけ、入力字と OpenCC の候補から Unihan の異体字を
++    1段たどり、平仄データにある字を候補に足す（DECISIONS.md (c)）。
+     順序に優先の意味はない。どれを採るかはエンジンも決めない（§4.3）。
++
++    戻り値: (variants, ambiguous, unmapped, supplemented)
+     """
+     variants: dict[str, list[str]] = {}
+     ambiguous: list[str] = []
+     unmapped: list[str] = []
++    supplemented: list[str] = []
+     # 字単位の対応だけを使う（語単位の見出しは除く）
+     for key in sorted((k for k in set(jp) | set(st) if len(k) == 1), key=ord):
+         candidates, sources = _collect_variant_candidates(key, chars, jp, st)
+ 
+         known = [c for c in candidates if c in chars]
++        if not known:
++            # 同じ字に複数の経路でたどり着いたら、経路をまとめて1件として記録する
++            labels: dict[str, list[str]] = {}
++            for via in dict.fromkeys([key, *candidates]):
++                for field, target in unihan.get(via, []):
++                    if target in chars:
++                        labels.setdefault(target, [])
++                        label = f"{field}（{via}から）"
++                        if label not in labels[target]:
++                            labels[target].append(label)
++            for target, target_labels in labels.items():
++                if target not in sources:
++                    candidates.append(target)
++                sources.setdefault(target, []).extend(f"Unihan {lb}" for lb in target_labels)
++                supplemented.append(f"{key}\t{target}\t{'・'.join(target_labels)}")
++            known = [c for c in candidates if c in chars]
+         # 一対多かどうかは、平仄データに絞る前の候補で判定する。
+         # データにない候補も「平仄データにない」と書いて残し、黙って一つに決めない。
+         if len(candidates) > 1:
+@@ -235,7 +288,7 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
+             continue  # データ上で自分自身にしか対応しない字は variants.json に載せない
+         variants[key] = known
+     # 日本語入力で出会いやすい新字体由来の字を先に並べる
+-    return variants, ambiguous, [row for _, _, row in sorted(unmapped)]
++    return variants, ambiguous, [row for _, _, row in sorted(unmapped)], supplemented
+ 
+ 
+ def format_readings(readings: list[dict]) -> str:
+@@ -305,7 +358,7 @@ def report(title: str, explanation: list[str], rows: list[str]) -> str:
+ 
+ 
+ def build() -> dict[Path, str]:
+-    for p in (WIKISOURCE, WASEI, ST_CHARS, JP_SHINJITAI):
++    for p in (WIKISOURCE, WASEI, ST_CHARS, JP_SHINJITAI, UNIHAN_VARIANTS):
+         if not p.exists():
+             raise BuildError(f"{p.relative_to(ROOT)} がない。先に scripts/fetch_sources.py を実行する")
+ 
+@@ -319,7 +372,8 @@ def build() -> dict[Path, str]:
+ 
+     jp = parse_opencc(JP_SHINJITAI.read_text(encoding="utf-8"))
+     st = parse_opencc(ST_CHARS.read_text(encoding="utf-8"))
+-    variants, ambiguous, unmapped = build_variants(chars, jp, st)
++    unihan = parse_unihan_variants(UNIHAN_VARIANTS.read_text(encoding="utf-8"))
++    variants, ambiguous, unmapped, supplemented = build_variants(chars, jp, st, unihan)
+ 
+     kokuji = parse_kokuji(WASEI.read_text(encoding="utf-8"))
+     kokuji_overlap = [
+@@ -352,6 +406,7 @@ def build() -> dict[Path, str]:
+             f"| 当てた修正（corrections.json） | {len(applied)} |",
+             f"| 異体字の対応（variants.json の見出し字） | {len(variants)} |",
+             f"| 対応の候補が2字以上になる字（ambiguous.txt） | {len(ambiguous)} |",
++            f"| Unihan で補った対応（unihan-supplemented.txt） | {len(supplemented)} |",
+             f"| 対応先がデータにない字（unmapped.txt） | {len(unmapped)} |",
+             f"| 国字（kokuji.json） | {len(kokuji)} |",
+             f"| 国字の一覧にあり、平水韻にも載る字 | {len(kokuji_overlap)} |",
+@@ -376,10 +431,19 @@ def build() -> dict[Path, str]:
+         OUT / "variants.json": dump_json(variants),
+         OUT / "kokuji.json": dump_json(kokuji_doc),
+         REPORTS / "summary.md": summary,
++        REPORTS / "unihan-supplemented.txt": report(
++            "Unihan で補った対応",
++            [
++                "OpenCC の対応では平仄データにつながらず、Unihan の異体字情報で候補を足した字（DECISIONS.md (c)）。",
++                "使った欄: kZVariant（字形違い）・kSemanticVariant（意味が同じ）・kJapaneseOldVariant（旧字体）。1段だけたどる。",
++                "書式: 入力字<TAB>足した候補<TAB>欄（どの字からたどったか）",
++            ],
++            supplemented,
++        ),
+         REPORTS / "unmapped.txt": report(
+             "対応できなかった字",
+             [
+-                "新字体→旧字体・簡体字→繁体字の対応はあるが、どの候補も平仄データ（chars.json）にない字。",
++                "新字体→旧字体・簡体字→繁体字の対応はあるが、どの候補も平仄データ（chars.json）になく、Unihan の異体字情報でも補えなかった字。",
+                 "新字体→旧字体の対応がある字を先に、簡体字→繁体字だけの字を後に並べる。",
+                 "書式: 入力字<TAB>対応の種類<TAB>候補",
+             ],
+diff --git a/scripts/fetch_sources.py b/scripts/fetch_sources.py
+index 3ace318..eae4e92 100644
+--- a/scripts/fetch_sources.py
++++ b/scripts/fetch_sources.py
+@@ -14,11 +14,13 @@ from __future__ import annotations
+ 
+ import argparse
+ import hashlib
++import io
+ import json
+ import sys
+ import time
+ import urllib.parse
+ import urllib.request
++import zipfile
+ from pathlib import Path
+ 
+ ROOT = Path(__file__).resolve().parent.parent
+@@ -28,6 +30,8 @@ USER_AGENT = "kanshi-app/0.1 (https://github.com/adatic/kanshi-app; data fetch)"
+ OPENCC_TAG = "ver.1.4.2"
+ OPENCC_BASE = f"https://raw.githubusercontent.com/BYVoid/OpenCC/{OPENCC_TAG}"
+ 
++UNICODE_VERSION = "18.0.0"
++
+ 
+ def mediawiki_revision(api: str, revid: int) -> str:
+     query = urllib.parse.urlencode(
+@@ -46,6 +50,7 @@ def mediawiki_revision(api: str, revid: int) -> str:
+ 
+ # path: data/raw/ からの相対パス
+ # kind: "mediawiki" は API の JSON から本文（wikitext）を取り出して保存する
++#       "zip-member" は zip を取得して archive_sha256 で検証し、member だけを取り出して保存する
+ SOURCES = [
+     {
+         "path": "wikisource-pingshui-8264804.wiki",
+@@ -77,6 +82,20 @@ SOURCES = [
+         "url": f"{OPENCC_BASE}/LICENSE",
+         "sha256": "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308",
+     },
++    {
++        "path": f"unicode-{UNICODE_VERSION}/Unihan_Variants.txt",
++        "kind": "zip-member",
++        "url": f"https://www.unicode.org/Public/{UNICODE_VERSION}/ucd/Unihan.zip",
++        "archive_sha256": "4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e",
++        "member": "Unihan_Variants.txt",
++        "sha256": "4ccfd34b08ac7b9c14353f6668ba43e3796d85c4cdce7952b635be16015aafa2",
++    },
++    {
++        "path": f"unicode-{UNICODE_VERSION}/license.txt",
++        "kind": "file",
++        "url": "https://www.unicode.org/license.txt",
++        "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
++    },
+ ]
+ 
+ 
+@@ -113,6 +132,18 @@ def fetch(source: dict, force: bool) -> bool:
+     body = http_get(source["url"])
+     if source["kind"] == "mediawiki":
+         body = extract_mediawiki_content(body)
++    elif source["kind"] == "zip-member":
++        archive_digest = hashlib.sha256(body).hexdigest()
++        if archive_digest != source["archive_sha256"]:
++            print(
++                f"NG   {source['path']}: zip の SHA-256 が一致しません\n"
++                f"     期待値 {source['archive_sha256']}\n"
++                f"     実際   {archive_digest}",
++                file=sys.stderr,
++            )
++            return False
++        with zipfile.ZipFile(io.BytesIO(body)) as zf:
++            body = zf.read(source["member"])
+     digest = hashlib.sha256(body).hexdigest()
+     if digest != source["sha256"]:
+         print(
+diff --git a/scripts/test_build_data.py b/scripts/test_build_data.py
+index b9aadea..6acb45b 100644
+--- a/scripts/test_build_data.py
++++ b/scripts/test_build_data.py
+@@ -6,14 +6,23 @@
+ 
+ import unittest
+ 
+-from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_kokuji, parse_wikisource
++from build_data import (
++    BuildError,
++    apply_corrections,
++    build_chars,
++    build_variants,
++    parse_kokuji,
++    parse_unihan_variants,
++    parse_wikisource,
++)
+ 
+ R = {"tone": "平", "rhyme": "上平一東"}  # 仮の読み
+ 
+ 
+ class BuildVariantsTest(unittest.TestCase):
+     def run_variants(self, chars, jp=None, st=None):
+-        return build_variants({c: [R] for c in chars}, jp or {}, st or {})
++        variants, ambiguous, unmapped, _ = build_variants({c: [R] for c in chars}, jp or {}, st or {}, {})
++        return variants, ambiguous, unmapped
+ 
+     def test_one_to_many_with_one_known_candidate_is_reported(self):
+         # 甲 → 乙 丙 のうち、データにあるのは丙だけ
+@@ -169,5 +178,90 @@ class ParseKokujiTest(unittest.TestCase):
+         self.assertEqual(result["萩"], "出典の行見出しに「要出典」「疑問点」の印がある")
+ 
+ 
++UNIHAN = """\
++# comment
++U+4E19\tkSemanticVariant\tU+4E01<kMatthews
++U+4E59\tkZVariant\tU+4E03
++U+4E59\tkSpoofingVariant\tU+4E09
++U+4E59\tkSpecializedSemanticVariant\tU+4E0A
++U+4E59\tkSimplifiedVariant\tU+4E0B
++U+4E59\tkTraditionalVariant\tU+4E0D
++U+4E59\tkJapaneseNewVariant\tU+4E10
++U+4E19\tkJapaneseOldVariant\tU+4E08 U+4E07
++"""
++
++
++class ParseUnihanTest(unittest.TestCase):
++    def test_only_the_three_allowed_fields_are_used(self):
++        table = parse_unihan_variants(UNIHAN)
++        # 乙(U+4E59) は kZVariant の 七 だけ。除外する欄（見た目が似ているだけ・特定の文脈だけ・簡繁・新字体）は使わない
++        self.assertEqual(table["乙"], [("kZVariant", "七")])
++        # 丙(U+4E19) は kSemanticVariant の 丁（出典タグ <kMatthews は外す）と、kJapaneseOldVariant の 丈・万
++        self.assertEqual(
++            table["丙"],
++            [("kSemanticVariant", "丁"), ("kJapaneseOldVariant", "丈"), ("kJapaneseOldVariant", "万")],
++        )
++
++
++class UnihanSupplementTest(unittest.TestCase):
++    def run_variants(self, chars, jp=None, st=None, unihan=None):
++        return build_variants({c: [R] for c in chars}, jp or {}, st or {}, unihan or {})
++
++    def test_unihan_fills_a_key_that_opencc_could_not_map(self):
++        # 甲 → 乙（OpenCC。データにない）、甲 の Unihan 意味異体字 丙 はデータにある
++        variants, ambiguous, unmapped, supplemented = self.run_variants(
++            ["丙"], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
++        )
++        self.assertEqual(variants, {"甲": ["丙"]})
++        self.assertEqual(unmapped, [])
++        self.assertEqual(supplemented, ["甲\t丙\tkSemanticVariant（甲から）"])
++        # OpenCC の候補 乙 はデータにないので、候補は2字（一対多）として記録される
++        self.assertTrue(ambiguous[0].startswith("甲\t1/2\t"))
++
++    def test_unihan_is_followed_from_opencc_candidates_too(self):
++        # 甲 → 乙（OpenCC）→ 丙（乙 の Unihan Z異体字）
++        variants, _, _, supplemented = self.run_variants(
++            ["丙"], jp={"甲": ["乙"]}, unihan={"乙": [("kZVariant", "丙")]}
++        )
++        self.assertEqual(variants, {"甲": ["丙"]})
++        self.assertEqual(supplemented, ["甲\t丙\tkZVariant（乙から）"])
++
++    def test_unihan_is_not_used_when_opencc_already_maps(self):
++        variants, _, _, supplemented = self.run_variants(
++            ["乙", "丙"], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
++        )
++        self.assertEqual(variants, {"甲": ["乙"]})
++        self.assertEqual(supplemented, [])
++
++    def test_unihan_candidates_missing_from_data_are_not_added(self):
++        variants, _, unmapped, supplemented = self.run_variants(
++            [], jp={"甲": ["乙"]}, unihan={"甲": [("kSemanticVariant", "丙")]}
++        )
++        self.assertEqual(variants, {})
++        self.assertEqual(supplemented, [])
++        self.assertEqual(unmapped, ["甲\t新字体→旧字体\t候補: 乙"])
++
++    def test_one_target_reached_by_several_paths_is_one_row(self):
++        # 甲 からも、OpenCC の候補 乙 からも 丙 にたどり着く。甲 は簡体字→繁体字で自分自身にも対応する
++        variants, _, _, supplemented = self.run_variants(
++            ["丙"],
++            jp={"甲": ["乙"]},
++            st={"甲": ["甲"]},
++            unihan={"甲": [("kSemanticVariant", "丙")], "乙": [("kZVariant", "丙")]},
++        )
++        self.assertEqual(variants, {"甲": ["丙"]})
++        self.assertEqual(supplemented, ["甲\t丙\tkSemanticVariant（甲から）・kZVariant（乙から）"])
++
++    def test_several_unihan_candidates_are_all_kept(self):
++        variants, ambiguous, _, supplemented = self.run_variants(
++            ["丙", "丁"],
++            jp={"甲": ["乙"]},
++            unihan={"甲": [("kSemanticVariant", "丙"), ("kSemanticVariant", "丁")]},
++        )
++        self.assertEqual(variants, {"甲": ["丙", "丁"]})
++        self.assertTrue(ambiguous[0].startswith("甲\t2/3\t"))
++        self.assertEqual(len(supplemented), 2)
++
++
+ if __name__ == "__main__":
+     unittest.main()
