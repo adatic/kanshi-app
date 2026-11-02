@@ -11,9 +11,18 @@ index 9432427..609b918 100644
 +          python-version: "3.12"
        - run: npm ci
        - run: npm test
+diff --git a/.gitignore b/.gitignore
+index 7e3789d..7dd0415 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,3 +3,4 @@ dist/
+ coverage/
+ *.log
+ .DS_Store
++__pycache__/
 diff --git a/DATA_SOURCES.md b/DATA_SOURCES.md
 new file mode 100644
-index 0000000..2bcd2fa
+index 0000000..8a919a8
 --- /dev/null
 +++ b/DATA_SOURCES.md
 @@ -0,0 +1,116 @@
@@ -90,7 +99,7 @@ index 0000000..2bcd2fa
 +
 +- 1字→1字以上の対応だけを使いました（語単位の対応は使っていません）。
 +- 入力字ごとに、候補を「その字自身（平仄データにあれば）」「新字体→旧字体」「簡体字→繁体字」の順に集め、平仄データにある候補だけを `data/variants.json` に載せました。**順序に優先の意味はありません。**
-+- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補が複数になった字（201字）は `data/reports/ambiguous.txt` に、どの候補も平仄データにない字（1,472字）は `data/reports/unmapped.txt` に出しています。後者のうち、新字体由来の字（並・艶・渓・炉・汚 など19字）を先頭に並べています。平仄データ側が別の異体字で載せているためと考えられますが、まだ対応していません。
++- 一対多の対応は一つに決めていません（CLAUDE.md §4.3）。候補（その字自身を含む）が2字以上になった字（395字）は、平仄データにない候補も含めて `data/reports/ambiguous.txt` に出しています。そのうち平仄データにある候補が1字だけの字（175字。例：叙→敍・敘のうち敘だけがある）も、黙って一つに決めずに記録しています。どの候補も平仄データにない字（1,472字）は `data/reports/unmapped.txt` に出しています。後者のうち、新字体由来の字（並・艶・渓・炉・汚 など19字）を先頭に並べています。平仄データ側が別の異体字で載せているためと考えられますが、まだ対応していません。
 +
 +## 3. ウィキペディア日本語版「和製漢字」
 +
@@ -134,7 +143,7 @@ index 0000000..2bcd2fa
 +
 +元データは同じウィキソースのページなので、そちらを版を固定して直接取り込み、【詞】【辭】欄を区別して残すことにしました。
 diff --git a/TASKS.md b/TASKS.md
-index 8f59a02..7042306 100644
+index 8f59a02..053055f 100644
 --- a/TASKS.md
 +++ b/TASKS.md
 @@ -4,7 +4,17 @@
@@ -148,7 +157,7 @@ index 8f59a02..7042306 100644
 +
 +完了条件:
 +- [ ] 元データ（ウィキソース「平水韻」版8264804、OpenCC ver.1.4.2 の対応表、ウィキペディア「和製漢字」版109822326）を版を固定して `data/raw/` に保存し、ハッシュで検証して取得するスクリプトがある
-+- [ ] 生成スクリプトが `data/raw/` だけから `data/chars.json`・`data/rhymes.json`・`data/variants.json`・`data/kokuji.json` と `data/reports/` を作り、同じ入力から同じ出力を出す（`npm test` で再生成して差分がないことを確かめる）
++- [ ] 生成スクリプトが `data/raw/` と、根拠つきの修正一覧 `data/corrections.json` だけから `data/chars.json`・`data/rhymes.json`・`data/variants.json`・`data/kokuji.json` と `data/reports/` を作り、同じ入力から同じ出力を出す（`npm test` で再生成して差分がないことを確かめる）
 +- [ ] ウィキソース版の【詞】【辭】欄の字は本体と区別し、`note` で印を付けて残す（扱いは人間が判断する）
 +- [ ] 簡体字→繁体字、新字体→旧字体の対応で候補が複数になった字は一つに決めず `data/reports/ambiguous.txt` に、対応先がデータにない字は `data/reports/unmapped.txt` に出す
 +- [ ] データ検査（声調の値域、韻目名の表記揺れ、同一字の重複定義など）が `npm test` で走り、エラーがゼロ
@@ -178,18 +187,19 @@ index 0000000..a1b17b2
 +  ]
 +}
 diff --git a/package.json b/package.json
-index bc3c9b0..c1bd893 100644
+index bc3c9b0..0198984 100644
 --- a/package.json
 +++ b/package.json
-@@ -13,7 +13,10 @@
+@@ -13,7 +13,11 @@
    },
    "scripts": {
      "typecheck": "tsc -p tsconfig.json && tsc -p packages/engine/tsconfig.json",
 -    "test": "npm run typecheck && vitest run"
-+    "test": "npm run typecheck && npm run data:verify && vitest run",
++    "test": "npm run typecheck && npm run data:unit && npm run data:verify && vitest run",
 +    "data:fetch": "python3 scripts/fetch_sources.py",
 +    "data:build": "python3 scripts/build_data.py",
-+    "data:verify": "python3 scripts/build_data.py --check"
++    "data:verify": "python3 scripts/build_data.py --check",
++    "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\""
    },
    "devDependencies": {
      "@types/node": "^26.6.6",
@@ -198,10 +208,10 @@ deleted file mode 100644
 index e69de29..0000000
 diff --git a/scripts/build_data.py b/scripts/build_data.py
 new file mode 100644
-index 0000000..4226546
+index 0000000..622e839
 --- /dev/null
 +++ b/scripts/build_data.py
-@@ -0,0 +1,443 @@
+@@ -0,0 +1,447 @@
 +#!/usr/bin/env python3
 +"""data/raw/ の元データから、エンジンが読むデータとレポートを生成する（CLAUDE.md §4.3）。
 +
@@ -401,9 +411,8 @@ index 0000000..4226546
 +    variants: dict[str, list[str]] = {}
 +    ambiguous: list[str] = []
 +    unmapped: list[str] = []
-+    for key in sorted(set(jp) | set(st), key=ord):
-+        if len(key) != 1:
-+            continue  # 字単位の対応だけを使う
++    # 字単位の対応だけを使う（語単位の見出しは除く）
++    for key in sorted((k for k in set(jp) | set(st) if len(k) == 1), key=ord):
 +        candidates: list[str] = []
 +        sources: dict[str, list[str]] = {}
 +
@@ -420,19 +429,23 @@ index 0000000..4226546
 +            add(c, "簡体字→繁体字")
 +
 +        known = [c for c in candidates if c in chars]
-+        if known == [key]:
-+            continue  # 自分自身にしか対応しない字は載せない
++        # 一対多かどうかは、平仄データに絞る前の候補で判定する。
++        # データにない候補も「平仄データにない」と書いて残し、黙って一つに決めない。
++        if len(candidates) > 1:
++            detail = "／".join(
++                f"{c}（{'・'.join(sources[c])}: "
++                f"{format_readings(chars[c]) if c in chars else '平仄データにない'}）"
++                for c in candidates
++            )
++            ambiguous.append(f"{key}\t{len(known)}/{len(candidates)}\t{detail}")
 +        if not known:
 +            others = [c for c in candidates if c != key]
 +            kinds = "・".join(dict.fromkeys(src for c in others for src in sources[c]))
 +            unmapped.append((0 if key in jp else 1, ord(key), f"{key}\t{kinds}\t候補: {' '.join(others)}"))
 +            continue
++        if known == [key]:
++            continue  # データ上で自分自身にしか対応しない字は variants.json に載せない
 +        variants[key] = known
-+        if len(known) > 1:
-+            detail = "／".join(
-+                f"{c}（{'・'.join(sources[c])}: {format_readings(chars[c])}）" for c in known
-+            )
-+            ambiguous.append(f"{key}\t{detail}")
 +    # 日本語入力で出会いやすい新字体由来の字を先に並べる
 +    return variants, ambiguous, [row for _, _, row in sorted(unmapped)]
 +
@@ -547,7 +560,7 @@ index 0000000..4226546
 +            f"| 元データ内の重複（同じ字・同じ韻目） | {len(dup_lines)} |",
 +            f"| 当てた修正（corrections.json） | {len(applied)} |",
 +            f"| 異体字の対応（variants.json の見出し字） | {len(variants)} |",
-+            f"| 対応の候補が複数になる字（ambiguous.txt） | {len(ambiguous)} |",
++            f"| 対応の候補が2字以上になる字（ambiguous.txt） | {len(ambiguous)} |",
 +            f"| 対応先がデータにない字（unmapped.txt） | {len(unmapped)} |",
 +            f"| 国字（kokuji.json） | {len(kokuji)} |",
 +            f"| 国字の一覧にあり、平水韻にも載る字 | {len(kokuji_overlap)} |",
@@ -584,8 +597,9 @@ index 0000000..4226546
 +        REPORTS / "ambiguous.txt": report(
 +            "対応の候補が複数になる字",
 +            [
-+                "一つに決めずに、候補をすべて variants.json に載せた字。",
-+                "書式: 入力字<TAB>候補（対応の種類: その字の韻目）／…",
++                "新字体→旧字体・簡体字→繁体字の対応で、候補（その字自身を含む）が2字以上になる字。",
++                "平仄データにある候補はすべて variants.json に載せた（一つに決めていない）。平仄データにない候補もここに残す。",
++                "書式: 入力字<TAB>平仄データにある候補の数/候補の数<TAB>候補（対応の種類: その字の韻目）／…",
 +            ],
 +            ambiguous,
 +        ),
@@ -934,3 +948,150 @@ index 0000000..3ace318
 +
 +if __name__ == "__main__":
 +    sys.exit(main())
+diff --git a/scripts/test_build_data.py b/scripts/test_build_data.py
+new file mode 100644
+index 0000000..1366a0c
+--- /dev/null
++++ b/scripts/test_build_data.py
+@@ -0,0 +1,141 @@
++"""scripts/build_data.py の単体テスト。`npm test`（npm run data:unit）で走る。
++
++入力は架空の小さな表で、生成ロジックの境界だけを確かめる。
++平仄・韻目の正誤は扱わない（読みは形を満たすだけの仮の値）。
++"""
++
++import unittest
++
++from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_wikisource
++
++R = {"tone": "平", "rhyme": "上平一東"}  # 仮の読み
++
++
++class BuildVariantsTest(unittest.TestCase):
++    def run_variants(self, chars, jp=None, st=None):
++        return build_variants({c: [R] for c in chars}, jp or {}, st or {})
++
++    def test_one_to_many_with_one_known_candidate_is_reported(self):
++        # 甲 → 乙 丙 のうち、データにあるのは丙だけ
++        variants, ambiguous, unmapped = self.run_variants(["丙"], jp={"甲": ["乙", "丙"]})
++        self.assertEqual(variants, {"甲": ["丙"]})
++        self.assertEqual(len(ambiguous), 1)
++        self.assertTrue(ambiguous[0].startswith("甲\t1/2\t"))
++        self.assertIn("乙（新字体→旧字体: 平仄データにない）", ambiguous[0])
++        self.assertEqual(unmapped, [])
++
++    def test_one_to_many_with_all_known_keeps_every_candidate(self):
++        variants, ambiguous, _ = self.run_variants(["乙", "丙"], st={"甲": ["乙", "丙"]})
++        self.assertEqual(variants, {"甲": ["乙", "丙"]})
++        self.assertTrue(ambiguous[0].startswith("甲\t2/2\t"))
++
++    def test_key_itself_counts_as_a_candidate_when_known(self):
++        # 甲 自身がデータにあり、さらに 乙 にも対応する
++        variants, ambiguous, _ = self.run_variants(["甲", "乙"], jp={"甲": ["乙"]})
++        self.assertEqual(variants, {"甲": ["甲", "乙"]})
++        self.assertIn("甲（自身: 上平一東）", ambiguous[0])
++
++    def test_known_self_with_unknown_other_is_reported_but_not_listed(self):
++        variants, ambiguous, unmapped = self.run_variants(["甲"], jp={"甲": ["乙"]})
++        self.assertEqual(variants, {})
++        self.assertTrue(ambiguous[0].startswith("甲\t1/2\t"))
++        self.assertEqual(unmapped, [])
++
++    def test_one_to_one_is_not_ambiguous(self):
++        variants, ambiguous, unmapped = self.run_variants(["乙"], jp={"甲": ["乙"]})
++        self.assertEqual(variants, {"甲": ["乙"]})
++        self.assertEqual(ambiguous, [])
++        self.assertEqual(unmapped, [])
++
++    def test_no_known_candidate_goes_to_unmapped(self):
++        variants, _, unmapped = self.run_variants([], st={"甲": ["乙"]})
++        self.assertEqual(variants, {})
++        self.assertEqual(unmapped, ["甲\t簡体字→繁体字\t候補: 乙"])
++
++    def test_unmapped_lists_shinjitai_before_simplified(self):
++        _, _, unmapped = self.run_variants([], jp={"丁": ["乙"]}, st={"丙": ["丑"]})
++        # 丙（U+4E19）は丁（U+4E01）より後ろの字だが、新字体由来の丁を先に並べる
++        self.assertEqual([row[0] for row in unmapped], ["丁", "丙"])
++
++    def test_multi_char_keys_are_ignored(self):
++        variants, ambiguous, unmapped = self.run_variants(["乙"], st={"甲乙": ["乙"]})
++        self.assertEqual((variants, ambiguous, unmapped), ({}, [], []))
++
++
++WIKI = """\
++==上平聲部==
++上平聲一{{++|東}}
++
++東同
++
++【詞】中同
++
++上平聲二{{++|冬}}
++
++冬
++==上聲部==
++上聲一{{++|董}}
++
++董同
++"""
++
++
++class ParseAndBuildCharsTest(unittest.TestCase):
++    def test_supplement_marker_is_kept_and_body_wins_on_duplicate(self):
++        rhymes, entries = parse_wikisource(WIKI)
++        self.assertEqual([r["id"] for r in rhymes], ["上平一東", "上平二冬", "上声一董"])
++        chars, dups = build_chars(rhymes, entries)
++        self.assertEqual(chars["中"], [{"tone": "平", "rhyme": "上平一東", "note": "【詞】"}])
++        # 同は本体と【詞】の両方に載る → 本体を採り、重複として記録する
++        self.assertEqual(
++            chars["同"],
++            [{"tone": "平", "rhyme": "上平一東"}, {"tone": "上", "rhyme": "上声一董"}],
++        )
++        self.assertEqual(len(dups), 1)
++        self.assertTrue(dups[0].startswith("同\t上平一東\t本体と【詞】"))
++
++    def test_non_han_text_stops_the_build(self):
++        with self.assertRaises(BuildError):
++            parse_wikisource("上平聲一{{++|東}}\n東Public\n")
++
++    def test_body_before_first_heading_stops_the_build(self):
++        with self.assertRaises(BuildError):
++            parse_wikisource("東同\n")
++
++
++class ApplyCorrectionsTest(unittest.TestCase):
++    def setUp(self):
++        self.rhymes, entries = parse_wikisource(WIKI)
++        self.chars, _ = build_chars(self.rhymes, entries)
++
++    def correction(self, **kw):
++        base = {"action": "add", "char": "冬", "rhyme": "上平一東", "reason": "r", "evidence": ["e"]}
++        return {**base, **kw}
++
++    def test_add_inserts_reading_in_rhyme_order(self):
++        chars, applied = apply_corrections(self.chars, self.rhymes, [self.correction()])
++        self.assertEqual(
++            chars["冬"],
++            [{"tone": "平", "rhyme": "上平一東"}, {"tone": "平", "rhyme": "上平二冬"}],
++        )
++        self.assertEqual(len(applied), 1)
++
++    def test_add_promotes_supplement_reading_to_body(self):
++        chars, _ = apply_corrections(self.chars, self.rhymes, [self.correction(char="中")])
++        self.assertEqual(chars["中"], [{"tone": "平", "rhyme": "上平一東"}])
++
++    def test_unneeded_correction_stops_the_build(self):
++        with self.assertRaises(BuildError):
++            apply_corrections(self.chars, self.rhymes, [self.correction(char="東")])
++
++    def test_correction_without_evidence_stops_the_build(self):
++        with self.assertRaises(BuildError):
++            apply_corrections(self.chars, self.rhymes, [self.correction(evidence=[])])
++
++    def test_unknown_rhyme_stops_the_build(self):
++        with self.assertRaises(BuildError):
++            apply_corrections(self.chars, self.rhymes, [self.correction(rhyme="上平九十九無")])
++
++
++if __name__ == "__main__":
++    unittest.main()
