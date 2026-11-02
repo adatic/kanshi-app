@@ -246,6 +246,8 @@ def format_readings(readings: list[dict]) -> str:
 KOKUJI_SECTION = ("== 和製漢字の例 ==", "== 通用範囲 ==")
 TEMPLATE_CHAR_RE = re.compile(r"^\{\{JIS\d+フォント\|(.)\}\}")
 DOUBT_RE = re.compile(r"\{\{(要出典|疑問点)\|")
+# 備考で、その字が国字であることに留保を付けている言い回し（出典の表で使われているもの）
+HEDGE_PHRASES = ("国字でない可能性", "国字とは言い難い")
 
 
 def parse_kokuji(text: str):
@@ -266,8 +268,9 @@ def parse_kokuji(text: str):
         notes = []
         if DOUBT_RE.search(cell):
             notes.append("出典の行見出しに「要出典」「疑問点」の印がある")
-        if "国字でない可能性" in row:
-            notes.append("出典の備考に「国字でない可能性がある」とある")
+        for phrase in HEDGE_PHRASES:
+            if phrase in row:
+                notes.append(f"出典の備考に「{phrase}」とある")
         entry = {"char": ch}
         if notes:
             entry["note"] = "。".join(notes)

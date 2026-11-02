@@ -6,7 +6,7 @@
 
 import unittest
 
-from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_wikisource
+from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_kokuji, parse_wikisource
 
 R = {"tone": "平", "rhyme": "上平一東"}  # 仮の読み
 
@@ -135,6 +135,38 @@ class ApplyCorrectionsTest(unittest.TestCase):
     def test_unknown_rhyme_stops_the_build(self):
         with self.assertRaises(BuildError):
             apply_corrections(self.chars, self.rhymes, [self.correction(rhyme="上平九十九無")])
+
+
+KOKUJI_WIKI = """\
+== 和製漢字の例 ==
+{| class="sortable wikitable"
+!和製漢字!!訓読み!!音読み!!備考
+|-
+!峠{{r|"x"|page=1}}
+|とうげ||-||古くからある。
+|-
+!{{JIS90フォント|辻}}
+|つじ||-||国字でない可能性がある<ref>x</ref>。
+|-
+!搾
+|しぼ（る）||サク||異体字。国字とは言い難い<ref>x</ref>。
+|-
+!萩{{要出典|date=2024年1月}}
+|はぎ||-||
+|}
+
+== 通用範囲 ==
+"""
+
+
+class ParseKokujiTest(unittest.TestCase):
+    def test_hedges_in_remarks_and_header_marks_become_notes(self):
+        result = {e["char"]: e.get("note") for e in parse_kokuji(KOKUJI_WIKI)}
+        self.assertEqual(list(result), ["峠", "辻", "搾", "萩"])
+        self.assertIsNone(result["峠"])
+        self.assertEqual(result["辻"], "出典の備考に「国字でない可能性」とある")
+        self.assertEqual(result["搾"], "出典の備考に「国字とは言い難い」とある")
+        self.assertEqual(result["萩"], "出典の行見出しに「要出典」「疑問点」の印がある")
 
 
 if __name__ == "__main__":
