@@ -69,15 +69,20 @@ function evaluateLines(grid: CellState[][], form: FormDef | null, ctx: RuleConte
     const at = (p: number) => pz(l, p);
 
     // 挟み平：押韻しない句で、律句の5〜7字目 ○●● が ●○● になっている
+    // 7字目が決まらない（未入力・データにない字）ときは、仄なら挟み平になりうるので、違反を断定しない
     const hasami =
       def !== undefined &&
       !rhymeLines.includes(l) &&
       def.base.slice(4) === HASAMI_BASE &&
       at(4) === "仄" &&
       at(5) === "平" &&
-      at(6) === "仄";
+      at(6) !== "平";
     if (hasami) {
-      out.push(finding(ctx, "hasami-hei", l, [4, 5, 6], `${name}の5〜7字目が「仄平仄」です。挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`));
+      const message =
+        at(6) === "仄"
+          ? `${name}の5〜7字目が「仄平仄」です。挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`
+          : `${name}の5・6字目が「仄平」です。7字目が決まらないため、7字目が仄なら挟み平（句末の平仄仄を仄平仄に換える形）として許容されます。`;
+      out.push(finding(ctx, "hasami-hei", l, [4, 5, 6], message));
     }
     const hasamiPositions = hasami ? [4, 5] : [];
 

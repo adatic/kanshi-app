@@ -123,6 +123,28 @@ describe("hasami-hei（挟み平）", () => {
     expect(issues(run(lines))).toEqual(["variant:hasami-hei:2:4,5,6"]);
   });
 
+  it("7字目が決まらないときは、仄なら挟み平になりうるので、定型の違反を断定しない", () => {
+    // 転句 ●●○○○●● → ●●○○●○＿（7字目が未入力）
+    const lines = replaceAt(replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○"), 2, 6, "＿");
+    expect(issues(run(lines))).toEqual(["variant:hasami-hei:2:4,5,6"]);
+  });
+
+  it("7字目がデータにない字でも同じ（データにない字の要確認は別に出る）", () => {
+    const lines = replaceAt(replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○"), 2, 6, UNKNOWN);
+    expect(issues(run(lines))).toEqual(["check:unknown-char:2:6", "variant:hasami-hei:2:4,5,6"]);
+  });
+
+  it("7字目が平と決まっていれば挟み平ではなく、定型と二六対の違反", () => {
+    // 転句 ●●○○●○○（5〜7字目が仄平平）
+    const lines = replaceAt(replaceAt(replaceAt(HN, 2, 4, "●"), 2, 5, "○"), 2, 6, "○");
+    expect(issues(run(lines))).toEqual([
+      "violation:niroku-tsui:2:1,5",
+      "violation:pattern:2:4",
+      "violation:pattern:2:5",
+      "violation:pattern:2:6",
+    ]);
+  });
+
   it("句末が ○○● の句を ●○● にしても挟み平ではない（5字目の一三五不論）", () => {
     const HF = baseLines("heiki-funyuin"); // 起句 ○○●●○○●
     expect(issues(run(replaceAt(HF, 0, 4, "●")))).toEqual(["variant:ichisango-furon:0:4"]);

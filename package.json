@@ -20,7 +20,8 @@
     "data:unit": "python3 -m unittest discover -s scripts -p \"test_*.py\"",
     "golden:find": "python3 scripts/find_golden_sources.py",
     "golden:fetch": "python3 scripts/fetch_golden_sources.py",
-    "golden:input": "python3 scripts/build_golden_input.py"
+    "golden:input": "python3 scripts/build_golden_input.py",
+    "golden:update": "GOLDEN_UPDATE=1 vitest run golden"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
