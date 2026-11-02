@@ -22,7 +22,7 @@ index 7e3789d..7dd0415 100644
 +__pycache__/
 diff --git a/DATA_SOURCES.md b/DATA_SOURCES.md
 new file mode 100644
-index 0000000..8a919a8
+index 0000000..600dd19
 --- /dev/null
 +++ b/DATA_SOURCES.md
 @@ -0,0 +1,116 @@
@@ -114,7 +114,7 @@ index 0000000..8a919a8
 +### 加工内容
 +
 +- 「和製漢字の例」の表の行見出しから、字を1字ずつ取り出しました（28字）。
-+- 行見出しに「要出典」「疑問点」の印がある字（萩）、備考に「国字でない可能性がある」とある字（畠・襷）には、`kokuji.json` で `note` を付けました。
++- 行見出しに「要出典」「疑問点」の印がある字（萩）、備考で国字であることに留保が付いている字（「国字でない可能性がある」の畠・襷、「国字とは言い難い」の搾）には、`kokuji.json` で `note` を付けました。
 +
 +### 限界
 +
@@ -208,10 +208,10 @@ deleted file mode 100644
 index e69de29..0000000
 diff --git a/scripts/build_data.py b/scripts/build_data.py
 new file mode 100644
-index 0000000..622e839
+index 0000000..73c1bba
 --- /dev/null
 +++ b/scripts/build_data.py
-@@ -0,0 +1,447 @@
+@@ -0,0 +1,450 @@
 +#!/usr/bin/env python3
 +"""data/raw/ の元データから、エンジンが読むデータとレポートを生成する（CLAUDE.md §4.3）。
 +
@@ -460,6 +460,8 @@ index 0000000..622e839
 +KOKUJI_SECTION = ("== 和製漢字の例 ==", "== 通用範囲 ==")
 +TEMPLATE_CHAR_RE = re.compile(r"^\{\{JIS\d+フォント\|(.)\}\}")
 +DOUBT_RE = re.compile(r"\{\{(要出典|疑問点)\|")
++# 備考で、その字が国字であることに留保を付けている言い回し（出典の表で使われているもの）
++HEDGE_PHRASES = ("国字でない可能性", "国字とは言い難い")
 +
 +
 +def parse_kokuji(text: str):
@@ -480,8 +482,9 @@ index 0000000..622e839
 +        notes = []
 +        if DOUBT_RE.search(cell):
 +            notes.append("出典の行見出しに「要出典」「疑問点」の印がある")
-+        if "国字でない可能性" in row:
-+            notes.append("出典の備考に「国字でない可能性がある」とある")
++        for phrase in HEDGE_PHRASES:
++            if phrase in row:
++                notes.append(f"出典の備考に「{phrase}」とある")
 +        entry = {"char": ch}
 +        if notes:
 +            entry["note"] = "。".join(notes)
@@ -950,10 +953,10 @@ index 0000000..3ace318
 +    sys.exit(main())
 diff --git a/scripts/test_build_data.py b/scripts/test_build_data.py
 new file mode 100644
-index 0000000..1366a0c
+index 0000000..b9aadea
 --- /dev/null
 +++ b/scripts/test_build_data.py
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,173 @@
 +"""scripts/build_data.py の単体テスト。`npm test`（npm run data:unit）で走る。
 +
 +入力は架空の小さな表で、生成ロジックの境界だけを確かめる。
@@ -962,7 +965,7 @@ index 0000000..1366a0c
 +
 +import unittest
 +
-+from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_wikisource
++from build_data import BuildError, apply_corrections, build_chars, build_variants, parse_kokuji, parse_wikisource
 +
 +R = {"tone": "平", "rhyme": "上平一東"}  # 仮の読み
 +
@@ -1091,6 +1094,38 @@ index 0000000..1366a0c
 +    def test_unknown_rhyme_stops_the_build(self):
 +        with self.assertRaises(BuildError):
 +            apply_corrections(self.chars, self.rhymes, [self.correction(rhyme="上平九十九無")])
++
++
++KOKUJI_WIKI = """\
++== 和製漢字の例 ==
++{| class="sortable wikitable"
++!和製漢字!!訓読み!!音読み!!備考
++|-
++!峠{{r|"x"|page=1}}
++|とうげ||-||古くからある。
++|-
++!{{JIS90フォント|辻}}
++|つじ||-||国字でない可能性がある<ref>x</ref>。
++|-
++!搾
++|しぼ（る）||サク||異体字。国字とは言い難い<ref>x</ref>。
++|-
++!萩{{要出典|date=2024年1月}}
++|はぎ||-||
++|}
++
++== 通用範囲 ==
++"""
++
++
++class ParseKokujiTest(unittest.TestCase):
++    def test_hedges_in_remarks_and_header_marks_become_notes(self):
++        result = {e["char"]: e.get("note") for e in parse_kokuji(KOKUJI_WIKI)}
++        self.assertEqual(list(result), ["峠", "辻", "搾", "萩"])
++        self.assertIsNone(result["峠"])
++        self.assertEqual(result["辻"], "出典の備考に「国字でない可能性」とある")
++        self.assertEqual(result["搾"], "出典の備考に「国字とは言い難い」とある")
++        self.assertEqual(result["萩"], "出典の行見出しに「要出典」「疑問点」の印がある")
 +
 +
 +if __name__ == "__main__":
