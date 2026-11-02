@@ -36,35 +36,36 @@ def split4(text: str) -> list[str]:
     return [text[i : i + 7] for i in range(0, 28, 7)]
 
 
+def _build_poem(p: dict, excerpt: dict) -> dict:
+    """1首の本文を照合先から取り出し、入力とレポートに共通の情報を組み立てる。"""
+    sel = p["selection"]
+    text = window_text(excerpt, p["text"]) if p["text"] is not None else None
+    cross = window_text(excerpt, p["crosscheck"]) if p["crosscheck"] is not None else None
+    if text is not None and len(text) != 28:
+        raise SystemExit(f"エラー: {p['id']} の本文が28字ではない: {text}")
+    return {
+        "id": p["id"],
+        "group": p["group"],
+        "included": p["group"] == INCLUDED_GROUP and text is not None,
+        "title": sel["chapter"],
+        "author": sel["author"],
+        "lines": split4(text) if text is not None else None,
+        "source": p["text"],
+        "review": p["textReview"],
+        "diffs": {
+            # [位置(1始まり), 本文の字, 比べた版の字]
+            "selection": diffs(text, sel["text"]) if text is not None else None,
+            "crosscheck": diffs(text, cross) if text is not None and cross is not None else None,
+        },
+    }
+
+
 def build() -> dict[Path, str]:
     doc = json.loads(SOURCES.read_text(encoding="utf-8"))
     commit = doc["upstream"]["commit"]
     excerpt = json.loads((ROOT / "data" / "raw" / f"chinese-poetry-{commit[:7]}" / "excerpt.json").read_text(encoding="utf-8"))
 
-    poems = []
-    for p in doc["poems"]:
-        sel = p["selection"]
-        text = window_text(excerpt, p["text"]) if p["text"] is not None else None
-        cross = window_text(excerpt, p["crosscheck"]) if p["crosscheck"] is not None else None
-        if text is not None and len(text) != 28:
-            raise SystemExit(f"エラー: {p['id']} の本文が28字ではない: {text}")
-        poems.append(
-            {
-                "id": p["id"],
-                "group": p["group"],
-                "included": p["group"] == INCLUDED_GROUP and text is not None,
-                "title": sel["chapter"],
-                "author": sel["author"],
-                "lines": split4(text) if text is not None else None,
-                "source": p["text"],
-                "review": p["textReview"],
-                "diffs": {
-                    # [位置(1始まり), 本文の字, 比べた版の字]
-                    "selection": diffs(text, sel["text"]) if text is not None else None,
-                    "crosscheck": diffs(text, cross) if text is not None and cross is not None else None,
-                },
-            }
-        )
+    poems = [_build_poem(p, excerpt) for p in doc["poems"]]
 
     input_doc = {
         "description": "ゴールデンテストの入力（scripts/build_golden_input.py が生成。手で編集しない）。included が true の詩をエンジンに通す。本文は chinese-poetry の 全唐诗/poet.tang（繁体字）から取った。",
