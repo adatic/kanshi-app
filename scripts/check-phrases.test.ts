@@ -12,7 +12,7 @@ const SLOT_START: Record<string, number> = { "1-2": 0, "3-4": 2, "5-6": 4, "6-7"
 
 describe("data/phrases（詩語頻度表）", () => {
   it("索引とファイルが過不足なく対応する", () => {
-    const files = readdirSync(dir).filter((f) => f !== "index.json").sort();
+    const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "index.json").sort();
     expect(Object.values(index.chars).map((c) => c.file).sort()).toEqual(files);
     expect(index.counts.files).toBe(files.length);
   });
@@ -53,5 +53,36 @@ describe("data/phrases（詩語頻度表）", () => {
     }
     expect(errors).toEqual([]);
     expect([n2, n3]).toEqual([index.counts["2"], index.counts["3"]]);
+  }, 60_000);
+
+  it("平仄パターンの探索用の索引（search/）は、詩語頻度表と過不足なく一致する", () => {
+    const search: { slots: string[]; files: Record<string, number> } = read("search/index.json");
+    expect(search.slots).toEqual(index.slots);
+    const code: Record<string, string> = { 平: "h", 仄: "z", "？": "q" };
+    const rhymeList = (JSON.parse(readFileSync(new URL("../data/rhymes.json", import.meta.url), "utf-8")) as { id: string }[]).map((r) => r.id);
+    // 頻度表から期待する行を作る
+    const expected = new Map<string, string[]>();
+    for (const info of Object.values(index.chars)) {
+      const groups: Record<"2" | "3", Entry[]> = read(info.file);
+      for (const size of ["2", "3"] as const)
+        for (const e of groups[size]) {
+          const row = JSON.stringify([e.w, e.n, e.r.map((r) => rhymeList.indexOf(r)), index.slots.map((s) => e.at[s] ?? 0)]);
+          for (const p of e.p) {
+            const name = `${size}-${[...p].map((c) => code[c]).join("")}`;
+            if (!expected.has(name)) expected.set(name, []);
+            expected.get(name)!.push(row);
+          }
+        }
+    }
+    expect(Object.keys(search.files).sort()).toEqual([...expected.keys()].sort());
+    expect(readdirSync(new URL("search/", dir)).filter((f) => f !== "index.json").sort()).toEqual([...expected.keys()].map((k) => `${k}.json`).sort());
+    for (const [name, rows] of expected) {
+      const actual: unknown[] = read(`search/${name}.json`);
+      expect(actual.length, name).toBe(search.files[name]);
+      expect(actual.map((r) => JSON.stringify(r)).sort(), name).toEqual([...rows].sort());
+      // 出現回数の多い順
+      const counts = actual.map((r) => (r as [string, number])[1]);
+      expect(counts.every((n, k) => k === 0 || counts[k - 1]! >= n), name).toBe(true);
+    }
   }, 60_000);
 });
