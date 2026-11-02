@@ -112,7 +112,7 @@ describe("kohei（孤平）の境界", () => {
   it("4字目の平の左が仄でも、右（5字目）が平なら孤平ではない", () => {
     // 承句 ●●○○●●◎ → ●●●○○●◎（3字目と5字目はどちらも◐）
     const lines = replaceAt(replaceAt(HN, 1, 2, "●"), 1, 4, "○");
-    expect(issues(run(lines))).toEqual(["variant:ichisango-furon:1:2,4"]);
+    expect(issues(run(lines))).toEqual(["variant:ichisango-furon:1:2", "variant:ichisango-furon:1:4"]);
   });
 });
 
@@ -297,6 +297,15 @@ describe("未入力のマス（＿）", () => {
     const a = run(replaceAt(HN, 0, 6, "＿"));
     expect(a.interpretations.map((i) => i.form.id).sort()).toEqual(["heiki-funyuin", "heiki-nyuin"]);
     expect(a.form.note).toMatch(/入韻/);
+  });
+
+  it("入韻・不入韻のどちらでも違反になる位置は、全体の結果に残る（位置ごとに共通部分を取る）", () => {
+    // 起句 ●●○●●●＿：仄起式の入韻では4字目だけ、不入韻では4字目と5字目が定型と不一致
+    const blank = "＿＿＿＿＿＿＿";
+    const a = run(["●●○●●●＿", blank, blank, blank]);
+    expect(a.interpretations.map((i) => i.form.id).sort()).toEqual(["sokki-funyuin", "sokki-nyuin"]);
+    expect(issues(a)).toContain("violation:pattern:0:3");
+    expect(issues(a)).not.toContain("violation:pattern:0:4");
   });
 
   for (const id of ["heiki-nyuin", "heiki-funyuin", "sokki-nyuin", "sokki-funyuin"] as FormId[]) {

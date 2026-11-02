@@ -8,6 +8,3 @@ export const lineName = (line: number) => LINE_NAMES[line] ?? `第${line + 1}句
 /** 0始まりの位置 → 「2字目」 */
 export const positionName = (position: number) => `${position + 1}字目`;
 
-/** 0始まりの位置の列 → 「2字目・4字目」 */
-export const positionsName = (positions: number[]) => positions.map(positionName).join("・");
-

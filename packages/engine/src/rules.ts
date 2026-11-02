@@ -1,6 +1,6 @@
 // 規則（CLAUDE.md §4.1「検査する規則」）。重みは data/rules.json から読み、オプションで上書きできる。
 import { pzOf } from "./chars";
-import { lineName, positionName, positionsName } from "./messages";
+import { lineName, positionName } from "./messages";
 import type { CharInfo, FormDef, Finding, Options, PZ, Reading, RuleDef, Severity } from "./types";
 
 /** 解釈の中の1マス。pz が null のマス（未入力・データにない字など）は、そのマスを使う比較をしない */
@@ -82,12 +82,12 @@ export function evaluate(
           mismatch.push(p);
         }
       });
-      if (mismatch.length > 0) {
-        const expected = mismatch.map((p) => `${positionName(p)}は${SYMBOL_PZ[def.pattern[p]!]}`).join("、");
-        out.push(finding(ctx, "pattern", l, mismatch, `${name}は定型（${form!.name}）では${expected}です。`));
+      // 1字ごとに1件にする（解釈に共通する指摘を、位置ごとに正しく取り出すため）
+      for (const p of mismatch) {
+        out.push(finding(ctx, "pattern", l, [p], `${name}の${positionName(p)}は、定型（${form!.name}）では${SYMBOL_PZ[def.pattern[p]!]}です。`));
       }
-      if (loose.length > 0) {
-        out.push(finding(ctx, "ichisango-furon", l, loose, `${name}の${positionsName(loose)}は律句と平仄が違いますが、一三五不論の範囲なので許容されます。`));
+      for (const p of loose) {
+        out.push(finding(ctx, "ichisango-furon", l, [p], `${name}の${positionName(p)}は律句と平仄が違いますが、一三五不論の範囲なので許容されます。`));
       }
     }
 
