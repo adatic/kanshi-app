@@ -123,10 +123,6 @@ class PatternTest(unittest.TestCase):
         self.assertEqual(last_rhymes("平無", self.readings, ORDER), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SearchFilesTest(unittest.TestCase):
     """平仄パターンで探すための索引（字数×パターンごとのファイル）。"""
 
@@ -156,3 +152,7 @@ class SearchFilesTest(unittest.TestCase):
             "丁": {"2": [self.entry("丁戊", 2, ["平平"], [], {})], "3": []},
         }
         self.assertEqual([e[0] for e in search_files(by_first, {})["2-hh"]], ["甲丙", "丁戊", "甲乙"])
+
+
+if __name__ == "__main__":
+    unittest.main()

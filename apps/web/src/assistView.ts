@@ -147,7 +147,7 @@ async function slotSection(ctx: AssistContext, line: number, slot: Slot): Promis
         { class: "cand" },
         place,
         h("span", { class: "cand-word", lang: "zh-Hant" }, c.word),
-        h("span", { class: "cand-meta" }, c.patterns.join("／"), endsLine && c.rhymes.length > 0 ? `　${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
+        h("span", { class: "cand-meta" }, c.patterns.join("／"), c.rhymes.length > 0 ? `　末字 ${c.rhymes.join("・")}` : "", `　${c.count}回（この位置 ${c.slotCount}回）`),
         c.status === "depends"
           ? h("details", { class: "depends" }, h("summary", {}, "字の読みによっては違反"), h("ul", {}, ...c.dependent.map((d) => h("li", {}, d))))
           : null,

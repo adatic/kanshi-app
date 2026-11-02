@@ -180,6 +180,8 @@ try {
     await page.waitForSelector("#assist .cand");
     const cands = await page.locator("#assist .cand").count();
     check(cands > 0 && cands <= 20, `${label}: 転句5-6字目の詩語候補を示す（${cands}語）`);
+    const metas = await page.$$eval("#assist .cand .cand-meta", (m) => m.map((x) => x.textContent));
+    check(metas.every((m) => m.includes("末字") && /\d+回/.test(m)), `${label}: 句末でない位置の候補にも、末字の韻目と出現回数を示す`);
     const first = await page.locator("#assist .cand .cand-word").first().textContent();
     const firstDepends = (await page.locator("#assist .cand").first().locator(".depends").count()) > 0;
     // 用例は開いたときに読み込む
