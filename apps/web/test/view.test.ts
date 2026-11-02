@@ -56,9 +56,26 @@ describe("buildView", () => {
     // 起句5字目を平に、末字を未入力に。入韻型では5字目が●（定型と不一致）、不入韻型では◐
     const v = view(replaceAt(replaceAt(HN, 0, 4, "○"), 0, 6, "＿"));
     expect(v.readingChoices).toEqual([]);
-    const byForm = Object.fromEntries(v.formChoices.map((c) => [c.formName, c.findings.map((f) => f.ruleName)]));
+    const byForm = Object.fromEntries(v.formChoices.map((c) => [c.formName, c.always.map((f) => f.ruleName)]));
     expect(byForm["平起式・首句入韻"]).toContain("定型との不一致");
     expect(byForm["平起式・首句不入韻"]).not.toContain("定型との不一致");
+    expect(v.formChoices.every((c) => c.sometimes.length === 0)).toBe(true); // 読みの分かれる字はない
+  });
+
+  it("詩格が分かれ、両韻字もあるときは、詩格の欄でも読みによって出る指摘を分けて示す", () => {
+    // 起句4字目を両韻字（平・去）に、末字を未入力に。平の読みでだけ二四不同などの違反が出る
+    const v = view(replaceAt(replaceAt(HN, 0, 3, RYO[0]!), 0, 6, "＿"));
+    expect(v.formChoices).toHaveLength(2);
+    // 平の読みで出る違反（どちらの詩格でも同じ）は、読み別の欄に「必ず出る」として出る
+    const hei = v.readingChoices[0]!.options.find((o) => o.label === "平・上平二冬")!;
+    // （定型の文言は詩格の名前を含むので、規則名で比べる）
+    const heiOnly = hei.always.map((f) => f.ruleName);
+    expect(heiOnly).toEqual(["定型との不一致", "二四不同", "孤平"]);
+    for (const c of v.formChoices) {
+      // 詩格の欄では、平の読みでだけ出る指摘を「必ず出る」に入れず、「読みによっては出る」に入れる
+      expect(c.always.map((f) => f.ruleName).filter((m) => heiOnly.includes(m)), c.formName).toEqual([]);
+      expect(c.sometimes.map((f) => f.ruleName), c.formName).toEqual(expect.arrayContaining(heiOnly));
+    }
   });
 
   it("詩格が一つに決まる詩では、詩格ごとの欄は空", () => {

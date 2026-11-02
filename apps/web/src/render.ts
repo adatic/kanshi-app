@@ -61,6 +61,10 @@ function findingList(items: FindingView[], severity: Severity): HTMLElement {
   );
 }
 
+/** 読みごと・詩格ごとの欄の1件 */
+const choiceItem = (f: ReadingFindingView) =>
+  h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`);
+
 /** 判定結果（詩格、記号列、指摘の一覧、作者が判断すること） */
 export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
   const formLine = h(
@@ -109,8 +113,6 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
             "ul",
             {},
             ...c.options.map((o) => {
-              const item = (f: ReadingFindingView) =>
-                h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`);
               const nothingAdded = o.always.length === 0 && o.sometimes.length === 0;
               return h(
                 "li",
@@ -119,13 +121,13 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
                 nothingAdded
                   ? h("span", { class: `result ${o.clean ? "ok" : ""}` }, o.clean ? "この読みなら違反なし" : "この読みで加わる指摘はありません（どの読みでも出る指摘は上の一覧にあります）")
                   : null,
-                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(item)) : null,
+                o.always.length > 0 ? h("ul", { class: "always" }, ...o.always.map(choiceItem)) : null,
                 o.sometimes.length > 0
                   ? h(
                       "details",
                       { class: "sometimes" },
                       h("summary", {}, `ほかの字の読みによっては出る指摘（${o.sometimes.length}件）`),
-                      h("ul", {}, ...o.sometimes.map(item)),
+                      h("ul", {}, ...o.sometimes.map(choiceItem)),
                     )
                   : null,
               );
@@ -144,15 +146,16 @@ export function resultView(v: PoemView, showPattern: boolean): HTMLElement {
           "div",
           { class: "choice" },
           h("p", { class: "cell" }, c.formName),
-          c.findings.length === 0
-            ? h("p", { class: "result" }, "この詩格で加わる指摘はありません")
-            : h(
-                "ul",
-                { class: "always" },
-                ...c.findings.map((f) =>
-                  h("li", {}, h("span", { class: `mark sev-${f.severity}`, "aria-label": SEVERITY_NAME[f.severity] }, SEVERITY_MARK[f.severity]), `${f.ruleName}：${f.message}`),
-                ),
-              ),
+          c.always.length === 0 && c.sometimes.length === 0 ? h("p", { class: "result" }, "この詩格で加わる指摘はありません") : null,
+          c.always.length > 0 ? h("ul", { class: "always" }, ...c.always.map(choiceItem)) : null,
+          c.sometimes.length > 0
+            ? h(
+                "details",
+                { class: "sometimes" },
+                h("summary", {}, `字の読みによっては出る指摘（${c.sometimes.length}件）`),
+                h("ul", {}, ...c.sometimes.map(choiceItem)),
+              )
+            : null,
         ),
       ),
     );

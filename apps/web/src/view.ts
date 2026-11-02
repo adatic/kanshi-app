@@ -54,8 +54,10 @@ export type ReadingChoiceView = {
 /** 詩格が一つに決まらない（起句の末字が未入力など）ときの、詩格の候補ごとに出る指摘 */
 export type FormChoiceView = {
   formName: string;
-  /** その詩格の解釈に出て、全体の一覧（どの解釈にも出る指摘）にはない指摘 */
-  findings: ReadingFindingView[];
+  /** この詩格なら、字の読みにかかわらず出る指摘（どの解釈にも出る指摘は除く） */
+  always: ReadingFindingView[];
+  /** この詩格で、字の読みによっては出る指摘（どの解釈にも出る指摘は除く） */
+  sometimes: ReadingFindingView[];
 };
 
 export type PoemView = {
@@ -88,28 +90,41 @@ const toFindingView = (data: EngineData) => (f: Finding): FindingView => ({
   message: f.message,
 });
 
+const findingKey = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
+
+/** 解釈の指摘のうち、違反と要確認で、どの解釈にも出るわけではないもの（キーつき） */
+function nonCommon(a: Analysis, data: EngineData, findings: Finding[]): [string, ReadingFindingView][] {
+  const common = new Set(a.findings.map(findingKey));
+  return [
+    ...new Map(
+      findings
+        .filter((f) => (f.severity === "violation" || f.severity === "check") && !common.has(findingKey(f)))
+        .map((f): [string, ReadingFindingView] => [
+          findingKey(f),
+          { severity: f.severity as "violation" | "check", ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message },
+        ]),
+    ).entries(),
+  ];
+}
+
+/** 解釈ごとの指摘の集まりを、すべてに出る指摘（always）と一部にだけ出る指摘（sometimes）に分ける */
+function splitBy(sets: [string, ReadingFindingView][][]): { always: ReadingFindingView[]; sometimes: ReadingFindingView[] } {
+  const alwaysKeys = sets.length === 0 ? [] : sets[0]!.map(([k]) => k).filter((k) => sets.every((s) => s.some(([x]) => x === k)));
+  const all = new Map(sets.flat());
+  return {
+    always: alwaysKeys.map((k) => all.get(k)!),
+    sometimes: [...all].filter(([k]) => !alwaysKeys.includes(k)).map(([, f]) => f),
+  };
+}
+
 /**
  * 読みが複数ある字ごとに、読みを選んだ解釈に出る指摘（違反と要確認）を「必ず出る」「組み合わせによって出る」に分ける。
  * どの読みでも出る指摘（全体の一覧にあるもの）は除く。
  */
 function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
   if (a.interpretations.length < 2) return [];
-  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
-  const common = new Set(a.findings.map(key));
   const hasCommonViolation = a.findings.some((f) => f.severity === "violation");
-  const rows = a.interpretations.map((i) => ({
-    readings: i.readings,
-    findings: [
-      ...new Map(
-        i.findings
-          .filter((f) => (f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
-          .map((f): [string, ReadingFindingView] => [
-            key(f),
-            { severity: f.severity as "violation" | "check", ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message },
-          ]),
-      ).entries(),
-    ],
-  }));
+  const rows = a.interpretations.map((i) => ({ readings: i.readings, findings: nonCommon(a, data, i.findings) }));
   const positions = [...new Set(a.interpretations.flatMap((i) => Object.keys(i.readings).map(Number)))].sort((x, y) => x - y);
   return positions.map((n) => {
     const l = Math.floor(n / 7);
@@ -118,11 +133,7 @@ function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
     return {
       cell: `${lineName(l)}の${p + 1}字目「${a.chars[l]![p]!.char}」`,
       options: labels.map((label) => {
-        const sets = rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings);
-        const alwaysKeys = sets.length === 0 ? [] : sets[0]!.map(([k]) => k).filter((k) => sets.every((s) => s.some(([x]) => x === k)));
-        const all = new Map(sets.flat());
-        const always = alwaysKeys.map((k) => all.get(k)!);
-        const sometimes = [...all].filter(([k]) => !alwaysKeys.includes(k)).map(([, f]) => f);
+        const { always, sometimes } = splitBy(rows.filter((r) => r.readings[n] && readingLabel(r.readings[n]!) === label).map((r) => r.findings));
         const clean = !hasCommonViolation && always.every((f) => f.severity !== "violation") && sometimes.every((f) => f.severity !== "violation");
         return { label, always, sometimes, clean };
       }),
@@ -130,20 +141,17 @@ function readingChoices(a: Analysis, data: EngineData): ReadingChoiceView[] {
   });
 }
 
-/** 詩格の候補ごとに、その詩格の解釈に出て、どの解釈にも出るわけではない指摘を集める */
+/**
+ * 詩格の候補ごとに、その詩格の解釈に出て、どの解釈にも出るわけではない指摘を集める。
+ * 同じ詩格でも字の読みで指摘が変わるので、「この詩格なら必ず出る」と「読みによっては出る」に分ける。
+ */
 function formChoices(a: Analysis, data: EngineData): FormChoiceView[] {
   const ids = [...new Set(a.interpretations.map((i) => i.form.id))];
   if (ids.length < 2) return [];
-  const key = (f: Finding) => `${f.rule}|${f.line}|${f.positions.join(",")}|${f.severity}`;
-  const common = new Set(a.findings.map(key));
-  return ids.map((id) => {
-    const found = new Map<string, ReadingFindingView>();
-    for (const i of a.interpretations.filter((x) => x.form.id === id))
-      for (const f of i.findings)
-        if ((f.severity === "violation" || f.severity === "check") && !common.has(key(f)))
-          found.set(key(f), { severity: f.severity, ruleName: data.rules.rules[f.rule]?.name ?? f.rule, message: f.message });
-    return { formName: data.forms.forms.find((f) => f.id === id)?.name ?? "未定", findings: [...found.values()] };
-  });
+  return ids.map((id) => ({
+    formName: data.forms.forms.find((f) => f.id === id)?.name ?? "未定",
+    ...splitBy(a.interpretations.filter((x) => x.form.id === id).map((i) => nonCommon(a, data, i.findings))),
+  }));
 }
 
 export function buildView(a: Analysis, data: EngineData): PoemView {
