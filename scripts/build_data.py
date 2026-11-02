@@ -22,7 +22,6 @@ import json
 import re
 import sys
 import unicodedata
-from collections import OrderedDict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -77,7 +76,7 @@ class BuildError(Exception):
 
 
 def parse_wikisource(text: str):
-    """戻り値: (rhymes, entries, problems)
+    """戻り値: (rhymes, entries)
 
     rhymes:  [{"id": "上平一東", "tone": "平"}...]（見出し順）
     entries: [(char, rhyme_id, marker or None, line_no)...]（出現順）
@@ -120,16 +119,16 @@ def build_chars(rhymes, entries):
     seen: dict[str, dict[str, tuple[str | None, int]]] = {}
     dup_lines: list[str] = []
     for ch, rhyme, marker, line_no in entries:
-        per = seen.setdefault(ch, {})
-        if rhyme not in per:
-            per[rhyme] = (marker, line_no)
+        readings_by_rhyme = seen.setdefault(ch, {})
+        if rhyme not in readings_by_rhyme:
+            readings_by_rhyme[rhyme] = (marker, line_no)
             continue
-        prev_marker, prev_line = per[rhyme]
+        prev_marker, prev_line = readings_by_rhyme[rhyme]
         kind = f"{prev_marker or '本体'}と{marker or '本体'}"
         dup_lines.append(f"{ch}\t{rhyme}\t{kind}\t{prev_line}行目・{line_no}行目")
         # 本体に載っていれば本体を優先する（【詞】【辭】の印は付けない）
         if prev_marker is not None and marker is None:
-            per[rhyme] = (None, prev_line)
+            readings_by_rhyme[rhyme] = (None, prev_line)
 
     chars: dict[str, list[dict]] = {}
     for ch in sorted(seen, key=ord):
@@ -188,6 +187,22 @@ def parse_opencc(text: str) -> dict[str, list[str]]:
     return table
 
 
+def _collect_variant_candidates(key, chars, jp, st):
+    """候補の出現順を保ち、同じ候補の由来をすべて残す。"""
+    sources: dict[str, list[str]] = {}
+
+    def add(candidate: str, source: str):
+        sources.setdefault(candidate, []).append(source)
+
+    if key in chars:
+        add(key, "自身")
+    for candidate in jp.get(key, []):
+        add(candidate, "新字体→旧字体")
+    for candidate in st.get(key, []):
+        add(candidate, "簡体字→繁体字")
+    return list(sources), sources
+
+
 def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
     """入力字 → データにある字の候補。
 
@@ -199,20 +214,7 @@ def build_variants(chars, jp: dict[str, list[str]], st: dict[str, list[str]]):
     unmapped: list[str] = []
     # 字単位の対応だけを使う（語単位の見出しは除く）
     for key in sorted((k for k in set(jp) | set(st) if len(k) == 1), key=ord):
-        candidates: list[str] = []
-        sources: dict[str, list[str]] = {}
-
-        def add(c: str, src: str):
-            if c not in candidates:
-                candidates.append(c)
-            sources.setdefault(c, []).append(src)
-
-        if key in chars:
-            add(key, "自身")
-        for c in jp.get(key, []):
-            add(c, "新字体→旧字体")
-        for c in st.get(key, []):
-            add(c, "簡体字→繁体字")
+        candidates, sources = _collect_variant_candidates(key, chars, jp, st)
 
         known = [c for c in candidates if c in chars]
         # 一対多かどうかは、平仄データに絞る前の候補で判定する。
