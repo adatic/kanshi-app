@@ -875,3 +875,100 @@ button.more {
 .required-item .counts {
   font-size: 0.78rem;
 }
+
+/* 確定と理由、必須要素の消失警告、編集の記録（M6） */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.commit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.pending-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.commit-row input {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+button.small[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.required-warning {
+  border: 2px solid var(--shu);
+  background: var(--shu-soft);
+  color: var(--shu);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+}
+.required-warning::before {
+  content: "✕ ";
+}
+.required-warning:empty {
+  display: none;
+}
+.history-title {
+  margin-top: 20px;
+}
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.history li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 6px 12px;
+  border-bottom: 1px dashed var(--line);
+  font-size: 0.85rem;
+}
+.history li:last-child {
+  border-bottom: 0;
+}
+.h-time,
+.h-origin {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.h-who {
+  font-weight: 600;
+}
+.h-who.dict {
+  color: var(--ai);
+}
+.h-change {
+  font-family: var(--f-han);
+}
+.h-reason {
+  flex-basis: 100%;
+  color: var(--ink);
+}

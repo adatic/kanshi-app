@@ -3,11 +3,28 @@ import { analyze } from "@kanshi/engine";
 import type { EngineData, FormId, Options } from "@kanshi/engine";
 import { assistPanel } from "./assistView";
 import { loadEngineData, loadRhymes, phraseStore, type Rhyme } from "./data";
-import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid } from "./grid";
+import {
+  addRequired,
+  commitPending,
+  currentRequired,
+  currentSettings,
+  historyView,
+  newDoc,
+  pendingEdits,
+  record,
+  removeRequired,
+  requiredWarnings,
+  setSettings,
+  setWorking,
+  type Actor,
+  type PoemDoc,
+  type Settings,
+} from "./doc";
+import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid, writeAt } from "./grid";
 import { gridEditor } from "./gridEditor";
 import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
 import { cellPanel, h, resultParts, resultView } from "./render";
-import { buildView, cellDetail } from "./view";
+import { buildView, cellDetail, lineName } from "./view";
 
 /** 例の詩（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
 const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞新承寵", "簾外春寒賜錦袍"].join("\n");
@@ -61,32 +78,57 @@ function settingsPanel(data: EngineData, rhymes: readonly Rhyme[], onChange: () 
 
   return {
     el,
-    options(): Options {
-      const o: Options = {};
-      if (formSelect.value) o.form = formSelect.value as FormId;
-      if (unknownSelect.value) o.unknownAs = unknownSelect.value as "平" | "仄";
-      if (kokuji.checked) o.allowKokuji = true;
-      return o;
+    get(): Settings {
+      return {
+        form: (formSelect.value || null) as FormId | null,
+        unknownAs: (unknownSelect.value || null) as "平" | "仄" | null,
+        allowKokuji: kokuji.checked,
+        showPattern: pattern.checked,
+        rhyme: rhymeSelect.value || null,
+      };
     },
-    showPattern: () => pattern.checked,
-    rhyme: () => rhymeSelect.value || null,
+    set(v: Settings) {
+      formSelect.value = v.form ?? "";
+      unknownSelect.value = v.unknownAs ?? "";
+      kokuji.checked = v.allowKokuji;
+      pattern.checked = v.showPattern;
+      rhymeSelect.value = v.rhyme ?? "";
+    },
   };
 }
+
+/** 設定から、エンジンに渡す判定の条件 */
+function optionsOf(s: Settings): Options {
+  const o: Options = {};
+  if (s.form !== null) o.form = s.form;
+  if (s.unknownAs !== null) o.unknownAs = s.unknownAs;
+  if (s.allowKokuji) o.allowKokuji = true;
+  return o;
+}
+
+const now = () => new Date().toISOString();
+
+/** 記録の時刻を、画面に出す短い形にする */
+const timeLabel = (iso: string) => {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 /** 必須要素1語の表示。編集と登録解除は呼び出し側に委ねる。 */
 function requiredItem(
   r: RequiredView,
-  onPlace: (at: number, word: string) => void,
-  onRemove: (word: string) => void,
+  onPlace: (at: number) => void,
+  onRemove: () => void,
 ): HTMLElement {
   const placeButton = (pl: { line: number; start: number; label: string }, extra = "") => {
     const b = h("button", { type: "button", class: "small place-req", "aria-label": `「${r.word}」を${pl.label}に入れる` }, `${pl.label}${extra}`);
     const at = pl.line * WIDTH + pl.start;
-    b.addEventListener("click", () => onPlace(at, r.word));
+    b.addEventListener("click", () => onPlace(at));
     return b;
   };
   const remove = h("button", { type: "button", class: "small remove", "aria-label": `「${r.word}」の登録を外す` }, "外す");
-  remove.addEventListener("click", () => onRemove(r.word));
+  remove.addEventListener("click", () => onRemove());
   return h(
     "div",
     { class: "required-item" },
@@ -108,7 +150,8 @@ function requiredItem(
 
 function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   let mode: Mode = "grid";
-  let grid = emptyGrid();
+  /** 詩の記録。マス目・必須要素・設定はここから導き出す（CLAUDE.md §4.6） */
+  let doc: PoemDoc = newDoc(now());
   let selected: number | null = null;
   /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
   let slotName: string | null = null;
@@ -120,13 +163,41 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
   let gridEdited = false;
 
-  const settings = settingsPanel(data, rhymes, () => update());
+  const settings = settingsPanel(data, rhymes, () => {
+    doc = setSettings(doc, now(), settings.get());
+    update();
+  });
+  settings.set(currentSettings(doc));
+
+  // ---- 確定と理由 ----
+  const reasonInput = h("input", { id: "reason-input", type: "text", autocomplete: "off", placeholder: "なぜそうしたか（任意）" }) as HTMLInputElement;
+  const commitButton = h("button", { type: "button", class: "small", id: "commit" }, "確定");
+  const pendingNote = h("p", { class: "pending-note", id: "pending-note" });
+  /** 記録が増えたら、使った理由の入力欄を空にする */
+  const apply = (next: PoemDoc) => {
+    if (next.events.length > doc.events.length) reasonInput.value = "";
+    doc = next;
+  };
+  const reason = () => reasonInput.value;
+  /** 操作でマス目を変え、記録する（先に未確定の手入力を確定する） */
+  const operate = (next: readonly string[], actor: Actor, origin: string, focusAt: number | null) => {
+    apply(record(doc, now(), next, { actor, origin, reason: reason() }));
+    gridEdited = true;
+    editor.setGrid(doc.working);
+    syncNote.textContent = "";
+    update();
+    if (focusAt !== null) editor.focus(focusAt);
+  };
+  commitButton.addEventListener("click", () => {
+    apply(commitPending(doc, now(), { reason: reason() }));
+    update();
+  });
 
   // ---- マス目で作る ----
   const editor = gridEditor({
-    initial: grid,
+    initial: doc.working,
     onChange(next) {
-      grid = next;
+      doc = setWorking(doc, next);
       gridEdited = true;
       syncNote.textContent = "";
       update();
@@ -136,34 +207,32 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
         slotName = null;
         limit = 20;
       }
+      // 別の句に移ったら、それまでの句の手入力を確定する（§4.6：1マスではなく、句の書き換えを単位にする）
+      apply(commitPending(doc, now(), { except: Math.floor(i / WIDTH), reason: reason() }));
       selected = i;
       update();
     },
   });
   const syncNote = h("p", { class: "sync-note", role: "status" });
+  const warning = h("div", { class: "required-warning", role: "alert" });
   const panel = h("div", { id: "cell-panel" });
   const assistBox = h("div", { id: "assist" });
   const gridResult = h("div", { id: "grid-result", class: "result" });
-  const hasPoem = () => grid.some((c) => c !== BLANK);
-  const replaceGrid = (next: string[], question: string) => {
+  const history = h("div", { id: "history" });
+  const hasPoem = () => doc.working.some((c) => c !== BLANK);
+  const replaceGrid = (next: string[], origin: string, question: string) => {
     if (hasPoem() && !window.confirm(question)) return;
-    grid = next;
-    gridEdited = true;
-    editor.setGrid(grid);
-    syncNote.textContent = "";
-    update();
-    editor.focus(0);
+    operate(next, "author", origin, 0);
   };
   const gridSample = h("button", { type: "button", class: "small", id: "grid-sample" }, "例の詩を入れる");
   gridSample.addEventListener("click", () => {
     const r = textToGrid(SAMPLE);
-    if ("grid" in r) replaceGrid(r.grid, "マス目の詩を、例の詩で置き換えますか？");
+    if ("grid" in r) replaceGrid(r.grid, "sample", "マス目の詩を、例の詩で置き換えますか？");
   });
   const gridClear = h("button", { type: "button", class: "small", id: "grid-clear" }, "すべて消す");
-  gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "マス目の字をすべて消しますか？"));
+  gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "clear", "マス目の字をすべて消しますか？"));
 
   // ---- 必須要素（最大2語）と、置ける位置 ----
-  let required: string[] = [];
   const requiredInput = h("input", {
     id: "required-input",
     type: "text",
@@ -175,19 +244,19 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   const requiredAdd = h("button", { type: "button", class: "small", id: "required-add" }, "登録");
   const requiredNote = h("p", { class: "required-note", role: "status" });
   const requiredList = h("div", { class: "required-list" });
-  const addRequired = () => {
-    const error = validateRequired(requiredInput.value, required);
+  const addRequiredWord = () => {
+    const error = validateRequired(requiredInput.value, currentRequired(doc).map((r) => r.word));
     requiredNote.textContent = error ?? "";
     if (error !== null) return;
-    required = [...required, requiredInput.value.trim()];
+    doc = addRequired(doc, now(), requiredInput.value.trim());
     requiredInput.value = "";
     update();
   };
-  requiredAdd.addEventListener("click", addRequired);
+  requiredAdd.addEventListener("click", addRequiredWord);
   requiredInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();
-      addRequired();
+      addRequiredWord();
     }
   });
   const requiredCard = h(
@@ -207,13 +276,30 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
       "div",
       { class: "poem-area" },
       h("h2", {}, "作詩"),
+      warning,
       h("p", { class: "help" }, "1マスに1字。漢字はふだんどおり変換して入れてください。2字以上を確定すると続くマスに入ります。矢印キーで移動できます。"),
       editor.el,
       syncNote,
+      h(
+        "div",
+        { class: "commit-row" },
+        pendingNote,
+        h("label", { for: "reason-input", class: "visually-hidden" }, "理由（任意）"),
+        reasonInput,
+        commitButton,
+      ),
+      h("p", { class: "help" }, "同じ句の中の手入力は、別の句に移るか「確定」を押すと、1件の記録になります。理由は書かなくてもかまいません。"),
       h("div", { class: "buttons" }, gridSample, gridClear),
     ),
     h("aside", { class: "cell-panel", "aria-labelledby": "cell-panel-title" }, h("h2", { id: "cell-panel-title" }, "選択中のマス"), panel),
-    h("div", { class: "grid-results" }, h("h2", {}, "検査結果"), gridResult),
+    h(
+      "div",
+      { class: "grid-results" },
+      h("h2", {}, "検査結果"),
+      gridResult,
+      h("h2", { class: "history-title" }, "編集の記録"),
+      history,
+    ),
   );
 
   // ---- 貼り付けて判定する ----
@@ -268,15 +354,16 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     if (next === "grid") {
       const r = textToGrid(input.value);
       if ("grid" in r) {
-        grid = r.grid;
-        editor.setGrid(grid);
+        apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
+        editor.setGrid(doc.working);
         syncNote.textContent = "";
       } else {
         syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
       }
       gridEdited = false;
-    } else if (gridEdited || "grid" in textToGrid(input.value)) {
-      input.value = gridToText(grid);
+    } else {
+      apply(commitPending(doc, now(), { reason: reason() }));
+      if (gridEdited || "grid" in textToGrid(input.value)) input.value = gridToText(doc.working);
     }
     mode = next;
     refreshTabs();
@@ -296,22 +383,66 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     });
   }
 
+  /** 必須要素の消失警告。文が変わったときだけ書き換える（読み上げを繰り返さない） */
+  const renderWarning = () => {
+    const text = requiredWarnings(doc)
+      .map((w) => (w.kind === "lost" ? `必須要素「${w.word}」が詩から消えています。` : `必須要素「${w.word}」が詩に入っていません。`))
+      .join("");
+    if (warning.textContent !== text) warning.textContent = text;
+  };
+
+  const renderHistory = () => {
+    const pending = pendingEdits(doc);
+    pendingNote.textContent =
+      pending.length === 0
+        ? "未確定の変更はありません。"
+        : `未確定：${pending.map((e) => `${lineName(e.line)}「${e.before}」→「${e.after}」`).join("、")}`;
+    commitButton.toggleAttribute("disabled", pending.length === 0);
+    const rows = historyView(doc);
+    history.replaceChildren(
+      rows.length === 0
+        ? h("p", { class: "none" }, "まだ記録はありません。")
+        : h(
+            "ol",
+            { class: "history", reversed: "" },
+            ...rows.map((r) =>
+              h(
+                "li",
+                {},
+                h("span", { class: "h-time" }, timeLabel(r.at)),
+                h("span", { class: `h-who ${r.who === "作者" ? "" : "dict"}` }, r.who),
+                h("span", { class: "h-where" }, r.where),
+                h("span", { class: "h-change", lang: "zh-Hant" }, `${r.before} → ${r.after}`),
+                h("span", { class: "h-origin" }, r.origin),
+                r.reason !== null ? h("span", { class: "h-reason" }, `理由：${r.reason}`) : null,
+              ),
+            ),
+          ),
+    );
+  };
+
   function update() {
-    const options = settings.options();
-    const showPattern = settings.showPattern();
+    const current = currentSettings(doc);
+    const options = optionsOf(current);
+    const showPattern = current.showPattern;
     if (mode === "grid") {
+      const grid = doc.working;
       const a = analyze(grid, data, options);
       const v = buildView(a, data);
       editor.refresh(v, showPattern);
+      renderWarning();
+      renderHistory();
       requiredList.replaceChildren(
-        ...required.map((w) => requiredItem(
-          requiredView(w, grid, data, options),
-          (at, word) => editor.place(at, word, at),
-          (word) => {
-            required = required.filter((w) => w !== word);
-            update();
-          },
-        )),
+        ...currentRequired(doc).map((r) =>
+          requiredItem(
+            requiredView(r.word, grid, data, options),
+            (at) => operate(writeAt(doc.working, at, r.word).grid, "author", `required:${r.id}`, at),
+            () => {
+              doc = removeRequired(doc, now(), r.id);
+              update();
+            },
+          ),
+        ),
       );
       gridResult.replaceChildren(...resultParts(v, showPattern));
       panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
@@ -329,7 +460,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
         index: at,
         store,
         rhymes: rhymeIds,
-        rhymeSetting: settings.rhyme(),
+        rhymeSetting: current.rhyme,
         slotName,
         limit,
         onSlot(name) {
@@ -342,7 +473,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
           update();
         },
         onPlace(index, word) {
-          editor.place(index, word, at);
+          operate(writeAt(doc.working, index, word).grid, "dictionary", `phrase:${word}`, at);
         },
       }).then((el) => {
         if (turn === assistTurn) assistBox.replaceChildren(el);
