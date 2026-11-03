@@ -799,7 +799,8 @@ button.more {
   gap: 16px;
   min-width: 0;
 }
-.required {
+.required,
+.save {
   background: var(--sheet);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -971,4 +972,23 @@ button.small[disabled] {
 .h-reason {
   flex-basis: 100%;
   color: var(--ink);
+}
+
+/* 保存（M6） */
+.save-status {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--rokusho);
+}
+.save-status.warn {
+  color: var(--shu);
+  font-weight: 600;
+}
+.save-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.save-note:empty {
+  display: none;
 }
