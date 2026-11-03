@@ -21,6 +21,7 @@ import {
   type Settings,
 } from "./doc";
 import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid, writeAt } from "./grid";
+import { browserStorage, loadFromStorage, loadPaste, parseDoc, savePaste, saveToStorage, serializeDoc, type KeyValueStore, type PasteState } from "./storage";
 import { gridEditor } from "./gridEditor";
 import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
 import { cellPanel, h, resultParts, resultView } from "./render";
@@ -148,10 +149,46 @@ function requiredItem(
   );
 }
 
-function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+/**
+ * 起動時に読み込んだ詩と、保存先。
+ * saveTo は自動保存の先。壊れたデータを別のキーに残せなかったときは、元のデータを上書きしないよう null にし、blocked に理由を入れる
+ */
+type Startup = { doc: PoemDoc; paste: PasteState; store: KeyValueStore | null; saveTo: KeyValueStore | null; blocked: string | null; note: string };
+
+/** 保存先から詩を読み込む。読めなければ新しく始め、理由を note に入れる */
+function startup(): Startup {
+  const store = browserStorage();
+  return { ...startupDoc(store), paste: loadPaste(store) };
+}
+
+function startupDoc(store: KeyValueStore | null): Omit<Startup, "paste"> {
+  const r = loadFromStorage(store);
+  if ("doc" in r) return { doc: r.doc, store, saveTo: store, blocked: null, note: "前回の続きから開きました。" };
+  if ("error" in r) {
+    const note = `保存されていた詩を読み込めませんでした（${r.error}）。新しく始めます。`;
+    return r.keptAs !== null
+      ? { doc: newDoc(now()), store, saveTo: store, blocked: null, note: `${note}読めなかったデータは、このブラウザの「${r.keptAs}」に残してあります。` }
+      : {
+          doc: newDoc(now()),
+          store,
+          saveTo: null,
+          blocked: "読めなかった前回のデータを別の場所に残せなかったので、上書きしないよう自動保存を止めています。「書き出す」でファイルに保存してください。",
+          note,
+        };
+  }
+  return { doc: newDoc(now()), store, saveTo: store, blocked: null, note: "" };
+}
+
+/** 書き出すファイルの名前（kanshi-20261103-0915.json） */
+const exportName = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `kanshi-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+};
+
+function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLElement {
   let mode: Mode = "grid";
   /** 詩の記録。マス目・必須要素・設定はここから導き出す（CLAUDE.md §4.6） */
-  let doc: PoemDoc = newDoc(now());
+  let doc: PoemDoc = init.doc;
   let selected: number | null = null;
   /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
   let slotName: string | null = null;
@@ -162,6 +199,8 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   const rhymeIds = rhymes.map((r) => r.id);
   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
   let gridEdited = false;
+  /** 貼り付けモードの本文に、マス目（記録）へ移していない編集があるか */
+  let pasteDirty = init.paste.dirty;
 
   const settings = settingsPanel(data, rhymes, () => {
     doc = setSettings(doc, now(), settings.get());
@@ -269,6 +308,97 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     requiredList,
   );
 
+  // ---- 保存（自動保存・書き出し・読み込み・新しく始める）（§4.7） ----
+  const saveStatus = h("p", { class: "save-status", id: "save-status", role: "status" });
+  const saveNote = h("p", { class: "save-note", id: "save-note", role: "status" }, init.note);
+  const exportButton = h("button", { type: "button", class: "small", id: "export" }, "書き出す");
+  const importButton = h("button", { type: "button", class: "small", id: "import" }, "読み込む");
+  const importFile = h("input", { type: "file", id: "import-file", accept: "application/json,.json", hidden: "" }) as HTMLInputElement;
+  const newButton = h("button", { type: "button", class: "small", id: "new-poem" }, "新しく始める");
+  /** doc を差し替えたあと、画面の状態をそろえる */
+  const resetTo = (next: PoemDoc) => {
+    doc = next;
+    selected = null;
+    slotName = null;
+    limit = 20;
+    reasonInput.value = "";
+    settings.set(currentSettings(doc));
+    editor.setGrid(doc.working);
+    // 貼り付けモードの本文も新しい詩にそろえる（古い本文が、タブを移ったときに新しい詩を上書きしないように）
+    input.value = gridToText(doc.working);
+    gridEdited = false;
+    pasteDirty = false;
+    syncNote.textContent = "";
+    update();
+  };
+  /** 消える前に確認すべきものがあるか（マス目に移していない貼り付けの本文も含む） */
+  const hasWork = () =>
+    doc.events.length > 0 || hasPoem() || currentRequired(doc).length > 0 || (pasteDirty && input.value.trim() !== "");
+  exportButton.addEventListener("click", () => {
+    // マス目に移していない貼り付けの本文は、先にマス目に移して記録する（タブを移ったときと同じ）。
+    // 移せないとき、貼り付けモードでは書き出さない。マス目モード（移せなかった本文を残したまま移ってきた）では、入らないことを示して書き出す
+    const moved = movePasteToGrid();
+    if (moved !== null && mode === "paste") {
+      saveNote.textContent = `貼り付けた本文をマス目に移せないため、書き出していません。${moved}`;
+      return;
+    }
+    // 書き出す前に、未確定の手入力を確定する（書き出したファイルは記録だけでマス目が決まる）
+    apply(commitPending(doc, now(), { reason: reason() }));
+    update();
+    const url = URL.createObjectURL(new Blob([serializeDoc(doc)], { type: "application/json" }));
+    const a = h("a", { href: url, download: exportName(new Date()) });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveNote.textContent = `書き出しました（記録 ${doc.events.length}件）。${moved !== null ? "マス目に移せなかった貼り付けモードの本文は入っていません。" : ""}`;
+  });
+  importButton.addEventListener("click", () => importFile.click());
+  importFile.addEventListener("change", () => {
+    const file = importFile.files?.[0];
+    importFile.value = "";
+    if (file === undefined) return;
+    void file.text().then((text) => {
+      const r = parseDoc(text);
+      if ("error" in r) {
+        saveNote.textContent = `「${file.name}」を読み込めませんでした（${r.error}）。いまの詩はそのままです。`;
+        return;
+      }
+      if (hasWork() && !window.confirm("いまの詩を、読み込んだ詩で置き換えますか？（いまの詩を残すなら、先に書き出してください）")) return;
+      resetTo(r.doc);
+      saveNote.textContent = `「${file.name}」を読み込みました（記録 ${r.doc.events.length}件）。`;
+    });
+  });
+  newButton.addEventListener("click", () => {
+    if (hasWork() && !window.confirm("いまの詩と記録を消して、新しく始めますか？（残すなら、先に書き出してください）")) return;
+    resetTo(newDoc(now()));
+    saveNote.textContent = "新しく始めました。";
+  });
+  const saveCard = h(
+    "section",
+    { class: "save", "aria-labelledby": "save-title" },
+    h("h2", { id: "save-title" }, "保存"),
+    saveStatus,
+    h("div", { class: "buttons" }, exportButton, importButton, newButton),
+    importFile,
+    saveNote,
+    h("p", { class: "help" }, "書き出したファイル（JSON）には、詩と編集の記録、必須要素、設定が入っています。別の端末で読み込めば続きから作れます。"),
+  );
+  let lastSaved: boolean | null = null;
+  const autosave = () => {
+    const ok = saveToStorage(init.saveTo, doc) && savePaste(init.saveTo, { text: input.value, dirty: pasteDirty });
+    if (ok === lastSaved) return;
+    lastSaved = ok;
+    saveStatus.textContent = ok
+      ? "このブラウザに自動で保存しています。"
+      : init.blocked !== null
+        ? init.blocked
+        : init.store === null
+          ? "このブラウザでは自動保存が使えません。「書き出す」でファイルに保存してください。"
+          : "自動保存できませんでした（保存できる量を超えたなど）。「書き出す」でファイルに保存してください。";
+    saveStatus.classList.toggle("warn", !ok);
+  };
+
   const gridMode = h(
     "section",
     { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
@@ -310,16 +440,22 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     autocomplete: "off",
     "aria-describedby": "poem-help",
   }) as HTMLTextAreaElement;
-  input.addEventListener("input", () => update());
+  input.value = init.paste.text;
+  input.addEventListener("input", () => {
+    pasteDirty = true;
+    update();
+  });
   const output = h("div", { id: "result" });
   const sample = h("button", { type: "button", class: "small", id: "paste-sample" }, "例の詩を入れる");
   sample.addEventListener("click", () => {
     input.value = SAMPLE;
+    pasteDirty = true;
     update();
   });
   const clear = h("button", { type: "button", class: "small" }, "消す");
   clear.addEventListener("click", () => {
     input.value = "";
+    pasteDirty = true;
     update();
     input.focus();
   });
@@ -349,30 +485,48 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
       tabs[m].tabIndex = m === mode ? 0 : -1;
     }
   };
+  /**
+   * 貼り付けモードで編集した本文を、マス目に移して記録する。移せたら（または移すものがなければ）null、
+   * 7字×4句の漢字にならず移せなければ理由を返す（マス目は変えない）
+   */
+  function movePasteToGrid(): string | null {
+    if (!pasteDirty) return null;
+    const r = textToGrid(input.value);
+    if (!("grid" in r)) return r.reasons.join("");
+    apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
+    editor.setGrid(doc.working);
+    pasteDirty = false;
+    gridEdited = false;
+    return null;
+  }
+
   const setMode = (next: Mode) => {
     if (next === mode) return;
     if (next === "grid") {
-      const r = textToGrid(input.value);
-      if ("grid" in r) {
-        apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
-        editor.setGrid(doc.working);
-        syncNote.textContent = "";
-      } else {
-        syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
-      }
+      const reasons = movePasteToGrid();
+      syncNote.textContent = reasons === null ? "" : `貼り付けた本文は、マス目に移していません。${reasons}マス目は前のままです。`;
       gridEdited = false;
     } else {
       apply(commitPending(doc, now(), { reason: reason() }));
-      if (gridEdited || "grid" in textToGrid(input.value)) input.value = gridToText(doc.working);
+      // マス目に移していない貼り付けの編集は残す。ただしマス目を編集したら、マス目の詩で置き換える
+      if (!pasteDirty || gridEdited) {
+        input.value = gridToText(doc.working);
+        pasteDirty = false;
+      }
     }
     mode = next;
+    showMode();
+    update();
+  };
+  function showMode() {
     refreshTabs();
     gridMode.hidden = mode !== "grid";
     pasteMode.hidden = mode !== "paste";
     requiredCard.hidden = mode !== "grid";
-    update();
-  };
-  refreshTabs();
+  }
+  // マス目に移していない貼り付けの本文が残っていれば、離れたときと同じく貼り付けモードで始める
+  if (pasteDirty) mode = "paste";
+  showMode();
   for (const m of ["grid", "paste"] as const) {
     tabs[m].addEventListener("click", () => setMode(m));
     tabs[m].addEventListener("keydown", (e) => {
@@ -422,6 +576,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
   };
 
   function update() {
+    autosave();
     const current = currentSettings(doc);
     const options = optionsOf(current);
     const showPattern = current.showPattern;
@@ -488,7 +643,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
     "div",
     { class: "app" },
     h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
-    h("div", { class: "workbench" }, h("div", { class: "side" }, settings.el, requiredCard), gridMode, pasteMode),
+    h("div", { class: "workbench" }, h("div", { class: "side" }, settings.el, requiredCard, saveCard), gridMode, pasteMode),
   );
 }
 
@@ -496,7 +651,7 @@ async function start() {
   const root = document.getElementById("app")!;
   try {
     const [data, rhymes] = await Promise.all([loadEngineData(), loadRhymes()]);
-    root.replaceChildren(app(data, rhymes));
+    root.replaceChildren(app(data, rhymes, startup()));
   } catch (e) {
     root.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
   }

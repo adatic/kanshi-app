@@ -1,0 +1,944 @@
+diff --git a/TASKS.md b/TASKS.md
+index d792bcf..55fe659 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,6 +4,18 @@
+ 
+ ## 進行中
+ 
++### m6-save — 自動保存、書き出し・読み込み（M6）
++
++ブランチ: `task/m6-save`
++
++完了条件:
++- [ ] 詩の記録（m6-log の doc）を localStorage に自動で保存し、開き直すと同じ状態（マス目・未確定の手入力・必須要素・設定・編集の記録）に戻る。キーにスキーマの版を含める（CLAUDE.md §4.7）
++- [ ] JSON で書き出し・読み込みができる。書き出す前に未確定の手入力を確定する。読み込むときは形を検査し（記録をたどってマス目が合うことを含む）、合わなければ理由を示して、いまの詩は変えない
++- [ ] 読み込んだデータの版が古ければ、版ごとの変換を順にかけて今の版にする。今より新しい版は、理由を示して読み込まない（§4.7）
++- [ ] localStorage が使えない環境（例外を投げる、書き込めない）でも画面は動き、自動保存できないことと、書き出しで保存できることを示す（§4.7）。保存されていたデータが壊れていたら、理由を示して新しく始め、壊れたデータは別のキーに残す
++- [ ] 新しく始める（確認つき）
++- [ ] 保存・検査・変換は純関数（保存先は引数で渡す）にして単体テストする。Playwright で「1首作って書き出し、別の環境で読み込んで同じ状態に戻る」こと（M6 の完了条件）、開き直して戻ること、localStorage が使えなくても動くことを確かめる
++
+ ## 完了
+ 
+ ### m6-log — 由来の記録と、必須要素の消失警告（M6）
+diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
+index 45d26b3..fa1c3fc 100644
+--- a/apps/web/e2e/smoke.mjs
++++ b/apps/web/e2e/smoke.mjs
+@@ -2,7 +2,9 @@
+ // 期待値は記憶ではなく、ゴールデンテストのスナップショット（エンジンが出した結果）から取る。
+ // SHOTS_DIR を渡すと、確認用の画面写真をそこに保存する。
+ import { spawn } from "node:child_process";
+-import { mkdirSync, readFileSync } from "node:fs";
++import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { chromium } from "playwright";
+ 
+@@ -362,6 +364,198 @@ try {
+     check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
+     await context.close();
+   }
++
++  // ---- 保存・書き出し・読み込み（M6 の完了条件：1首作って書き出し、読み込んで同じ状態に戻る） ----
++  {
++    const label = "save";
++    const desktop = { viewport: { width: 1280, height: 900 } };
++    const work = mkdtempSync(join(tmpdir(), "kanshi-e2e-"));
++    const errors = [];
++    const open = async (context) => {
++      const page = await context.newPage();
++      page.on("dialog", (d) => d.accept());
++      page.on("pageerror", (e) => errors.push(String(e)));
++      await page.goto(`${ORIGIN}/`);
++      await page.waitForSelector("#grid-mode .gin");
++      return page;
++    };
++    /** 画面の状態：マス目、未確定の表示、必須要素、設定、編集の記録 */
++    const stateOf = (page) =>
++      page.evaluate(() => ({
++        cells: [...document.querySelectorAll(".gin")].map((i) => i.value),
++        pending: document.querySelector("#pending-note").textContent,
++        required: [...document.querySelectorAll(".required-item .cand-word")].map((x) => x.textContent),
++        settings: ["#form-select", "#unknown-select", "#rhyme-select", "#allow-kokuji", "#show-pattern"].map((sel) => {
++          const el = document.querySelector(sel);
++          return el.type === "checkbox" ? el.checked : el.value;
++        }),
++        history: [...document.querySelectorAll("#history li")].map((li) => li.textContent),
++      }));
++    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
++
++    const ctxA = await browser.newContext(desktop);
++    const page = await open(ctxA);
++    const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
++    const q03 = poem("q03").lines;
++    // 1首作る：詩全体の貼り付け（手入力）、転句5-6字目を空けて候補を採用、必須要素、設定、理由つきの確定、未確定の手入力
++    await cell(0).click();
++    await page.evaluate((t) => {
++      const dt = new DataTransfer();
++      dt.setData("text/plain", t);
++      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
++    }, q03.join("\n"));
++    for (const i of [18, 19]) {
++      await cell(i).click();
++      await page.keyboard.press("Backspace");
++    }
++    await page.fill("#reason-input", "転句を書き直す");
++    await page.locator("#commit").click();
++    await cell(18).click();
++    await page.locator('#assist .slot-tabs button[data-slot="5-6"]').click();
++    await page.waitForSelector("#assist .cand .place");
++    await page.locator("#assist .cand .place").first().click();
++    await page.fill("#required-input", q03[0].slice(0, 2));
++    await page.locator("#required-add").click();
++    await page.selectOption("#rhyme-select", { index: 3 });
++    await page.selectOption("#unknown-select", "仄");
++    await cell(27).click();
++    await page.keyboard.insertText(q03[2][0]); // 結句末を書き換えたまま（未確定）
++    const made = await stateOf(page);
++    check(made.history.length >= 5 && made.pending.includes("結句") && made.required.length === 1, `${label}: 1首を作った（記録 ${made.history.length}件、未確定あり）`);
++    check((await page.locator("#save-status").textContent()).includes("自動で保存"), `${label}: 自動で保存していると示す`);
++
++    // 開き直すと、未確定の手入力も含めて同じ状態に戻る
++    await page.reload();
++    await page.waitForSelector("#grid-mode .gin");
++    check(same(await stateOf(page), made), `${label}: 開き直すと同じ状態に戻る`);
++
++    // 書き出す（未確定の手入力は確定してから書き出す）
++    const [download] = await Promise.all([page.waitForEvent("download"), page.locator("#export").click()]);
++    const file = join(work, download.suggestedFilename());
++    await download.saveAs(file);
++    const exported = await stateOf(page);
++    check(exported.pending.includes("未確定の変更はありません") && exported.history.length === made.history.length + 1, `${label}: 書き出す前に未確定の手入力を確定する`);
++    const json = JSON.parse(readFileSync(file, "utf-8"));
++    check(json.app === "kanshi-app" && json.schema === 1 && json.events.length === exported.history.length, `${label}: 書き出したファイル（${download.suggestedFilename()}）に記録がすべて入っている`);
++    check(/^kanshi-\d{8}-\d{4}\.json$/.test(download.suggestedFilename()), `${label}: ファイル名に日時が入る`);
++
++    // 別の環境（保存が空）で読み込むと、同じ状態に戻る
++    const ctxB = await browser.newContext(desktop);
++    const pageB = await open(ctxB);
++    check((await stateOf(pageB)).history.length === 0, `${label}: 別の環境は空から始まる`);
++    await pageB.setInputFiles("#import-file", file);
++    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.includes("読み込みました"));
++    check(same(await stateOf(pageB), exported), `${label}: 書き出したファイルを別の環境で読み込むと、同じ状態に戻る`);
++
++    // 壊れたファイルは読み込まず、いまの詩はそのまま
++    const broken = join(work, "broken.json");
++    // 最後の記録の「前」を「後」と同じにする（記録をたどると、その時点のマス目と合わない）
++    writeFileSync(broken, JSON.stringify({ ...json, events: json.events.map((e, k) => (k === json.events.length - 1 ? { ...e, before: e.after } : e)) }));
++    await pageB.setInputFiles("#import-file", broken);
++    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.includes("読み込めませんでした"));
++    const note = await pageB.locator("#save-note").textContent();
++    check(note.includes("合いません") && same(await stateOf(pageB), exported), `${label}: 記録の合わないファイルは理由を示して読み込まない（${note}）`);
++
++    // 貼り付けモードで読み込んでからマス目に移っても、読み込んだ詩のまま（古い貼り付けの本文で上書きしない）
++    await pageB.locator("#tab-paste").click();
++    await pageB.fill("#poem-input", q03.join("\n"));
++    await pageB.setInputFiles("#import-file", file);
++    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.startsWith("「kanshi-"));
++    check((await pageB.inputValue("#poem-input")) === exported.cells.map((c) => c || "＿").join("").match(/.{7}/gu).join("\n"), `${label}: 読み込むと貼り付けの本文も読み込んだ詩になる`);
++    await pageB.locator("#tab-grid").click();
++    check(same(await stateOf(pageB), exported), `${label}: 貼り付けモードで読み込んでマス目に移っても、読み込んだ詩のまま`);
++
++    // 新しく始める（貼り付けモードで始めても、マス目に移って古い詩が戻らない）
++    await pageB.locator("#tab-paste").click();
++    await pageB.locator("#new-poem").click();
++    check((await pageB.inputValue("#poem-input")) === "", `${label}: 新しく始めると貼り付けの本文も空になる`);
++    await pageB.locator("#tab-grid").click();
++    const fresh = await stateOf(pageB);
++    check(fresh.history.length === 0 && fresh.cells.every((c) => c === "") && fresh.required.length === 0, `${label}: 新しく始めると空になる`);
++    await ctxB.close();
++
++    // 書き込めない（容量が埋まっているなど）状態で開き直しても、前回の詩は戻り、自動保存できないことを示す
++    await page.addInitScript(() => {
++      Storage.prototype.setItem = () => {
++        throw new DOMException("quota", "QuotaExceededError");
++      };
++    });
++    await page.reload();
++    await page.waitForSelector("#grid-mode .gin");
++    check(same(await stateOf(page), exported), `${label}: 書き込めなくても、前回の詩は読める`);
++    check((await page.locator("#save-status").textContent()).includes("自動保存できませんでした"), `${label}: 書き込めないことを示す`);
++    await ctxA.close();
++
++    // 保存が壊れていて、別のキーに残せないときは、元のデータを上書きしない
++    const ctxD = await browser.newContext(desktop);
++    await ctxD.addInitScript(() => {
++      if (sessionStorage.getItem("seeded")) return;
++      sessionStorage.setItem("seeded", "1");
++      localStorage.setItem("kanshi-app/poem/v1", "{broken");
++      const set = Storage.prototype.setItem;
++      Storage.prototype.setItem = function (k, v) {
++        if (String(k).endsWith(":broken")) throw new DOMException("quota", "QuotaExceededError");
++        return set.call(this, k, v);
++      };
++    });
++    const pageD = await open(ctxD);
++    await pageD.locator(`.gin[data-index="0"]`).click();
++    await pageD.keyboard.insertText(q03[0]);
++    const kept = await pageD.evaluate(() => localStorage.getItem("kanshi-app/poem/v1"));
++    check(kept === "{broken", `${label}: 壊れたデータを残せないときは、元のキーに上書きしない`);
++    check((await pageD.locator("#save-status").textContent()).includes("自動保存を止めています"), `${label}: 自動保存を止めたことを示す`);
++    check((await pageD.locator("#save-note").textContent()).includes("読み込めませんでした"), `${label}: 読み込めなかったことを示す`);
++    await ctxD.close();
++
++    // 貼り付けモードで編集した本文：タブを移さずに書き出しても記録に入り、開き直しても残る
++    const ctxE = await browser.newContext(desktop);
++    const pageE = await open(ctxE);
++    await pageE.locator("#tab-paste").click();
++    await pageE.fill("#poem-input", q03.join("\n"));
++    const [dlE] = await Promise.all([pageE.waitForEvent("download"), pageE.locator("#export").click()]);
++    const fileE = join(work, "paste-export.json");
++    await dlE.saveAs(fileE);
++    const jsonE = JSON.parse(readFileSync(fileE, "utf-8"));
++    check(
++      jsonE.working.join("") === q03.join("") && jsonE.events.every((e) => e.origin === "paste"),
++      `${label}: 貼り付けモードのまま書き出すと、本文をマス目に移して記録してから書き出す`,
++    );
++    let downloads = 0;
++    pageE.on("download", () => downloads++);
++    await pageE.fill("#poem-input", q03.join("，\n"));
++    await pageE.locator("#export").click();
++    check(
++      (await pageE.locator("#save-note").textContent()).includes("書き出していません") && downloads === 0,
++      `${label}: マス目に移せない本文では書き出さず、理由を示す`,
++    );
++    const q10 = poem("q10").lines.join("\n");
++    await pageE.fill("#poem-input", q10);
++    await pageE.reload();
++    await pageE.waitForSelector("#grid-mode .gin");
++    await pageE.locator("#tab-paste").click();
++    check((await pageE.inputValue("#poem-input")) === q10, `${label}: マス目に移していない貼り付けの本文は、開き直しても残る`);
++    await pageE.locator("#tab-grid").click();
++    const cellsE = await pageE.$$eval(".gin", (els) => els.map((e) => e.value).join(""));
++    check(cellsE === q10.replaceAll("\n", ""), `${label}: 開き直したあとでマス目に移すと、その本文がマス目に入る`);
++    await ctxE.close();
++
++    // localStorage が使えない環境でも動き、自動保存できないことを示す
++    const ctxC = await browser.newContext(desktop);
++    await ctxC.addInitScript(() => {
++      Object.defineProperty(window, "localStorage", {
++        get() {
++          throw new DOMException("denied", "SecurityError");
++        },
++      });
++    });
++    const pageC = await open(ctxC);
++    check((await pageC.locator("#save-status").textContent()).includes("自動保存が使えません"), `${label}: localStorage が使えないと示す`);
++    await pageC.locator(`.gin[data-index="0"]`).click();
++    await pageC.keyboard.insertText(q03[0]);
++    check((await stateOf(pageC)).history.length === 1, `${label}: localStorage が使えなくても作詩と記録はできる`);
++    await ctxC.close();
++    check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
++  }
+ } finally {
+   await browser.close();
+   server.kill();
+diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
+index e5db5b9..143dfb6 100644
+--- a/apps/web/src/main.ts
++++ b/apps/web/src/main.ts
+@@ -21,6 +21,7 @@ import {
+   type Settings,
+ } from "./doc";
+ import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid, writeAt } from "./grid";
++import { browserStorage, loadFromStorage, loadPaste, parseDoc, savePaste, saveToStorage, serializeDoc, type KeyValueStore, type PasteState } from "./storage";
+ import { gridEditor } from "./gridEditor";
+ import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
+ import { cellPanel, h, resultParts, resultView } from "./render";
+@@ -148,10 +149,46 @@ function requiredItem(
+   );
+ }
+ 
+-function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
++/**
++ * 起動時に読み込んだ詩と、保存先。
++ * saveTo は自動保存の先。壊れたデータを別のキーに残せなかったときは、元のデータを上書きしないよう null にし、blocked に理由を入れる
++ */
++type Startup = { doc: PoemDoc; paste: PasteState; store: KeyValueStore | null; saveTo: KeyValueStore | null; blocked: string | null; note: string };
++
++/** 保存先から詩を読み込む。読めなければ新しく始め、理由を note に入れる */
++function startup(): Startup {
++  const store = browserStorage();
++  return { ...startupDoc(store), paste: loadPaste(store) };
++}
++
++function startupDoc(store: KeyValueStore | null): Omit<Startup, "paste"> {
++  const r = loadFromStorage(store);
++  if ("doc" in r) return { doc: r.doc, store, saveTo: store, blocked: null, note: "前回の続きから開きました。" };
++  if ("error" in r) {
++    const note = `保存されていた詩を読み込めませんでした（${r.error}）。新しく始めます。`;
++    return r.keptAs !== null
++      ? { doc: newDoc(now()), store, saveTo: store, blocked: null, note: `${note}読めなかったデータは、このブラウザの「${r.keptAs}」に残してあります。` }
++      : {
++          doc: newDoc(now()),
++          store,
++          saveTo: null,
++          blocked: "読めなかった前回のデータを別の場所に残せなかったので、上書きしないよう自動保存を止めています。「書き出す」でファイルに保存してください。",
++          note,
++        };
++  }
++  return { doc: newDoc(now()), store, saveTo: store, blocked: null, note: "" };
++}
++
++/** 書き出すファイルの名前（kanshi-20261103-0915.json） */
++const exportName = (d: Date) => {
++  const pad = (n: number) => String(n).padStart(2, "0");
++  return `kanshi-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
++};
++
++function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLElement {
+   let mode: Mode = "grid";
+   /** 詩の記録。マス目・必須要素・設定はここから導き出す（CLAUDE.md §4.6） */
+-  let doc: PoemDoc = newDoc(now());
++  let doc: PoemDoc = init.doc;
+   let selected: number | null = null;
+   /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
+   let slotName: string | null = null;
+@@ -162,6 +199,8 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   const rhymeIds = rhymes.map((r) => r.id);
+   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
+   let gridEdited = false;
++  /** 貼り付けモードの本文に、マス目（記録）へ移していない編集があるか */
++  let pasteDirty = init.paste.dirty;
+ 
+   const settings = settingsPanel(data, rhymes, () => {
+     doc = setSettings(doc, now(), settings.get());
+@@ -269,6 +308,96 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     requiredList,
+   );
+ 
++  // ---- 保存（自動保存・書き出し・読み込み・新しく始める）（§4.7） ----
++  const saveStatus = h("p", { class: "save-status", id: "save-status", role: "status" });
++  const saveNote = h("p", { class: "save-note", id: "save-note", role: "status" }, init.note);
++  const exportButton = h("button", { type: "button", class: "small", id: "export" }, "書き出す");
++  const importButton = h("button", { type: "button", class: "small", id: "import" }, "読み込む");
++  const importFile = h("input", { type: "file", id: "import-file", accept: "application/json,.json", hidden: "" }) as HTMLInputElement;
++  const newButton = h("button", { type: "button", class: "small", id: "new-poem" }, "新しく始める");
++  /** doc を差し替えたあと、画面の状態をそろえる */
++  const resetTo = (next: PoemDoc) => {
++    doc = next;
++    selected = null;
++    slotName = null;
++    limit = 20;
++    reasonInput.value = "";
++    settings.set(currentSettings(doc));
++    editor.setGrid(doc.working);
++    // 貼り付けモードの本文も新しい詩にそろえる（古い本文が、タブを移ったときに新しい詩を上書きしないように）
++    input.value = gridToText(doc.working);
++    gridEdited = false;
++    pasteDirty = false;
++    syncNote.textContent = "";
++    update();
++  };
++  const hasWork = () => doc.events.length > 0 || hasPoem() || currentRequired(doc).length > 0;
++  exportButton.addEventListener("click", () => {
++    // 貼り付けモードで編集した本文は、先にマス目に移して記録する（タブを移ったときと同じ）
++    if (mode === "paste") {
++      const moved = movePasteToGrid();
++      if (moved !== null) {
++        saveNote.textContent = `貼り付けた本文をマス目に移せないため、書き出していません。${moved}`;
++        return;
++      }
++    }
++    // 書き出す前に、未確定の手入力を確定する（書き出したファイルは記録だけでマス目が決まる）
++    apply(commitPending(doc, now(), { reason: reason() }));
++    update();
++    const url = URL.createObjectURL(new Blob([serializeDoc(doc)], { type: "application/json" }));
++    const a = h("a", { href: url, download: exportName(new Date()) });
++    document.body.append(a);
++    a.click();
++    a.remove();
++    setTimeout(() => URL.revokeObjectURL(url), 1000);
++    saveNote.textContent = `書き出しました（記録 ${doc.events.length}件）。`;
++  });
++  importButton.addEventListener("click", () => importFile.click());
++  importFile.addEventListener("change", () => {
++    const file = importFile.files?.[0];
++    importFile.value = "";
++    if (file === undefined) return;
++    void file.text().then((text) => {
++      const r = parseDoc(text);
++      if ("error" in r) {
++        saveNote.textContent = `「${file.name}」を読み込めませんでした（${r.error}）。いまの詩はそのままです。`;
++        return;
++      }
++      if (hasWork() && !window.confirm("いまの詩を、読み込んだ詩で置き換えますか？（いまの詩を残すなら、先に書き出してください）")) return;
++      resetTo(r.doc);
++      saveNote.textContent = `「${file.name}」を読み込みました（記録 ${r.doc.events.length}件）。`;
++    });
++  });
++  newButton.addEventListener("click", () => {
++    if (hasWork() && !window.confirm("いまの詩と記録を消して、新しく始めますか？（残すなら、先に書き出してください）")) return;
++    resetTo(newDoc(now()));
++    saveNote.textContent = "新しく始めました。";
++  });
++  const saveCard = h(
++    "section",
++    { class: "save", "aria-labelledby": "save-title" },
++    h("h2", { id: "save-title" }, "保存"),
++    saveStatus,
++    h("div", { class: "buttons" }, exportButton, importButton, newButton),
++    importFile,
++    saveNote,
++    h("p", { class: "help" }, "書き出したファイル（JSON）には、詩と編集の記録、必須要素、設定が入っています。別の端末で読み込めば続きから作れます。"),
++  );
++  let lastSaved: boolean | null = null;
++  const autosave = () => {
++    const ok = saveToStorage(init.saveTo, doc) && savePaste(init.saveTo, { text: input.value, dirty: pasteDirty });
++    if (ok === lastSaved) return;
++    lastSaved = ok;
++    saveStatus.textContent = ok
++      ? "このブラウザに自動で保存しています。"
++      : init.blocked !== null
++        ? init.blocked
++        : init.store === null
++          ? "このブラウザでは自動保存が使えません。「書き出す」でファイルに保存してください。"
++          : "自動保存できませんでした（保存できる量を超えたなど）。「書き出す」でファイルに保存してください。";
++    saveStatus.classList.toggle("warn", !ok);
++  };
++
+   const gridMode = h(
+     "section",
+     { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
+@@ -310,16 +439,22 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     autocomplete: "off",
+     "aria-describedby": "poem-help",
+   }) as HTMLTextAreaElement;
+-  input.addEventListener("input", () => update());
++  input.value = init.paste.text;
++  input.addEventListener("input", () => {
++    pasteDirty = true;
++    update();
++  });
+   const output = h("div", { id: "result" });
+   const sample = h("button", { type: "button", class: "small", id: "paste-sample" }, "例の詩を入れる");
+   sample.addEventListener("click", () => {
+     input.value = SAMPLE;
++    pasteDirty = true;
+     update();
+   });
+   const clear = h("button", { type: "button", class: "small" }, "消す");
+   clear.addEventListener("click", () => {
+     input.value = "";
++    pasteDirty = true;
+     update();
+     input.focus();
+   });
+@@ -349,21 +484,34 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+       tabs[m].tabIndex = m === mode ? 0 : -1;
+     }
+   };
++  /**
++   * 貼り付けモードで編集した本文を、マス目に移して記録する。移せたら（または移すものがなければ）null、
++   * 7字×4句の漢字にならず移せなければ理由を返す（マス目は変えない）
++   */
++  function movePasteToGrid(): string | null {
++    if (!pasteDirty) return null;
++    const r = textToGrid(input.value);
++    if (!("grid" in r)) return r.reasons.join("");
++    apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
++    editor.setGrid(doc.working);
++    pasteDirty = false;
++    gridEdited = false;
++    return null;
++  }
++
+   const setMode = (next: Mode) => {
+     if (next === mode) return;
+     if (next === "grid") {
+-      const r = textToGrid(input.value);
+-      if ("grid" in r) {
+-        apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
+-        editor.setGrid(doc.working);
+-        syncNote.textContent = "";
+-      } else {
+-        syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
+-      }
++      const reasons = movePasteToGrid();
++      syncNote.textContent = reasons === null ? "" : `貼り付けた本文は、マス目に移していません。${reasons}マス目は前のままです。`;
+       gridEdited = false;
+     } else {
+       apply(commitPending(doc, now(), { reason: reason() }));
+-      if (gridEdited || "grid" in textToGrid(input.value)) input.value = gridToText(doc.working);
++      // マス目に移していない貼り付けの編集は残す。ただしマス目を編集したら、マス目の詩で置き換える
++      if (!pasteDirty || gridEdited) {
++        input.value = gridToText(doc.working);
++        pasteDirty = false;
++      }
+     }
+     mode = next;
+     refreshTabs();
+@@ -422,6 +570,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   };
+ 
+   function update() {
++    autosave();
+     const current = currentSettings(doc);
+     const options = optionsOf(current);
+     const showPattern = current.showPattern;
+@@ -488,7 +637,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     "div",
+     { class: "app" },
+     h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
+-    h("div", { class: "workbench" }, h("div", { class: "side" }, settings.el, requiredCard), gridMode, pasteMode),
++    h("div", { class: "workbench" }, h("div", { class: "side" }, settings.el, requiredCard, saveCard), gridMode, pasteMode),
+   );
+ }
+ 
+@@ -496,7 +645,7 @@ async function start() {
+   const root = document.getElementById("app")!;
+   try {
+     const [data, rhymes] = await Promise.all([loadEngineData(), loadRhymes()]);
+-    root.replaceChildren(app(data, rhymes));
++    root.replaceChildren(app(data, rhymes, startup()));
+   } catch (e) {
+     root.replaceChildren(h("p", { class: "error" }, `データを読み込めませんでした。${e instanceof Error ? e.message : ""}`));
+   }
+diff --git a/apps/web/src/storage.ts b/apps/web/src/storage.ts
+new file mode 100644
+index 0000000..bd973f2
+--- /dev/null
++++ b/apps/web/src/storage.ts
+@@ -0,0 +1,207 @@
++// 保存・書き出し・読み込み（CLAUDE.md §4.7）。保存先（localStorage など）は引数で受け取り、例外は外に出さない。
++// 読み込むデータは形を検査し、記録をたどってマス目が合うことまで確かめてから使う。
++import { SCHEMA, replay, type EditEvent, type PoemDoc, type RequiredItem, type Settings, type Snapshot } from "./doc";
++import { BLANK, CELLS, WIDTH } from "./grid";
++import { MAX_REQUIRED } from "./required";
++
++const APP = "kanshi-app";
++
++/** localStorage のキー。スキーマの版を含める */
++export const storageKey = (version: number) => `${APP}/poem/v${version}`;
++export const STORAGE_KEY = storageKey(SCHEMA);
++
++/** 保存先として使う最小限の形（localStorage と同じ） */
++export type KeyValueStore = { getItem(key: string): string | null; setItem(key: string, value: string): void };
++
++type Raw = Record<string, unknown>;
++export type Migration = (raw: Raw) => Raw;
++
++/** 版ごとの変換。キーの版のデータを、次の版にする。版1が最初の版なので、いまは空 */
++export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
++
++/** 書き出す JSON。アプリの印と版を付ける */
++export function serializeDoc(doc: PoemDoc): string {
++  return JSON.stringify({ app: APP, ...doc }, null, 1);
++}
++
++/** 古い版のデータを、版ごとの変換を順にかけて target の版にする */
++export function migrate(raw: Raw, target: number, steps: Readonly<Record<number, Migration>>): { raw: Raw } | { error: string } {
++  let cur = raw;
++  if (typeof cur.schema !== "number" || !Number.isInteger(cur.schema)) return { error: "版（schema）が書かれていません。" };
++  while ((cur.schema as number) < target) {
++    const v = cur.schema as number;
++    const step = steps[v];
++    if (step === undefined) return { error: `版${v}のファイルは、今の版に変換できません。` };
++    cur = step(cur);
++  }
++  return { raw: cur };
++}
++
++const FORMS = ["heiki-nyuin", "heiki-funyuin", "sokki-nyuin", "sokki-funyuin"];
++const ACTORS = ["author", "dictionary", "ai"];
++const isHan = (c: string) => /^\p{Script=Han}$/u.test(c);
++const isCell = (c: unknown) => typeof c === "string" && (c === BLANK || isHan(c));
++const isCells = (s: unknown) => typeof s === "string" && [...s].length > 0 && [...s].every(isCell);
++const isObj = (x: unknown): x is Raw => typeof x === "object" && x !== null && !Array.isArray(x);
++const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x);
++
++function isEvent(e: unknown): e is EditEvent {
++  return (
++    isObj(e) &&
++    typeof e.at === "string" &&
++    ACTORS.includes(e.actor as string) &&
++    isInt(e.line) &&
++    e.line >= 0 &&
++    e.line * WIDTH < CELLS &&
++    isInt(e.slot) &&
++    isCells(e.before) &&
++    isCells(e.after) &&
++    (e.origin === null || typeof e.origin === "string") &&
++    (e.reason === undefined || typeof e.reason === "string")
++  );
++}
++
++function isSettings(s: unknown): s is Settings {
++  return (
++    isObj(s) &&
++    (s.form === null || FORMS.includes(s.form as string)) &&
++    (s.unknownAs === null || s.unknownAs === "平" || s.unknownAs === "仄") &&
++    typeof s.allowKokuji === "boolean" &&
++    typeof s.showPattern === "boolean" &&
++    (s.rhyme === null || typeof s.rhyme === "string")
++  );
++}
++
++const isRequired = (r: unknown): r is RequiredItem =>
++  isObj(r) && typeof r.id === "string" && /^r\d+$/.test(r.id) && typeof r.word === "string" && [2, 3].includes([...r.word].length) && [...r.word].every(isHan);
++
++function isSnapshot(s: unknown): s is Snapshot {
++  return isObj(s) && typeof s.at === "string" && isSettings(s.settings) && Array.isArray(s.required) && s.required.length <= MAX_REQUIRED && s.required.every(isRequired);
++}
++
++/**
++ * 書き出したファイル（または保存したデータ）を読み込む。古い版は変換する。
++ * 形が合わない、今より新しい版、記録をたどってマス目が合わない、のいずれかなら理由を返す。
++ */
++export function parseDoc(text: string, steps: Readonly<Record<number, Migration>> = MIGRATIONS): { doc: PoemDoc } | { error: string } {
++  let parsed: unknown;
++  try {
++    parsed = JSON.parse(text);
++  } catch {
++    return { error: "JSON として読めません。" };
++  }
++  if (!isObj(parsed) || parsed.app !== APP) return { error: "この作業台で書き出したファイルではありません。" };
++  if (isInt(parsed.schema) && parsed.schema > SCHEMA) {
++    return { error: `新しい版（${parsed.schema}）の作業台で書き出したファイルです。この作業台は版${SCHEMA}までしか読めません。` };
++  }
++  const m = migrate(parsed, SCHEMA, steps);
++  if ("error" in m) return m;
++  const raw = m.raw;
++
++  if (!Array.isArray(raw.events)) return { error: "記録（events）がありません。" };
++  for (const [k, e] of raw.events.entries()) if (!isEvent(e)) return { error: `${k + 1}件目の記録の形が正しくありません。` };
++  if (!Array.isArray(raw.snapshots) || raw.snapshots.length === 0) return { error: "スナップショットがありません。" };
++  for (const [k, s] of raw.snapshots.entries()) if (!isSnapshot(s)) return { error: `${k + 1}件目のスナップショットの形が正しくありません。` };
++  if (!Array.isArray(raw.working) || raw.working.length !== CELLS || !raw.working.every(isCell)) {
++    return { error: "マス目（working）は28マスの漢字か「＿」でなければなりません。" };
++  }
++  const snapshots = raw.snapshots as Snapshot[];
++  const maxId = Math.max(0, ...snapshots.flatMap((s) => s.required.map((r) => Number(r.id.slice(1)))));
++  if (!isInt(raw.nextRequiredId) || raw.nextRequiredId <= maxId) return { error: "必須要素の番号（nextRequiredId）が正しくありません。" };
++  if (!Array.isArray(raw.requiredSeen) || !raw.requiredSeen.every((x) => typeof x === "string")) return { error: "requiredSeen の形が正しくありません。" };
++
++  const events = raw.events as EditEvent[];
++  const r = replay(events);
++  if ("error" in r) return r;
++
++  return {
++    doc: {
++      schema: SCHEMA,
++      events,
++      snapshots,
++      working: raw.working as string[],
++      nextRequiredId: raw.nextRequiredId,
++      requiredSeen: raw.requiredSeen as string[],
++    },
++  };
++}
++
++/** error のとき keptAs は、壊れたデータを残したキー。残せなかったら null（そのときは元のキーに上書きしてはいけない） */
++export type LoadResult = { doc: PoemDoc } | { none: true } | { unavailable: true } | { error: string; keptAs: string | null };
++
++/**
++ * 保存先から読み込む。今の版のキーになければ、前の版のキーを新しい順に探して変換する。
++ * 壊れていたら、そのデータを「キー:broken」に残して理由を返す。
++ */
++export function loadFromStorage(store: KeyValueStore | null, steps: Readonly<Record<number, Migration>> = MIGRATIONS): LoadResult {
++  if (store === null) return { unavailable: true };
++  try {
++    for (let v = SCHEMA; v >= 0; v--) {
++      const key = storageKey(v);
++      const text = store.getItem(key);
++      if (text === null) continue;
++      const r = parseDoc(text, steps);
++      if ("doc" in r) return r;
++      const keptAs = `${key}:broken`;
++      try {
++        store.setItem(keptAs, text);
++        return { error: r.error, keptAs };
++      } catch {
++        return { error: r.error, keptAs: null };
++      }
++    }
++    return { none: true };
++  } catch {
++    return { unavailable: true };
++  }
++}
++
++/** 保存する。保存できなければ false（例外は外に出さない） */
++export function saveToStorage(store: KeyValueStore | null, doc: PoemDoc): boolean {
++  if (store === null) return false;
++  try {
++    store.setItem(STORAGE_KEY, serializeDoc(doc));
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++/**
++ * ブラウザの localStorage。取り出せなければ（設定で禁止など）null。
++ * 書き込めるかどうかはここでは試さない（容量が埋まっていても、前回の詩は読める）。書き込めないことは saveToStorage が false で知らせる
++ */
++export function browserStorage(): KeyValueStore | null {
++  try {
++    return window.localStorage ?? null;
++  } catch {
++    return null;
++  }
++}
++
++/** 貼り付けモードの本文の保存先。詩の記録とは別に持つ（7字×4句になっていない書きかけの本文もあるため） */
++export const PASTE_KEY = `${APP}/paste/v${SCHEMA}`;
++
++/** 貼り付けモードの本文と、マス目に移していない編集があるか */
++export type PasteState = { text: string; dirty: boolean };
++
++export function loadPaste(store: KeyValueStore | null): PasteState {
++  const empty = { text: "", dirty: false };
++  if (store === null) return empty;
++  try {
++    const raw: unknown = JSON.parse(store.getItem(PASTE_KEY) ?? "null");
++    return isObj(raw) && typeof raw.text === "string" && typeof raw.dirty === "boolean" ? { text: raw.text, dirty: raw.dirty } : empty;
++  } catch {
++    return empty;
++  }
++}
++
++export function savePaste(store: KeyValueStore | null, paste: PasteState): boolean {
++  if (store === null) return false;
++  try {
++    store.setItem(PASTE_KEY, JSON.stringify(paste));
++    return true;
++  } catch {
++    return false;
++  }
++}
+diff --git a/apps/web/src/style.css b/apps/web/src/style.css
+index 87fe80b..0e5021d 100644
+--- a/apps/web/src/style.css
++++ b/apps/web/src/style.css
+@@ -799,7 +799,8 @@ button.more {
+   gap: 16px;
+   min-width: 0;
+ }
+-.required {
++.required,
++.save {
+   background: var(--sheet);
+   border: 1px solid var(--line);
+   border-radius: 10px;
+@@ -972,3 +973,22 @@ button.small[disabled] {
+   flex-basis: 100%;
+   color: var(--ink);
+ }
++
++/* 保存（M6） */
++.save-status {
++  margin: 0;
++  font-size: 0.85rem;
++  color: var(--rokusho);
++}
++.save-status.warn {
++  color: var(--shu);
++  font-weight: 600;
++}
++.save-note {
++  margin: 0;
++  font-size: 0.8rem;
++  color: var(--muted);
++}
++.save-note:empty {
++  display: none;
++}
+diff --git a/apps/web/test/storage.test.ts b/apps/web/test/storage.test.ts
+new file mode 100644
+index 0000000..6464fa6
+--- /dev/null
++++ b/apps/web/test/storage.test.ts
+@@ -0,0 +1,190 @@
++// 保存・書き出し・読み込み（apps/web/src/storage.ts）。字は平仄に関わらない架空の扱い（CLAUDE.md §0）。
++import { describe, expect, it } from "vitest";
++import { DEFAULT_SETTINGS, SCHEMA, addRequired, commitPending, newDoc, record, setSettings, setWorking, type PoemDoc } from "../src/doc";
++import { emptyGrid, writeAt } from "../src/grid";
++import { PASTE_KEY, STORAGE_KEY, loadFromStorage, loadPaste, migrate, parseDoc, savePaste, saveToStorage, serializeDoc, storageKey } from "../src/storage";
++import { P } from "../../../packages/engine/test/fixture";
++
++const T = (n: number) => `2026-11-03T10:00:${String(n).padStart(2, "0")}.000Z`;
++const write = (grid: readonly string[], index: number, text: string) => writeAt(grid, index, text).grid;
++
++/** 記録・必須要素・設定・未確定の手入力をひととおり含む doc */
++function sampleDoc(): PoemDoc {
++  let d = newDoc(T(0));
++  d = commitPending(setWorking(d, write(d.working, 0, P[0]! + P[1]! + P[2]!)), T(1), { reason: "書き出し" });
++  d = addRequired(d, T(2), P[3]! + P[4]!);
++  d = record(d, T(3), write(d.working, 7, P[3]! + P[4]!), { actor: "author", origin: "required:r1" });
++  d = record(d, T(4), write(d.working, 18, P[5]! + P[6]!), { actor: "dictionary", origin: `phrase:${P[5]}${P[6]}` });
++  d = setSettings(d, T(5), { ...DEFAULT_SETTINGS, unknownAs: "仄", rhyme: "上平一東" });
++  return setWorking(d, write(d.working, 27, P[7]!)); // 未確定の手入力
++}
++
++/** 書き換えたうえで JSON にする */
++const tweak = (f: (raw: Record<string, unknown>) => void) => {
++  const raw = JSON.parse(serializeDoc(sampleDoc()));
++  f(raw);
++  return JSON.stringify(raw);
++};
++
++/** 例外を投げられる、メモリ上の保存先 */
++function memoryStorage(opts: { throwOnGet?: boolean; throwOnSet?: boolean | ((key: string) => boolean) } = {}) {
++  const items = new Map<string, string>();
++  return {
++    items,
++    getItem(k: string) {
++      if (opts.throwOnGet) throw new Error("denied");
++      return items.get(k) ?? null;
++    },
++    setItem(k: string, v: string) {
++      if (typeof opts.throwOnSet === "function" ? opts.throwOnSet(k) : opts.throwOnSet) throw new Error("quota");
++      items.set(k, v);
++    },
++  };
++}
++
++describe("serializeDoc と parseDoc", () => {
++  it("書き出して読み込むと同じ doc に戻る", () => {
++    const d = sampleDoc();
++    expect(parseDoc(serializeDoc(d))).toEqual({ doc: d });
++  });
++
++  it("書き出したものには、アプリの印と版が付く", () => {
++    const raw = JSON.parse(serializeDoc(sampleDoc()));
++    expect([raw.app, raw.schema]).toEqual(["kanshi-app", SCHEMA]);
++  });
++
++  it("JSON でない・このアプリのものでないファイルは読み込まない", () => {
++    expect(parseDoc("{")).toEqual({ error: "JSON として読めません。" });
++    expect(parseDoc(JSON.stringify({ hello: 1 }))).toEqual({ error: "この作業台で書き出したファイルではありません。" });
++  });
++
++  it("今より新しい版は、理由を示して読み込まない", () => {
++    expect(parseDoc(tweak((r) => (r.schema = SCHEMA + 1)))).toEqual({
++      error: `新しい版（${SCHEMA + 1}）の作業台で書き出したファイルです。この作業台は版${SCHEMA}までしか読めません。`,
++    });
++  });
++
++  it("記録をたどってマス目が合わなければ読み込まない", () => {
++    const text = tweak((r) => {
++      (r.events as { before: string }[])[1]!.before = P[9]!.repeat(2);
++    });
++    expect(parseDoc(text)).toEqual({ error: "2件目の記録（承句の1-2字目）の「前」が、その時点のマス目と合いません。" });
++  });
++
++  it("形が合わないところを、場所を示して返す", () => {
++    expect(parseDoc(tweak((r) => (r.working = ["＿"])))).toEqual({ error: "マス目（working）は28マスの漢字か「＿」でなければなりません。" });
++    expect(parseDoc(tweak((r) => ((r.events as { actor: string }[])[0]!.actor = "robot")))).toEqual({ error: "1件目の記録の形が正しくありません。" });
++    expect(parseDoc(tweak((r) => ((r.events as { after: string }[])[0]!.after = "abc")))).toEqual({ error: "1件目の記録の形が正しくありません。" });
++    expect(parseDoc(tweak((r) => ((r.snapshots as { settings: { form: string } }[])[0]!.settings.form = "gogon")))).toEqual({
++      error: "1件目のスナップショットの形が正しくありません。",
++    });
++    expect(parseDoc(tweak((r) => (r.snapshots = [])))).toEqual({ error: "スナップショットがありません。" });
++    expect(
++      parseDoc(
++        tweak((r) => {
++          const snaps = r.snapshots as { required: { id: string; word: string }[] }[];
++          snaps[snaps.length - 1]!.required = ["r1", "r2", "r3"].map((id) => ({ id, word: P[0]! + P[1]! }));
++        }),
++      ),
++    ).toEqual({ error: "3件目のスナップショットの形が正しくありません。" });
++    expect(parseDoc(tweak((r) => (r.nextRequiredId = 1)))).toEqual({ error: "必須要素の番号（nextRequiredId）が正しくありません。" });
++    expect(parseDoc(tweak((r) => delete r.requiredSeen))).toEqual({ error: "requiredSeen の形が正しくありません。" });
++  });
++});
++
++describe("migrate（版ごとの変換）", () => {
++  it("古い版は、版ごとの変換を順にかけて今の版にする", () => {
++    const steps = {
++      1: (raw: Record<string, unknown>) => ({ ...raw, schema: 2, b: 1 }),
++      2: (raw: Record<string, unknown>) => ({ ...raw, schema: 3, c: 1 }),
++    };
++    expect(migrate({ schema: 1, a: 1 }, 3, steps)).toEqual({ raw: { schema: 3, a: 1, b: 1, c: 1 } });
++  });
++
++  it("変換のない古い版は読み込まない", () => {
++    expect(migrate({ schema: 0 }, 2, { 1: (r) => ({ ...r, schema: 2 }) })).toEqual({ error: "版0のファイルは、今の版に変換できません。" });
++  });
++
++  it("版の数がなければ読み込まない", () => {
++    expect(migrate({}, 1, {})).toEqual({ error: "版（schema）が書かれていません。" });
++  });
++});
++
++describe("localStorage への保存", () => {
++  it("キーにスキーマの版を含める", () => {
++    expect(STORAGE_KEY).toBe(storageKey(SCHEMA));
++    expect(STORAGE_KEY).toContain(`v${SCHEMA}`);
++  });
++
++  it("保存して読み込むと同じ doc に戻る。保存がなければ none", () => {
++    const s = memoryStorage();
++    expect(loadFromStorage(s)).toEqual({ none: true });
++    const d = sampleDoc();
++    expect(saveToStorage(s, d)).toBe(true);
++    expect(loadFromStorage(s)).toEqual({ doc: d });
++  });
++
++  it("保存先がない・例外を投げるときは unavailable。保存は false を返し、例外は外に出さない", () => {
++    expect(loadFromStorage(null)).toEqual({ unavailable: true });
++    expect(loadFromStorage(memoryStorage({ throwOnGet: true }))).toEqual({ unavailable: true });
++    expect(saveToStorage(null, sampleDoc())).toBe(false);
++    expect(saveToStorage(memoryStorage({ throwOnSet: true }), sampleDoc())).toBe(false);
++  });
++
++  it("壊れたデータは理由を返し、別のキーに残す", () => {
++    const s = memoryStorage();
++    s.items.set(STORAGE_KEY, "{broken");
++    const r = loadFromStorage(s);
++    expect(r).toEqual({ error: "JSON として読めません。", keptAs: `${STORAGE_KEY}:broken` });
++    expect(s.items.get(`${STORAGE_KEY}:broken`)).toBe("{broken");
++  });
++
++  it("壊れたデータを別のキーに残せなければ keptAs は null（呼び出し側は元のキーに上書きしない）", () => {
++    const s = memoryStorage({ throwOnSet: (k) => k.endsWith(":broken") });
++    s.items.set(STORAGE_KEY, "{broken");
++    expect(loadFromStorage(s)).toEqual({ error: "JSON として読めません。", keptAs: null });
++    expect(s.items.get(STORAGE_KEY)).toBe("{broken");
++  });
++
++  it("書き込めない（容量が埋まっているなど）保存先でも、保存済みの詩は読める", () => {
++    const s = memoryStorage({ throwOnSet: true });
++    s.items.set(STORAGE_KEY, serializeDoc(sampleDoc()));
++    expect(loadFromStorage(s)).toEqual({ doc: sampleDoc() });
++    expect(saveToStorage(s, sampleDoc())).toBe(false);
++  });
++
++  it("前の版のキーに保存があれば、変換して読み込む", () => {
++    const s = memoryStorage();
++    const old = { ...JSON.parse(serializeDoc(sampleDoc())), schema: 0 };
++    s.items.set(storageKey(0), JSON.stringify(old));
++    const r = loadFromStorage(s, { 0: (raw) => ({ ...raw, schema: 1 }) });
++    expect(r).toEqual({ doc: sampleDoc() });
++  });
++
++  it("空の詩の doc も保存して戻せる", () => {
++    const s = memoryStorage();
++    const d = newDoc(T(0));
++    saveToStorage(s, d);
++    expect(loadFromStorage(s)).toEqual({ doc: d });
++    expect((loadFromStorage(s) as { doc: PoemDoc }).doc.working).toEqual(emptyGrid());
++  });
++});
++
++describe("貼り付けモードの本文の保存", () => {
++  it("本文と、マス目に移していない編集があるかを保存して戻す", () => {
++    const s = memoryStorage();
++    expect(loadPaste(s)).toEqual({ text: "", dirty: false });
++    expect(savePaste(s, { text: "甲乙，\n丙", dirty: true })).toBe(true);
++    expect(loadPaste(s)).toEqual({ text: "甲乙，\n丙", dirty: true });
++    expect(PASTE_KEY).toContain(`v${SCHEMA}`);
++  });
++
++  it("保存先がない・壊れている・例外を投げるときは空", () => {
++    expect(loadPaste(null)).toEqual({ text: "", dirty: false });
++    const s = memoryStorage();
++    s.items.set(PASTE_KEY, "{");
++    expect(loadPaste(s)).toEqual({ text: "", dirty: false });
++    expect(loadPaste(memoryStorage({ throwOnGet: true }))).toEqual({ text: "", dirty: false });
++    expect(savePaste(memoryStorage({ throwOnSet: true }), { text: "", dirty: false })).toBe(false);
++  });
++});

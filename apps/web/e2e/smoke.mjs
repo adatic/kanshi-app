@@ -2,7 +2,9 @@
 // 期待値は記憶ではなく、ゴールデンテストのスナップショット（エンジンが出した結果）から取る。
 // SHOTS_DIR を渡すと、確認用の画面写真をそこに保存する。
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
@@ -361,6 +363,227 @@ try {
     if (shots) await page.screenshot({ path: `${shots}/log.png`, fullPage: true });
     check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
     await context.close();
+  }
+
+  // ---- 保存・書き出し・読み込み（M6 の完了条件：1首作って書き出し、読み込んで同じ状態に戻る） ----
+  {
+    const label = "save";
+    const desktop = { viewport: { width: 1280, height: 900 } };
+    const work = mkdtempSync(join(tmpdir(), "kanshi-e2e-"));
+    const errors = [];
+    const open = async (context) => {
+      const page = await context.newPage();
+      page.on("dialog", (d) => d.accept());
+      page.on("pageerror", (e) => errors.push(String(e)));
+      await page.goto(`${ORIGIN}/`);
+      await page.waitForSelector("#grid-mode .gin");
+      return page;
+    };
+    /** 画面の状態：マス目、未確定の表示、必須要素、設定、編集の記録 */
+    const stateOf = (page) =>
+      page.evaluate(() => ({
+        cells: [...document.querySelectorAll(".gin")].map((i) => i.value),
+        pending: document.querySelector("#pending-note").textContent,
+        required: [...document.querySelectorAll(".required-item .cand-word")].map((x) => x.textContent),
+        settings: ["#form-select", "#unknown-select", "#rhyme-select", "#allow-kokuji", "#show-pattern"].map((sel) => {
+          const el = document.querySelector(sel);
+          return el.type === "checkbox" ? el.checked : el.value;
+        }),
+        history: [...document.querySelectorAll("#history li")].map((li) => li.textContent),
+      }));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+    const ctxA = await browser.newContext(desktop);
+    const page = await open(ctxA);
+    const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
+    const q03 = poem("q03").lines;
+    // 1首作る：詩全体の貼り付け（手入力）、転句5-6字目を空けて候補を採用、必須要素、設定、理由つきの確定、未確定の手入力
+    await cell(0).click();
+    await page.evaluate((t) => {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", t);
+      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, q03.join("\n"));
+    for (const i of [18, 19]) {
+      await cell(i).click();
+      await page.keyboard.press("Backspace");
+    }
+    await page.fill("#reason-input", "転句を書き直す");
+    await page.locator("#commit").click();
+    await cell(18).click();
+    await page.locator('#assist .slot-tabs button[data-slot="5-6"]').click();
+    await page.waitForSelector("#assist .cand .place");
+    await page.locator("#assist .cand .place").first().click();
+    await page.fill("#required-input", q03[0].slice(0, 2));
+    await page.locator("#required-add").click();
+    await page.selectOption("#rhyme-select", { index: 3 });
+    await page.selectOption("#unknown-select", "仄");
+    await cell(27).click();
+    await page.keyboard.insertText(q03[2][0]); // 結句末を書き換えたまま（未確定）
+    const made = await stateOf(page);
+    check(made.history.length >= 5 && made.pending.includes("結句") && made.required.length === 1, `${label}: 1首を作った（記録 ${made.history.length}件、未確定あり）`);
+    check((await page.locator("#save-status").textContent()).includes("自動で保存"), `${label}: 自動で保存していると示す`);
+
+    // 開き直すと、未確定の手入力も含めて同じ状態に戻る
+    await page.reload();
+    await page.waitForSelector("#grid-mode .gin");
+    check(same(await stateOf(page), made), `${label}: 開き直すと同じ状態に戻る`);
+
+    // 書き出す（未確定の手入力は確定してから書き出す）
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator("#export").click()]);
+    const file = join(work, download.suggestedFilename());
+    await download.saveAs(file);
+    const exported = await stateOf(page);
+    check(exported.pending.includes("未確定の変更はありません") && exported.history.length === made.history.length + 1, `${label}: 書き出す前に未確定の手入力を確定する`);
+    const json = JSON.parse(readFileSync(file, "utf-8"));
+    check(json.app === "kanshi-app" && json.schema === 1 && json.events.length === exported.history.length, `${label}: 書き出したファイル（${download.suggestedFilename()}）に記録がすべて入っている`);
+    check(/^kanshi-\d{8}-\d{4}\.json$/.test(download.suggestedFilename()), `${label}: ファイル名に日時が入る`);
+
+    // 別の環境（保存が空）で読み込むと、同じ状態に戻る
+    const ctxB = await browser.newContext(desktop);
+    const pageB = await open(ctxB);
+    check((await stateOf(pageB)).history.length === 0, `${label}: 別の環境は空から始まる`);
+    await pageB.setInputFiles("#import-file", file);
+    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.includes("読み込みました"));
+    check(same(await stateOf(pageB), exported), `${label}: 書き出したファイルを別の環境で読み込むと、同じ状態に戻る`);
+
+    // 壊れたファイルは読み込まず、いまの詩はそのまま
+    const broken = join(work, "broken.json");
+    // 最後の記録の「前」を「後」と同じにする（記録をたどると、その時点のマス目と合わない）
+    writeFileSync(broken, JSON.stringify({ ...json, events: json.events.map((e, k) => (k === json.events.length - 1 ? { ...e, before: e.after } : e)) }));
+    await pageB.setInputFiles("#import-file", broken);
+    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.includes("読み込めませんでした"));
+    const note = await pageB.locator("#save-note").textContent();
+    check(note.includes("合いません") && same(await stateOf(pageB), exported), `${label}: 記録の合わないファイルは理由を示して読み込まない（${note}）`);
+
+    // 貼り付けモードで読み込んでからマス目に移っても、読み込んだ詩のまま（古い貼り付けの本文で上書きしない）
+    await pageB.locator("#tab-paste").click();
+    await pageB.fill("#poem-input", q03.join("\n"));
+    await pageB.setInputFiles("#import-file", file);
+    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.startsWith("「kanshi-"));
+    check((await pageB.inputValue("#poem-input")) === exported.cells.map((c) => c || "＿").join("").match(/.{7}/gu).join("\n"), `${label}: 読み込むと貼り付けの本文も読み込んだ詩になる`);
+    await pageB.locator("#tab-grid").click();
+    check(same(await stateOf(pageB), exported), `${label}: 貼り付けモードで読み込んでマス目に移っても、読み込んだ詩のまま`);
+
+    // 新しく始める（貼り付けモードで始めても、マス目に移って古い詩が戻らない）
+    await pageB.locator("#tab-paste").click();
+    await pageB.locator("#new-poem").click();
+    check((await pageB.inputValue("#poem-input")) === "", `${label}: 新しく始めると貼り付けの本文も空になる`);
+    await pageB.locator("#tab-grid").click();
+    const fresh = await stateOf(pageB);
+    check(fresh.history.length === 0 && fresh.cells.every((c) => c === "") && fresh.required.length === 0, `${label}: 新しく始めると空になる`);
+    await ctxB.close();
+
+    // 書き込めない（容量が埋まっているなど）状態で開き直しても、前回の詩は戻り、自動保存できないことを示す
+    await page.addInitScript(() => {
+      Storage.prototype.setItem = () => {
+        throw new DOMException("quota", "QuotaExceededError");
+      };
+    });
+    await page.reload();
+    await page.waitForSelector("#grid-mode .gin");
+    check(same(await stateOf(page), exported), `${label}: 書き込めなくても、前回の詩は読める`);
+    check((await page.locator("#save-status").textContent()).includes("自動保存できませんでした"), `${label}: 書き込めないことを示す`);
+    await ctxA.close();
+
+    // 保存が壊れていて、別のキーに残せないときは、元のデータを上書きしない
+    const ctxD = await browser.newContext(desktop);
+    await ctxD.addInitScript(() => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("kanshi-app/poem/v1", "{broken");
+      const set = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k, v) {
+        if (String(k).endsWith(":broken")) throw new DOMException("quota", "QuotaExceededError");
+        return set.call(this, k, v);
+      };
+    });
+    const pageD = await open(ctxD);
+    await pageD.locator(`.gin[data-index="0"]`).click();
+    await pageD.keyboard.insertText(q03[0]);
+    const kept = await pageD.evaluate(() => localStorage.getItem("kanshi-app/poem/v1"));
+    check(kept === "{broken", `${label}: 壊れたデータを残せないときは、元のキーに上書きしない`);
+    check((await pageD.locator("#save-status").textContent()).includes("自動保存を止めています"), `${label}: 自動保存を止めたことを示す`);
+    check((await pageD.locator("#save-note").textContent()).includes("読み込めませんでした"), `${label}: 読み込めなかったことを示す`);
+    await ctxD.close();
+
+    // 貼り付けモードで編集した本文：タブを移さずに書き出しても記録に入り、開き直しても残る
+    const ctxE = await browser.newContext(desktop);
+    const pageE = await open(ctxE);
+    await pageE.locator("#tab-paste").click();
+    await pageE.fill("#poem-input", q03.join("\n"));
+    const [dlE] = await Promise.all([pageE.waitForEvent("download"), pageE.locator("#export").click()]);
+    const fileE = join(work, "paste-export.json");
+    await dlE.saveAs(fileE);
+    const jsonE = JSON.parse(readFileSync(fileE, "utf-8"));
+    check(
+      jsonE.working.join("") === q03.join("") && jsonE.events.every((e) => e.origin === "paste"),
+      `${label}: 貼り付けモードのまま書き出すと、本文をマス目に移して記録してから書き出す`,
+    );
+    let downloads = 0;
+    pageE.on("download", () => downloads++);
+    await pageE.fill("#poem-input", q03.join("，\n"));
+    await pageE.locator("#export").click();
+    check(
+      (await pageE.locator("#save-note").textContent()).includes("書き出していません") && downloads === 0,
+      `${label}: マス目に移せない本文では書き出さず、理由を示す`,
+    );
+    const q10 = poem("q10").lines.join("\n");
+    await pageE.fill("#poem-input", q10);
+    await pageE.reload();
+    await pageE.waitForSelector("#poem-input");
+    check((await pageE.getAttribute("#tab-paste", "aria-selected")) === "true", `${label}: マス目に移していない貼り付けの本文があれば、貼り付けモードで始まる`);
+    check((await pageE.inputValue("#poem-input")) === q10, `${label}: マス目に移していない貼り付けの本文は、開き直しても残る`);
+    // 開き直したあと、タブを移さずに書き出しても、その本文が入る
+    const [dlE2] = await Promise.all([pageE.waitForEvent("download"), pageE.locator("#export").click()]);
+    const fileE2 = join(work, "paste-export-2.json");
+    await dlE2.saveAs(fileE2);
+    check(JSON.parse(readFileSync(fileE2, "utf-8")).working.join("") === q10.replaceAll("\n", ""), `${label}: 開き直したあと、そのまま書き出しても貼り付けの本文が入る`);
+    await pageE.locator("#tab-grid").click();
+    const cellsE = await pageE.$$eval(".gin", (els) => els.map((e) => e.value).join(""));
+    check(cellsE === q10.replaceAll("\n", ""), `${label}: 開き直したあとでマス目に移すと、その本文がマス目に入る`);
+    await ctxE.close();
+
+    // 貼り付け欄だけに本文があるときも、新しく始める・読み込むの前に確認し、やめれば本文は残る
+    const ctxF = await browser.newContext(desktop);
+    const pageF = await ctxF.newPage();
+    let answer = false;
+    let asked = 0;
+    pageF.on("dialog", (d) => {
+      asked++;
+      void (answer ? d.accept() : d.dismiss());
+    });
+    pageF.on("pageerror", (e) => errors.push(String(e)));
+    await pageF.goto(`${ORIGIN}/`);
+    await pageF.waitForSelector("#grid-mode .gin");
+    await pageF.locator("#tab-paste").click();
+    await pageF.fill("#poem-input", q10);
+    await pageF.locator("#new-poem").click();
+    check(asked === 1 && (await pageF.inputValue("#poem-input")) === q10, `${label}: 貼り付け欄だけに本文があっても「新しく始める」は確認し、やめれば残る`);
+    await pageF.setInputFiles("#import-file", file);
+    await pageF.waitForTimeout(300);
+    check(asked === 2 && (await pageF.inputValue("#poem-input")) === q10, `${label}: 貼り付け欄だけに本文があっても読み込みは確認し、やめれば残る`);
+    answer = true;
+    await pageF.locator("#new-poem").click();
+    check((await pageF.inputValue("#poem-input")) === "", `${label}: 確認して新しく始めれば空になる`);
+    await ctxF.close();
+
+    // localStorage が使えない環境でも動き、自動保存できないことを示す
+    const ctxC = await browser.newContext(desktop);
+    await ctxC.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        get() {
+          throw new DOMException("denied", "SecurityError");
+        },
+      });
+    });
+    const pageC = await open(ctxC);
+    check((await pageC.locator("#save-status").textContent()).includes("自動保存が使えません"), `${label}: localStorage が使えないと示す`);
+    await pageC.locator(`.gin[data-index="0"]`).click();
+    await pageC.keyboard.insertText(q03[0]);
+    check((await stateOf(pageC)).history.length === 1, `${label}: localStorage が使えなくても作詩と記録はできる`);
+    await ctxC.close();
+    check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
   }
 } finally {
   await browser.close();
