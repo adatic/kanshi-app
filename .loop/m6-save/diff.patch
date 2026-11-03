@@ -22,7 +22,7 @@ index d792bcf..55fe659 100644
  
  ### m6-log — 由来の記録と、必須要素の消失警告（M6）
 diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
-index 45d26b3..0c8da34 100644
+index 45d26b3..f690780 100644
 --- a/apps/web/e2e/smoke.mjs
 +++ b/apps/web/e2e/smoke.mjs
 @@ -2,7 +2,9 @@
@@ -36,7 +36,7 @@ index 45d26b3..0c8da34 100644
  import { fileURLToPath } from "node:url";
  import { chromium } from "playwright";
  
-@@ -362,6 +364,122 @@ try {
+@@ -362,6 +364,166 @@ try {
      check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
      await context.close();
    }
@@ -132,12 +132,56 @@ index 45d26b3..0c8da34 100644
 +    const note = await pageB.locator("#save-note").textContent();
 +    check(note.includes("合いません") && same(await stateOf(pageB), exported), `${label}: 記録の合わないファイルは理由を示して読み込まない（${note}）`);
 +
-+    // 新しく始める
++    // 貼り付けモードで読み込んでからマス目に移っても、読み込んだ詩のまま（古い貼り付けの本文で上書きしない）
++    await pageB.locator("#tab-paste").click();
++    await pageB.fill("#poem-input", q03.join("\n"));
++    await pageB.setInputFiles("#import-file", file);
++    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.startsWith("「kanshi-"));
++    check((await pageB.inputValue("#poem-input")) === exported.cells.map((c) => c || "＿").join("").match(/.{7}/gu).join("\n"), `${label}: 読み込むと貼り付けの本文も読み込んだ詩になる`);
++    await pageB.locator("#tab-grid").click();
++    check(same(await stateOf(pageB), exported), `${label}: 貼り付けモードで読み込んでマス目に移っても、読み込んだ詩のまま`);
++
++    // 新しく始める（貼り付けモードで始めても、マス目に移って古い詩が戻らない）
++    await pageB.locator("#tab-paste").click();
 +    await pageB.locator("#new-poem").click();
++    check((await pageB.inputValue("#poem-input")) === "", `${label}: 新しく始めると貼り付けの本文も空になる`);
++    await pageB.locator("#tab-grid").click();
 +    const fresh = await stateOf(pageB);
 +    check(fresh.history.length === 0 && fresh.cells.every((c) => c === "") && fresh.required.length === 0, `${label}: 新しく始めると空になる`);
-+    await ctxA.close();
 +    await ctxB.close();
++
++    // 書き込めない（容量が埋まっているなど）状態で開き直しても、前回の詩は戻り、自動保存できないことを示す
++    await page.addInitScript(() => {
++      Storage.prototype.setItem = () => {
++        throw new DOMException("quota", "QuotaExceededError");
++      };
++    });
++    await page.reload();
++    await page.waitForSelector("#grid-mode .gin");
++    check(same(await stateOf(page), exported), `${label}: 書き込めなくても、前回の詩は読める`);
++    check((await page.locator("#save-status").textContent()).includes("自動保存できませんでした"), `${label}: 書き込めないことを示す`);
++    await ctxA.close();
++
++    // 保存が壊れていて、別のキーに残せないときは、元のデータを上書きしない
++    const ctxD = await browser.newContext(desktop);
++    await ctxD.addInitScript(() => {
++      if (sessionStorage.getItem("seeded")) return;
++      sessionStorage.setItem("seeded", "1");
++      localStorage.setItem("kanshi-app/poem/v1", "{broken");
++      const set = Storage.prototype.setItem;
++      Storage.prototype.setItem = function (k, v) {
++        if (String(k).endsWith(":broken")) throw new DOMException("quota", "QuotaExceededError");
++        return set.call(this, k, v);
++      };
++    });
++    const pageD = await open(ctxD);
++    await pageD.locator(`.gin[data-index="0"]`).click();
++    await pageD.keyboard.insertText(q03[0]);
++    const kept = await pageD.evaluate(() => localStorage.getItem("kanshi-app/poem/v1"));
++    check(kept === "{broken", `${label}: 壊れたデータを残せないときは、元のキーに上書きしない`);
++    check((await pageD.locator("#save-status").textContent()).includes("自動保存を止めています"), `${label}: 自動保存を止めたことを示す`);
++    check((await pageD.locator("#save-note").textContent()).includes("読み込めませんでした"), `${label}: 読み込めなかったことを示す`);
++    await ctxD.close();
 +
 +    // localStorage が使えない環境でも動き、自動保存できないことを示す
 +    const ctxC = await browser.newContext(desktop);
@@ -160,7 +204,7 @@ index 45d26b3..0c8da34 100644
    await browser.close();
    server.kill();
 diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
-index e5db5b9..48f95b4 100644
+index e5db5b9..1c76ecc 100644
 --- a/apps/web/src/main.ts
 +++ b/apps/web/src/main.ts
 @@ -21,6 +21,7 @@ import {
@@ -171,23 +215,35 @@ index e5db5b9..48f95b4 100644
  import { gridEditor } from "./gridEditor";
  import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
  import { cellPanel, h, resultParts, resultView } from "./render";
-@@ -148,10 +149,30 @@ function requiredItem(
+@@ -148,10 +149,42 @@ function requiredItem(
    );
  }
  
 -function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
-+/** 起動時に読み込んだ詩と、保存先 */
-+type Startup = { doc: PoemDoc; store: KeyValueStore | null; note: string };
++/**
++ * 起動時に読み込んだ詩と、保存先。
++ * saveTo は自動保存の先。壊れたデータを別のキーに残せなかったときは、元のデータを上書きしないよう null にし、blocked に理由を入れる
++ */
++type Startup = { doc: PoemDoc; store: KeyValueStore | null; saveTo: KeyValueStore | null; blocked: string | null; note: string };
 +
 +/** 保存先から詩を読み込む。読めなければ新しく始め、理由を note に入れる */
 +function startup(): Startup {
 +  const store = browserStorage();
 +  const r = loadFromStorage(store);
-+  if ("doc" in r) return { doc: r.doc, store, note: "前回の続きから開きました。" };
++  if ("doc" in r) return { doc: r.doc, store, saveTo: store, blocked: null, note: "前回の続きから開きました。" };
 +  if ("error" in r) {
-+    return { doc: newDoc(now()), store, note: `保存されていた詩を読み込めませんでした（${r.error}）。新しく始めます。読めなかったデータは、このブラウザの「${r.keptAs}」に残してあります。` };
++    const note = `保存されていた詩を読み込めませんでした（${r.error}）。新しく始めます。`;
++    return r.keptAs !== null
++      ? { doc: newDoc(now()), store, saveTo: store, blocked: null, note: `${note}読めなかったデータは、このブラウザの「${r.keptAs}」に残してあります。` }
++      : {
++          doc: newDoc(now()),
++          store,
++          saveTo: null,
++          blocked: "読めなかった前回のデータを別の場所に残せなかったので、上書きしないよう自動保存を止めています。「書き出す」でファイルに保存してください。",
++          note,
++        };
 +  }
-+  return { doc: newDoc(now()), store, note: "" };
++  return { doc: newDoc(now()), store, saveTo: store, blocked: null, note: "" };
 +}
 +
 +/** 書き出すファイルの名前（kanshi-20261103-0915.json） */
@@ -204,7 +260,7 @@ index e5db5b9..48f95b4 100644
    let selected: number | null = null;
    /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
    let slotName: string | null = null;
-@@ -269,6 +290,82 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+@@ -269,6 +302,87 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
      requiredList,
    );
  
@@ -224,6 +280,9 @@ index e5db5b9..48f95b4 100644
 +    reasonInput.value = "";
 +    settings.set(currentSettings(doc));
 +    editor.setGrid(doc.working);
++    // 貼り付けモードの本文も新しい詩にそろえる（古い本文が、タブを移ったときに新しい詩を上書きしないように）
++    input.value = gridToText(doc.working);
++    gridEdited = false;
 +    syncNote.textContent = "";
 +    update();
 +  };
@@ -273,21 +332,23 @@ index e5db5b9..48f95b4 100644
 +  );
 +  let lastSaved: boolean | null = null;
 +  const autosave = () => {
-+    const ok = saveToStorage(init.store, doc);
++    const ok = saveToStorage(init.saveTo, doc);
 +    if (ok === lastSaved) return;
 +    lastSaved = ok;
 +    saveStatus.textContent = ok
 +      ? "このブラウザに自動で保存しています。"
-+      : init.store === null
-+        ? "このブラウザでは自動保存が使えません。「書き出す」でファイルに保存してください。"
-+        : "自動保存できませんでした（保存できる量を超えたなど）。「書き出す」でファイルに保存してください。";
++      : init.blocked !== null
++        ? init.blocked
++        : init.store === null
++          ? "このブラウザでは自動保存が使えません。「書き出す」でファイルに保存してください。"
++          : "自動保存できませんでした（保存できる量を超えたなど）。「書き出す」でファイルに保存してください。";
 +    saveStatus.classList.toggle("warn", !ok);
 +  };
 +
    const gridMode = h(
      "section",
      { id: "grid-mode", class: "grid-mode", role: "tabpanel", "aria-labelledby": "tab-grid" },
-@@ -422,6 +519,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+@@ -422,6 +536,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
    };
  
    function update() {
@@ -295,7 +356,7 @@ index e5db5b9..48f95b4 100644
      const current = currentSettings(doc);
      const options = optionsOf(current);
      const showPattern = current.showPattern;
-@@ -488,7 +586,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+@@ -488,7 +603,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
      "div",
      { class: "app" },
      h("div", { class: "tabs", role: "tablist", "aria-label": "入力のしかた" }, tabs.grid, tabs.paste),
@@ -304,7 +365,7 @@ index e5db5b9..48f95b4 100644
    );
  }
  
-@@ -496,7 +594,7 @@ async function start() {
+@@ -496,7 +611,7 @@ async function start() {
    const root = document.getElementById("app")!;
    try {
      const [data, rhymes] = await Promise.all([loadEngineData(), loadRhymes()]);
@@ -315,7 +376,7 @@ index e5db5b9..48f95b4 100644
    }
 diff --git a/apps/web/src/storage.ts b/apps/web/src/storage.ts
 new file mode 100644
-index 0000000..d36374a
+index 0000000..a6d6e86
 --- /dev/null
 +++ b/apps/web/src/storage.ts
 @@ -0,0 +1,180 @@
@@ -447,7 +508,8 @@ index 0000000..d36374a
 +  };
 +}
 +
-+export type LoadResult = { doc: PoemDoc } | { none: true } | { unavailable: true } | { error: string; keptAs: string };
++/** error のとき keptAs は、壊れたデータを残したキー。残せなかったら null（そのときは元のキーに上書きしてはいけない） */
++export type LoadResult = { doc: PoemDoc } | { none: true } | { unavailable: true } | { error: string; keptAs: string | null };
 +
 +/**
 + * 保存先から読み込む。今の版のキーになければ、前の版のキーを新しい順に探して変換する。
@@ -465,10 +527,10 @@ index 0000000..d36374a
 +      const keptAs = `${key}:broken`;
 +      try {
 +        store.setItem(keptAs, text);
++        return { error: r.error, keptAs };
 +      } catch {
-+        // 残せなくても、読み込めなかったことは知らせる
++        return { error: r.error, keptAs: null };
 +      }
-+      return { error: r.error, keptAs };
 +    }
 +    return { none: true };
 +  } catch {
@@ -487,14 +549,13 @@ index 0000000..d36374a
 +  }
 +}
 +
-+/** ブラウザの localStorage。使えなければ（プライベートブラウズ、設定で禁止など）null */
++/**
++ * ブラウザの localStorage。取り出せなければ（設定で禁止など）null。
++ * 書き込めるかどうかはここでは試さない（容量が埋まっていても、前回の詩は読める）。書き込めないことは saveToStorage が false で知らせる
++ */
 +export function browserStorage(): KeyValueStore | null {
 +  try {
-+    const s = window.localStorage;
-+    const probe = `${APP}/probe`;
-+    s.setItem(probe, "1");
-+    s.removeItem(probe);
-+    return s;
++    return window.localStorage ?? null;
 +  } catch {
 +    return null;
 +  }
@@ -538,10 +599,10 @@ index 87fe80b..0e5021d 100644
 +}
 diff --git a/apps/web/test/storage.test.ts b/apps/web/test/storage.test.ts
 new file mode 100644
-index 0000000..8221579
+index 0000000..9927375
 --- /dev/null
 +++ b/apps/web/test/storage.test.ts
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,171 @@
 +// 保存・書き出し・読み込み（apps/web/src/storage.ts）。字は平仄に関わらない架空の扱い（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
 +import { DEFAULT_SETTINGS, SCHEMA, addRequired, commitPending, newDoc, record, setSettings, setWorking, type PoemDoc } from "../src/doc";
@@ -571,7 +632,7 @@ index 0000000..8221579
 +};
 +
 +/** 例外を投げられる、メモリ上の保存先 */
-+function memoryStorage(opts: { throwOnGet?: boolean; throwOnSet?: boolean } = {}) {
++function memoryStorage(opts: { throwOnGet?: boolean; throwOnSet?: boolean | ((key: string) => boolean) } = {}) {
 +  const items = new Map<string, string>();
 +  return {
 +    items,
@@ -580,7 +641,7 @@ index 0000000..8221579
 +      return items.get(k) ?? null;
 +    },
 +    setItem(k: string, v: string) {
-+      if (opts.throwOnSet) throw new Error("quota");
++      if (typeof opts.throwOnSet === "function" ? opts.throwOnSet(k) : opts.throwOnSet) throw new Error("quota");
 +      items.set(k, v);
 +    },
 +  };
@@ -681,6 +742,20 @@ index 0000000..8221579
 +    const r = loadFromStorage(s);
 +    expect(r).toEqual({ error: "JSON として読めません。", keptAs: `${STORAGE_KEY}:broken` });
 +    expect(s.items.get(`${STORAGE_KEY}:broken`)).toBe("{broken");
++  });
++
++  it("壊れたデータを別のキーに残せなければ keptAs は null（呼び出し側は元のキーに上書きしない）", () => {
++    const s = memoryStorage({ throwOnSet: (k) => k.endsWith(":broken") });
++    s.items.set(STORAGE_KEY, "{broken");
++    expect(loadFromStorage(s)).toEqual({ error: "JSON として読めません。", keptAs: null });
++    expect(s.items.get(STORAGE_KEY)).toBe("{broken");
++  });
++
++  it("書き込めない（容量が埋まっているなど）保存先でも、保存済みの詩は読める", () => {
++    const s = memoryStorage({ throwOnSet: true });
++    s.items.set(STORAGE_KEY, serializeDoc(sampleDoc()));
++    expect(loadFromStorage(s)).toEqual({ doc: sampleDoc() });
++    expect(saveToStorage(s, sampleDoc())).toBe(false);
 +  });
 +
 +  it("前の版のキーに保存があれば、変換して読み込む", () => {
