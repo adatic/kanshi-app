@@ -331,15 +331,16 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
     syncNote.textContent = "";
     update();
   };
-  const hasWork = () => doc.events.length > 0 || hasPoem() || currentRequired(doc).length > 0;
+  /** 消える前に確認すべきものがあるか（マス目に移していない貼り付けの本文も含む） */
+  const hasWork = () =>
+    doc.events.length > 0 || hasPoem() || currentRequired(doc).length > 0 || (pasteDirty && input.value.trim() !== "");
   exportButton.addEventListener("click", () => {
-    // 貼り付けモードで編集した本文は、先にマス目に移して記録する（タブを移ったときと同じ）
-    if (mode === "paste") {
-      const moved = movePasteToGrid();
-      if (moved !== null) {
-        saveNote.textContent = `貼り付けた本文をマス目に移せないため、書き出していません。${moved}`;
-        return;
-      }
+    // マス目に移していない貼り付けの本文は、先にマス目に移して記録する（タブを移ったときと同じ）。
+    // 移せないとき、貼り付けモードでは書き出さない。マス目モード（移せなかった本文を残したまま移ってきた）では、入らないことを示して書き出す
+    const moved = movePasteToGrid();
+    if (moved !== null && mode === "paste") {
+      saveNote.textContent = `貼り付けた本文をマス目に移せないため、書き出していません。${moved}`;
+      return;
     }
     // 書き出す前に、未確定の手入力を確定する（書き出したファイルは記録だけでマス目が決まる）
     apply(commitPending(doc, now(), { reason: reason() }));
@@ -350,7 +351,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    saveNote.textContent = `書き出しました（記録 ${doc.events.length}件）。`;
+    saveNote.textContent = `書き出しました（記録 ${doc.events.length}件）。${moved !== null ? "マス目に移せなかった貼り付けモードの本文は入っていません。" : ""}`;
   });
   importButton.addEventListener("click", () => importFile.click());
   importFile.addEventListener("change", () => {
@@ -514,13 +515,18 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
       }
     }
     mode = next;
+    showMode();
+    update();
+  };
+  function showMode() {
     refreshTabs();
     gridMode.hidden = mode !== "grid";
     pasteMode.hidden = mode !== "paste";
     requiredCard.hidden = mode !== "grid";
-    update();
-  };
-  refreshTabs();
+  }
+  // マス目に移していない貼り付けの本文が残っていれば、離れたときと同じく貼り付けモードで始める
+  if (pasteDirty) mode = "paste";
+  showMode();
   for (const m of ["grid", "paste"] as const) {
     tabs[m].addEventListener("click", () => setMode(m));
     tabs[m].addEventListener("keydown", (e) => {

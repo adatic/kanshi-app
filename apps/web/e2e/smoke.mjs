@@ -531,13 +531,42 @@ try {
     const q10 = poem("q10").lines.join("\n");
     await pageE.fill("#poem-input", q10);
     await pageE.reload();
-    await pageE.waitForSelector("#grid-mode .gin");
-    await pageE.locator("#tab-paste").click();
+    await pageE.waitForSelector("#poem-input");
+    check((await pageE.getAttribute("#tab-paste", "aria-selected")) === "true", `${label}: マス目に移していない貼り付けの本文があれば、貼り付けモードで始まる`);
     check((await pageE.inputValue("#poem-input")) === q10, `${label}: マス目に移していない貼り付けの本文は、開き直しても残る`);
+    // 開き直したあと、タブを移さずに書き出しても、その本文が入る
+    const [dlE2] = await Promise.all([pageE.waitForEvent("download"), pageE.locator("#export").click()]);
+    const fileE2 = join(work, "paste-export-2.json");
+    await dlE2.saveAs(fileE2);
+    check(JSON.parse(readFileSync(fileE2, "utf-8")).working.join("") === q10.replaceAll("\n", ""), `${label}: 開き直したあと、そのまま書き出しても貼り付けの本文が入る`);
     await pageE.locator("#tab-grid").click();
     const cellsE = await pageE.$$eval(".gin", (els) => els.map((e) => e.value).join(""));
     check(cellsE === q10.replaceAll("\n", ""), `${label}: 開き直したあとでマス目に移すと、その本文がマス目に入る`);
     await ctxE.close();
+
+    // 貼り付け欄だけに本文があるときも、新しく始める・読み込むの前に確認し、やめれば本文は残る
+    const ctxF = await browser.newContext(desktop);
+    const pageF = await ctxF.newPage();
+    let answer = false;
+    let asked = 0;
+    pageF.on("dialog", (d) => {
+      asked++;
+      void (answer ? d.accept() : d.dismiss());
+    });
+    pageF.on("pageerror", (e) => errors.push(String(e)));
+    await pageF.goto(`${ORIGIN}/`);
+    await pageF.waitForSelector("#grid-mode .gin");
+    await pageF.locator("#tab-paste").click();
+    await pageF.fill("#poem-input", q10);
+    await pageF.locator("#new-poem").click();
+    check(asked === 1 && (await pageF.inputValue("#poem-input")) === q10, `${label}: 貼り付け欄だけに本文があっても「新しく始める」は確認し、やめれば残る`);
+    await pageF.setInputFiles("#import-file", file);
+    await pageF.waitForTimeout(300);
+    check(asked === 2 && (await pageF.inputValue("#poem-input")) === q10, `${label}: 貼り付け欄だけに本文があっても読み込みは確認し、やめれば残る`);
+    answer = true;
+    await pageF.locator("#new-poem").click();
+    check((await pageF.inputValue("#poem-input")) === "", `${label}: 確認して新しく始めれば空になる`);
+    await ctxF.close();
 
     // localStorage が使えない環境でも動き、自動保存できないことを示す
     const ctxC = await browser.newContext(desktop);
