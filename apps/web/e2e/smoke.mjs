@@ -456,12 +456,56 @@ try {
     const note = await pageB.locator("#save-note").textContent();
     check(note.includes("合いません") && same(await stateOf(pageB), exported), `${label}: 記録の合わないファイルは理由を示して読み込まない（${note}）`);
 
-    // 新しく始める
+    // 貼り付けモードで読み込んでからマス目に移っても、読み込んだ詩のまま（古い貼り付けの本文で上書きしない）
+    await pageB.locator("#tab-paste").click();
+    await pageB.fill("#poem-input", q03.join("\n"));
+    await pageB.setInputFiles("#import-file", file);
+    await pageB.waitForFunction(() => document.querySelector("#save-note")?.textContent?.startsWith("「kanshi-"));
+    check((await pageB.inputValue("#poem-input")) === exported.cells.map((c) => c || "＿").join("").match(/.{7}/gu).join("\n"), `${label}: 読み込むと貼り付けの本文も読み込んだ詩になる`);
+    await pageB.locator("#tab-grid").click();
+    check(same(await stateOf(pageB), exported), `${label}: 貼り付けモードで読み込んでマス目に移っても、読み込んだ詩のまま`);
+
+    // 新しく始める（貼り付けモードで始めても、マス目に移って古い詩が戻らない）
+    await pageB.locator("#tab-paste").click();
     await pageB.locator("#new-poem").click();
+    check((await pageB.inputValue("#poem-input")) === "", `${label}: 新しく始めると貼り付けの本文も空になる`);
+    await pageB.locator("#tab-grid").click();
     const fresh = await stateOf(pageB);
     check(fresh.history.length === 0 && fresh.cells.every((c) => c === "") && fresh.required.length === 0, `${label}: 新しく始めると空になる`);
-    await ctxA.close();
     await ctxB.close();
+
+    // 書き込めない（容量が埋まっているなど）状態で開き直しても、前回の詩は戻り、自動保存できないことを示す
+    await page.addInitScript(() => {
+      Storage.prototype.setItem = () => {
+        throw new DOMException("quota", "QuotaExceededError");
+      };
+    });
+    await page.reload();
+    await page.waitForSelector("#grid-mode .gin");
+    check(same(await stateOf(page), exported), `${label}: 書き込めなくても、前回の詩は読める`);
+    check((await page.locator("#save-status").textContent()).includes("自動保存できませんでした"), `${label}: 書き込めないことを示す`);
+    await ctxA.close();
+
+    // 保存が壊れていて、別のキーに残せないときは、元のデータを上書きしない
+    const ctxD = await browser.newContext(desktop);
+    await ctxD.addInitScript(() => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("kanshi-app/poem/v1", "{broken");
+      const set = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k, v) {
+        if (String(k).endsWith(":broken")) throw new DOMException("quota", "QuotaExceededError");
+        return set.call(this, k, v);
+      };
+    });
+    const pageD = await open(ctxD);
+    await pageD.locator(`.gin[data-index="0"]`).click();
+    await pageD.keyboard.insertText(q03[0]);
+    const kept = await pageD.evaluate(() => localStorage.getItem("kanshi-app/poem/v1"));
+    check(kept === "{broken", `${label}: 壊れたデータを残せないときは、元のキーに上書きしない`);
+    check((await pageD.locator("#save-status").textContent()).includes("自動保存を止めています"), `${label}: 自動保存を止めたことを示す`);
+    check((await pageD.locator("#save-note").textContent()).includes("読み込めませんでした"), `${label}: 読み込めなかったことを示す`);
+    await ctxD.close();
 
     // localStorage が使えない環境でも動き、自動保存できないことを示す
     const ctxC = await browser.newContext(desktop);

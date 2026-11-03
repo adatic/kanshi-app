@@ -149,18 +149,30 @@ function requiredItem(
   );
 }
 
-/** 起動時に読み込んだ詩と、保存先 */
-type Startup = { doc: PoemDoc; store: KeyValueStore | null; note: string };
+/**
+ * 起動時に読み込んだ詩と、保存先。
+ * saveTo は自動保存の先。壊れたデータを別のキーに残せなかったときは、元のデータを上書きしないよう null にし、blocked に理由を入れる
+ */
+type Startup = { doc: PoemDoc; store: KeyValueStore | null; saveTo: KeyValueStore | null; blocked: string | null; note: string };
 
 /** 保存先から詩を読み込む。読めなければ新しく始め、理由を note に入れる */
 function startup(): Startup {
   const store = browserStorage();
   const r = loadFromStorage(store);
-  if ("doc" in r) return { doc: r.doc, store, note: "前回の続きから開きました。" };
+  if ("doc" in r) return { doc: r.doc, store, saveTo: store, blocked: null, note: "前回の続きから開きました。" };
   if ("error" in r) {
-    return { doc: newDoc(now()), store, note: `保存されていた詩を読み込めませんでした（${r.error}）。新しく始めます。読めなかったデータは、このブラウザの「${r.keptAs}」に残してあります。` };
+    const note = `保存されていた詩を読み込めませんでした（${r.error}）。新しく始めます。`;
+    return r.keptAs !== null
+      ? { doc: newDoc(now()), store, saveTo: store, blocked: null, note: `${note}読めなかったデータは、このブラウザの「${r.keptAs}」に残してあります。` }
+      : {
+          doc: newDoc(now()),
+          store,
+          saveTo: null,
+          blocked: "読めなかった前回のデータを別の場所に残せなかったので、上書きしないよう自動保存を止めています。「書き出す」でファイルに保存してください。",
+          note,
+        };
   }
-  return { doc: newDoc(now()), store, note: "" };
+  return { doc: newDoc(now()), store, saveTo: store, blocked: null, note: "" };
 }
 
 /** 書き出すファイルの名前（kanshi-20261103-0915.json） */
@@ -306,6 +318,9 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
     reasonInput.value = "";
     settings.set(currentSettings(doc));
     editor.setGrid(doc.working);
+    // 貼り付けモードの本文も新しい詩にそろえる（古い本文が、タブを移ったときに新しい詩を上書きしないように）
+    input.value = gridToText(doc.working);
+    gridEdited = false;
     syncNote.textContent = "";
     update();
   };
@@ -355,14 +370,16 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
   );
   let lastSaved: boolean | null = null;
   const autosave = () => {
-    const ok = saveToStorage(init.store, doc);
+    const ok = saveToStorage(init.saveTo, doc);
     if (ok === lastSaved) return;
     lastSaved = ok;
     saveStatus.textContent = ok
       ? "このブラウザに自動で保存しています。"
-      : init.store === null
-        ? "このブラウザでは自動保存が使えません。「書き出す」でファイルに保存してください。"
-        : "自動保存できませんでした（保存できる量を超えたなど）。「書き出す」でファイルに保存してください。";
+      : init.blocked !== null
+        ? init.blocked
+        : init.store === null
+          ? "このブラウザでは自動保存が使えません。「書き出す」でファイルに保存してください。"
+          : "自動保存できませんでした（保存できる量を超えたなど）。「書き出す」でファイルに保存してください。";
     saveStatus.classList.toggle("warn", !ok);
   };
 

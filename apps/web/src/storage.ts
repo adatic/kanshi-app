@@ -126,7 +126,8 @@ export function parseDoc(text: string, steps: Readonly<Record<number, Migration>
   };
 }
 
-export type LoadResult = { doc: PoemDoc } | { none: true } | { unavailable: true } | { error: string; keptAs: string };
+/** error のとき keptAs は、壊れたデータを残したキー。残せなかったら null（そのときは元のキーに上書きしてはいけない） */
+export type LoadResult = { doc: PoemDoc } | { none: true } | { unavailable: true } | { error: string; keptAs: string | null };
 
 /**
  * 保存先から読み込む。今の版のキーになければ、前の版のキーを新しい順に探して変換する。
@@ -144,10 +145,10 @@ export function loadFromStorage(store: KeyValueStore | null, steps: Readonly<Rec
       const keptAs = `${key}:broken`;
       try {
         store.setItem(keptAs, text);
+        return { error: r.error, keptAs };
       } catch {
-        // 残せなくても、読み込めなかったことは知らせる
+        return { error: r.error, keptAs: null };
       }
-      return { error: r.error, keptAs };
     }
     return { none: true };
   } catch {
@@ -166,14 +167,13 @@ export function saveToStorage(store: KeyValueStore | null, doc: PoemDoc): boolea
   }
 }
 
-/** ブラウザの localStorage。使えなければ（プライベートブラウズ、設定で禁止など）null */
+/**
+ * ブラウザの localStorage。取り出せなければ（設定で禁止など）null。
+ * 書き込めるかどうかはここでは試さない（容量が埋まっていても、前回の詩は読める）。書き込めないことは saveToStorage が false で知らせる
+ */
 export function browserStorage(): KeyValueStore | null {
   try {
-    const s = window.localStorage;
-    const probe = `${APP}/probe`;
-    s.setItem(probe, "1");
-    s.removeItem(probe);
-    return s;
+    return window.localStorage ?? null;
   } catch {
     return null;
   }

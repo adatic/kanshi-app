@@ -27,7 +27,7 @@ const tweak = (f: (raw: Record<string, unknown>) => void) => {
 };
 
 /** 例外を投げられる、メモリ上の保存先 */
-function memoryStorage(opts: { throwOnGet?: boolean; throwOnSet?: boolean } = {}) {
+function memoryStorage(opts: { throwOnGet?: boolean; throwOnSet?: boolean | ((key: string) => boolean) } = {}) {
   const items = new Map<string, string>();
   return {
     items,
@@ -36,7 +36,7 @@ function memoryStorage(opts: { throwOnGet?: boolean; throwOnSet?: boolean } = {}
       return items.get(k) ?? null;
     },
     setItem(k: string, v: string) {
-      if (opts.throwOnSet) throw new Error("quota");
+      if (typeof opts.throwOnSet === "function" ? opts.throwOnSet(k) : opts.throwOnSet) throw new Error("quota");
       items.set(k, v);
     },
   };
@@ -137,6 +137,20 @@ describe("localStorage への保存", () => {
     const r = loadFromStorage(s);
     expect(r).toEqual({ error: "JSON として読めません。", keptAs: `${STORAGE_KEY}:broken` });
     expect(s.items.get(`${STORAGE_KEY}:broken`)).toBe("{broken");
+  });
+
+  it("壊れたデータを別のキーに残せなければ keptAs は null（呼び出し側は元のキーに上書きしない）", () => {
+    const s = memoryStorage({ throwOnSet: (k) => k.endsWith(":broken") });
+    s.items.set(STORAGE_KEY, "{broken");
+    expect(loadFromStorage(s)).toEqual({ error: "JSON として読めません。", keptAs: null });
+    expect(s.items.get(STORAGE_KEY)).toBe("{broken");
+  });
+
+  it("書き込めない（容量が埋まっているなど）保存先でも、保存済みの詩は読める", () => {
+    const s = memoryStorage({ throwOnSet: true });
+    s.items.set(STORAGE_KEY, serializeDoc(sampleDoc()));
+    expect(loadFromStorage(s)).toEqual({ doc: sampleDoc() });
+    expect(saveToStorage(s, sampleDoc())).toBe(false);
   });
 
   it("前の版のキーに保存があれば、変換して読み込む", () => {
