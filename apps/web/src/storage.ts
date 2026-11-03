@@ -178,3 +178,30 @@ export function browserStorage(): KeyValueStore | null {
     return null;
   }
 }
+
+/** 貼り付けモードの本文の保存先。詩の記録とは別に持つ（7字×4句になっていない書きかけの本文もあるため） */
+export const PASTE_KEY = `${APP}/paste/v${SCHEMA}`;
+
+/** 貼り付けモードの本文と、マス目に移していない編集があるか */
+export type PasteState = { text: string; dirty: boolean };
+
+export function loadPaste(store: KeyValueStore | null): PasteState {
+  const empty = { text: "", dirty: false };
+  if (store === null) return empty;
+  try {
+    const raw: unknown = JSON.parse(store.getItem(PASTE_KEY) ?? "null");
+    return isObj(raw) && typeof raw.text === "string" && typeof raw.dirty === "boolean" ? { text: raw.text, dirty: raw.dirty } : empty;
+  } catch {
+    return empty;
+  }
+}
+
+export function savePaste(store: KeyValueStore | null, paste: PasteState): boolean {
+  if (store === null) return false;
+  try {
+    store.setItem(PASTE_KEY, JSON.stringify(paste));
+    return true;
+  } catch {
+    return false;
+  }
+}

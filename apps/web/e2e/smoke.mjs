@@ -507,6 +507,38 @@ try {
     check((await pageD.locator("#save-note").textContent()).includes("読み込めませんでした"), `${label}: 読み込めなかったことを示す`);
     await ctxD.close();
 
+    // 貼り付けモードで編集した本文：タブを移さずに書き出しても記録に入り、開き直しても残る
+    const ctxE = await browser.newContext(desktop);
+    const pageE = await open(ctxE);
+    await pageE.locator("#tab-paste").click();
+    await pageE.fill("#poem-input", q03.join("\n"));
+    const [dlE] = await Promise.all([pageE.waitForEvent("download"), pageE.locator("#export").click()]);
+    const fileE = join(work, "paste-export.json");
+    await dlE.saveAs(fileE);
+    const jsonE = JSON.parse(readFileSync(fileE, "utf-8"));
+    check(
+      jsonE.working.join("") === q03.join("") && jsonE.events.every((e) => e.origin === "paste"),
+      `${label}: 貼り付けモードのまま書き出すと、本文をマス目に移して記録してから書き出す`,
+    );
+    let downloads = 0;
+    pageE.on("download", () => downloads++);
+    await pageE.fill("#poem-input", q03.join("，\n"));
+    await pageE.locator("#export").click();
+    check(
+      (await pageE.locator("#save-note").textContent()).includes("書き出していません") && downloads === 0,
+      `${label}: マス目に移せない本文では書き出さず、理由を示す`,
+    );
+    const q10 = poem("q10").lines.join("\n");
+    await pageE.fill("#poem-input", q10);
+    await pageE.reload();
+    await pageE.waitForSelector("#grid-mode .gin");
+    await pageE.locator("#tab-paste").click();
+    check((await pageE.inputValue("#poem-input")) === q10, `${label}: マス目に移していない貼り付けの本文は、開き直しても残る`);
+    await pageE.locator("#tab-grid").click();
+    const cellsE = await pageE.$$eval(".gin", (els) => els.map((e) => e.value).join(""));
+    check(cellsE === q10.replaceAll("\n", ""), `${label}: 開き直したあとでマス目に移すと、その本文がマス目に入る`);
+    await ctxE.close();
+
     // localStorage が使えない環境でも動き、自動保存できないことを示す
     const ctxC = await browser.newContext(desktop);
     await ctxC.addInitScript(() => {

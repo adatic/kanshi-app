@@ -21,7 +21,7 @@ import {
   type Settings,
 } from "./doc";
 import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid, writeAt } from "./grid";
-import { browserStorage, loadFromStorage, parseDoc, saveToStorage, serializeDoc, type KeyValueStore } from "./storage";
+import { browserStorage, loadFromStorage, loadPaste, parseDoc, savePaste, saveToStorage, serializeDoc, type KeyValueStore, type PasteState } from "./storage";
 import { gridEditor } from "./gridEditor";
 import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
 import { cellPanel, h, resultParts, resultView } from "./render";
@@ -153,11 +153,15 @@ function requiredItem(
  * 起動時に読み込んだ詩と、保存先。
  * saveTo は自動保存の先。壊れたデータを別のキーに残せなかったときは、元のデータを上書きしないよう null にし、blocked に理由を入れる
  */
-type Startup = { doc: PoemDoc; store: KeyValueStore | null; saveTo: KeyValueStore | null; blocked: string | null; note: string };
+type Startup = { doc: PoemDoc; paste: PasteState; store: KeyValueStore | null; saveTo: KeyValueStore | null; blocked: string | null; note: string };
 
 /** 保存先から詩を読み込む。読めなければ新しく始め、理由を note に入れる */
 function startup(): Startup {
   const store = browserStorage();
+  return { ...startupDoc(store), paste: loadPaste(store) };
+}
+
+function startupDoc(store: KeyValueStore | null): Omit<Startup, "paste"> {
   const r = loadFromStorage(store);
   if ("doc" in r) return { doc: r.doc, store, saveTo: store, blocked: null, note: "前回の続きから開きました。" };
   if ("error" in r) {
@@ -195,6 +199,8 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
   const rhymeIds = rhymes.map((r) => r.id);
   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
   let gridEdited = false;
+  /** 貼り付けモードの本文に、マス目（記録）へ移していない編集があるか */
+  let pasteDirty = init.paste.dirty;
 
   const settings = settingsPanel(data, rhymes, () => {
     doc = setSettings(doc, now(), settings.get());
@@ -321,11 +327,20 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
     // 貼り付けモードの本文も新しい詩にそろえる（古い本文が、タブを移ったときに新しい詩を上書きしないように）
     input.value = gridToText(doc.working);
     gridEdited = false;
+    pasteDirty = false;
     syncNote.textContent = "";
     update();
   };
   const hasWork = () => doc.events.length > 0 || hasPoem() || currentRequired(doc).length > 0;
   exportButton.addEventListener("click", () => {
+    // 貼り付けモードで編集した本文は、先にマス目に移して記録する（タブを移ったときと同じ）
+    if (mode === "paste") {
+      const moved = movePasteToGrid();
+      if (moved !== null) {
+        saveNote.textContent = `貼り付けた本文をマス目に移せないため、書き出していません。${moved}`;
+        return;
+      }
+    }
     // 書き出す前に、未確定の手入力を確定する（書き出したファイルは記録だけでマス目が決まる）
     apply(commitPending(doc, now(), { reason: reason() }));
     update();
@@ -370,7 +385,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
   );
   let lastSaved: boolean | null = null;
   const autosave = () => {
-    const ok = saveToStorage(init.saveTo, doc);
+    const ok = saveToStorage(init.saveTo, doc) && savePaste(init.saveTo, { text: input.value, dirty: pasteDirty });
     if (ok === lastSaved) return;
     lastSaved = ok;
     saveStatus.textContent = ok
@@ -424,16 +439,22 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
     autocomplete: "off",
     "aria-describedby": "poem-help",
   }) as HTMLTextAreaElement;
-  input.addEventListener("input", () => update());
+  input.value = init.paste.text;
+  input.addEventListener("input", () => {
+    pasteDirty = true;
+    update();
+  });
   const output = h("div", { id: "result" });
   const sample = h("button", { type: "button", class: "small", id: "paste-sample" }, "例の詩を入れる");
   sample.addEventListener("click", () => {
     input.value = SAMPLE;
+    pasteDirty = true;
     update();
   });
   const clear = h("button", { type: "button", class: "small" }, "消す");
   clear.addEventListener("click", () => {
     input.value = "";
+    pasteDirty = true;
     update();
     input.focus();
   });
@@ -463,21 +484,34 @@ function app(data: EngineData, rhymes: readonly Rhyme[], init: Startup): HTMLEle
       tabs[m].tabIndex = m === mode ? 0 : -1;
     }
   };
+  /**
+   * 貼り付けモードで編集した本文を、マス目に移して記録する。移せたら（または移すものがなければ）null、
+   * 7字×4句の漢字にならず移せなければ理由を返す（マス目は変えない）
+   */
+  function movePasteToGrid(): string | null {
+    if (!pasteDirty) return null;
+    const r = textToGrid(input.value);
+    if (!("grid" in r)) return r.reasons.join("");
+    apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
+    editor.setGrid(doc.working);
+    pasteDirty = false;
+    gridEdited = false;
+    return null;
+  }
+
   const setMode = (next: Mode) => {
     if (next === mode) return;
     if (next === "grid") {
-      const r = textToGrid(input.value);
-      if ("grid" in r) {
-        apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
-        editor.setGrid(doc.working);
-        syncNote.textContent = "";
-      } else {
-        syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
-      }
+      const reasons = movePasteToGrid();
+      syncNote.textContent = reasons === null ? "" : `貼り付けた本文は、マス目に移していません。${reasons}マス目は前のままです。`;
       gridEdited = false;
     } else {
       apply(commitPending(doc, now(), { reason: reason() }));
-      if (gridEdited || "grid" in textToGrid(input.value)) input.value = gridToText(doc.working);
+      // マス目に移していない貼り付けの編集は残す。ただしマス目を編集したら、マス目の詩で置き換える
+      if (!pasteDirty || gridEdited) {
+        input.value = gridToText(doc.working);
+        pasteDirty = false;
+      }
     }
     mode = next;
     refreshTabs();

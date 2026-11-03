@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, SCHEMA, addRequired, commitPending, newDoc, record, setSettings, setWorking, type PoemDoc } from "../src/doc";
 import { emptyGrid, writeAt } from "../src/grid";
-import { STORAGE_KEY, loadFromStorage, migrate, parseDoc, saveToStorage, serializeDoc, storageKey } from "../src/storage";
+import { PASTE_KEY, STORAGE_KEY, loadFromStorage, loadPaste, migrate, parseDoc, savePaste, saveToStorage, serializeDoc, storageKey } from "../src/storage";
 import { P } from "../../../packages/engine/test/fixture";
 
 const T = (n: number) => `2026-11-03T10:00:${String(n).padStart(2, "0")}.000Z`;
@@ -167,5 +167,24 @@ describe("localStorage への保存", () => {
     saveToStorage(s, d);
     expect(loadFromStorage(s)).toEqual({ doc: d });
     expect((loadFromStorage(s) as { doc: PoemDoc }).doc.working).toEqual(emptyGrid());
+  });
+});
+
+describe("貼り付けモードの本文の保存", () => {
+  it("本文と、マス目に移していない編集があるかを保存して戻す", () => {
+    const s = memoryStorage();
+    expect(loadPaste(s)).toEqual({ text: "", dirty: false });
+    expect(savePaste(s, { text: "甲乙，\n丙", dirty: true })).toBe(true);
+    expect(loadPaste(s)).toEqual({ text: "甲乙，\n丙", dirty: true });
+    expect(PASTE_KEY).toContain(`v${SCHEMA}`);
+  });
+
+  it("保存先がない・壊れている・例外を投げるときは空", () => {
+    expect(loadPaste(null)).toEqual({ text: "", dirty: false });
+    const s = memoryStorage();
+    s.items.set(PASTE_KEY, "{");
+    expect(loadPaste(s)).toEqual({ text: "", dirty: false });
+    expect(loadPaste(memoryStorage({ throwOnGet: true }))).toEqual({ text: "", dirty: false });
+    expect(savePaste(memoryStorage({ throwOnSet: true }), { text: "", dirty: false })).toBe(false);
   });
 });
