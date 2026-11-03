@@ -96,8 +96,11 @@ export function parseDoc(text: string, steps: Readonly<Record<number, Migration>
   }
   const m = migrate(parsed, SCHEMA, steps);
   if ("error" in m) return m;
-  const raw = m.raw;
+  return validateDoc(m.raw);
+}
 
+/** 現行版の形と編集記録の整合性を、従来と同じ順序で検査する。 */
+function validateDoc(raw: Raw): { doc: PoemDoc } | { error: string } {
   if (!Array.isArray(raw.events)) return { error: "記録（events）がありません。" };
   for (const [k, e] of raw.events.entries()) if (!isEvent(e)) return { error: `${k + 1}件目の記録の形が正しくありません。` };
   if (!Array.isArray(raw.snapshots) || raw.snapshots.length === 0) return { error: "スナップショットがありません。" };
