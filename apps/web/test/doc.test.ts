@@ -32,6 +32,7 @@ describe("newDoc", () => {
     expect(d.working).toEqual(emptyGrid());
     expect(d.events).toEqual([]);
     expect(d.snapshots).toEqual([{ at: T(0), required: [], settings: DEFAULT_SETTINGS }]);
+    expect(d.requiredSeen).toEqual([]);
   });
 });
 
@@ -174,6 +175,22 @@ describe("requiredWarnings（必須要素の消失警告）", () => {
     d = record(d, T(2), write(d.working, 0, w), { actor: "author", origin: "required:r1" });
     expect(requiredWarnings(d)).toEqual([]);
     d = setWorking(d, write(d.working, 1, P[9]!)); // 未確定の書き換えでも、いまのマス目から消えれば警告
+    expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
+  });
+
+  it("未確定の手入力で入れてから、確定せずに書き換えて消しても lost", () => {
+    let d = addRequired(newDoc(T(0)), T(1), w);
+    d = setWorking(d, write(d.working, 7, w)); // 承句に入れた（未確定）
+    expect(requiredWarnings(d)).toEqual([]);
+    d = setWorking(d, write(d.working, 8, P[9]!)); // 同じ句のまま1字を書き換えた
+    expect(d.events).toEqual([]);
+    expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
+  });
+
+  it("登録したときにすでに入っていた語も、あとで消えれば lost", () => {
+    let d = setWorking(newDoc(T(0)), write(emptyGrid(), 0, w));
+    d = addRequired(d, T(1), w);
+    d = setWorking(d, emptyGrid());
     expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
   });
 

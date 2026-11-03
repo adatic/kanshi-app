@@ -345,6 +345,19 @@ try {
     check(r[0].includes(`必須要素「${word0}」`) && r[0].includes("作者"), `${label}: 必須要素の配置は、どの必須要素からかを記録する（${r[0]}）`);
     // 必須要素の配置の前に、未確定だった起句の書き換えも確定されている
     check(r[1].includes("起句の1字目") && r[1].includes("手入力"), `${label}: 操作の前に未確定の手入力を確定する（${r[1]}）`);
+    // 未確定の手入力で入れた必須要素を、同じ句のまま書き換えて消しても警告する
+    const word3 = q03[3].slice(0, 2);
+    await page.fill("#required-input", word3);
+    await page.locator("#required-add").click();
+    await cell(21).click();
+    await page.keyboard.insertText(word3);
+    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 未確定の入力で入った必須要素には警告しない`);
+    await cell(22).click();
+    await page.keyboard.insertText(q03[2][0]);
+    check(
+      (await page.locator(".required-warning").textContent()).includes(`必須要素「${word3}」が詩から消えています`),
+      `${label}: 未確定のまま書き換えて消えた必須要素も警告する`,
+    );
     if (shots) await page.screenshot({ path: `${shots}/log.png`, fullPage: true });
     check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
     await context.close();

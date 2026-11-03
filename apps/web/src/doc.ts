@@ -50,12 +50,17 @@ export type PoemDoc = {
   working: string[];
   /** 次に振る必須要素の番号（ID は使い回さない） */
   nextRequiredId: number;
+  /**
+   * 一度でも詩に入ったことのある必須要素の ID（未確定の手入力で入った場合も含む）。消失警告に使う。
+   * 未確定の手入力は記録に残らないので、記録からは導けない。そのため doc に持つ
+   */
+  requiredSeen: string[];
 };
 
 export type LineEdit = { line: number; slot: number; before: string; after: string };
 
 export function newDoc(at: string, settings: Settings = DEFAULT_SETTINGS): PoemDoc {
-  return { schema: SCHEMA, events: [], snapshots: [{ at, required: [], settings }], working: emptyGrid(), nextRequiredId: 1 };
+  return { schema: SCHEMA, events: [], snapshots: [{ at, required: [], settings }], working: emptyGrid(), nextRequiredId: 1, requiredSeen: [] };
 }
 
 const where = (line: number, slot: number, length: number) =>
@@ -118,8 +123,16 @@ export function committedGrid(doc: PoemDoc): string[] {
 /** 未確定の手入力（句ごと） */
 export const pendingEdits = (doc: PoemDoc): LineEdit[] => diffLines(committedGrid(doc), doc.working);
 
+/** いまのマス目に入っている必須要素を、requiredSeen に加える */
+function markSeen(doc: PoemDoc): PoemDoc {
+  const found = currentRequired(doc)
+    .filter((r) => !doc.requiredSeen.includes(r.id) && presentPlaces(r.word, doc.working).length > 0)
+    .map((r) => r.id);
+  return found.length === 0 ? doc : { ...doc, requiredSeen: [...doc.requiredSeen, ...found] };
+}
+
 /** 手入力でマス目を変える（記録にはしない） */
-export const setWorking = (doc: PoemDoc, grid: readonly string[]): PoemDoc => ({ ...doc, working: [...grid] });
+export const setWorking = (doc: PoemDoc, grid: readonly string[]): PoemDoc => markSeen({ ...doc, working: [...grid] });
 
 const toEvents = (edits: LineEdit[], at: string, actor: Actor, origin: string | null, reason?: string): EditEvent[] => {
   const r = reason?.trim();
@@ -149,11 +162,11 @@ export function record(
   const flushed = commitPending(doc, at, op.reason !== undefined ? { reason: op.reason } : {});
   const edits = diffLines(flushed.working, next);
   if (edits.length === 0) return flushed;
-  return {
+  return markSeen({
     ...flushed,
     events: [...flushed.events, ...toEvents(edits, at, op.actor, op.origin, op.reason)],
     working: [...next],
-  };
+  });
 }
 
 const lastSnapshot = (doc: PoemDoc) => doc.snapshots[doc.snapshots.length - 1]!;
@@ -168,7 +181,7 @@ const snapshot = (doc: PoemDoc, at: string, required: RequiredItem[], settings: 
 /** 必須要素を登録する（語の検査は required.ts の validateRequired で先に行う） */
 export function addRequired(doc: PoemDoc, at: string, word: string): PoemDoc {
   const item = { id: `r${doc.nextRequiredId}`, word };
-  return { ...snapshot(doc, at, [...currentRequired(doc), item], currentSettings(doc)), nextRequiredId: doc.nextRequiredId + 1 };
+  return markSeen({ ...snapshot(doc, at, [...currentRequired(doc), item], currentSettings(doc)), nextRequiredId: doc.nextRequiredId + 1 });
 }
 
 export function removeRequired(doc: PoemDoc, at: string, id: string): PoemDoc {
@@ -186,23 +199,17 @@ export type RequiredWarning = { id: string; word: string; kind: "lost" | "missin
 
 /**
  * 必須要素の消失警告（§4.5）。いまのマス目（未確定を含む）にない必須要素について：
- * - lost：記録をたどった途中のどこかで一度は入っていた
+ * - lost：一度は詩に入っていた（未確定の手入力で入っていた場合も含む）
  * - missing：一度も入っていないが、28字がすべて埋まった
  */
 export function requiredWarnings(doc: PoemDoc): RequiredWarning[] {
-  const missingNow = currentRequired(doc).filter((r) => presentPlaces(r.word, doc.working).length === 0);
-  if (missingNow.length === 0) return [];
-  const states: string[][] = [];
-  const grid = emptyGrid();
-  for (const e of doc.events) {
-    [...e.after].forEach((c, i) => (grid[e.line * WIDTH + e.slot + i] = c));
-    states.push([...grid]);
-  }
   const full = doc.working.every((c) => c !== BLANK);
-  return missingNow.flatMap((r): RequiredWarning[] => {
-    if (states.some((g) => presentPlaces(r.word, g).length > 0)) return [{ ...r, kind: "lost" }];
-    return full ? [{ ...r, kind: "missing" }] : [];
-  });
+  return currentRequired(doc)
+    .filter((r) => presentPlaces(r.word, doc.working).length === 0)
+    .flatMap((r): RequiredWarning[] => {
+      if (doc.requiredSeen.includes(r.id)) return [{ ...r, kind: "lost" }];
+      return full ? [{ ...r, kind: "missing" }] : [];
+    });
 }
 
 export type HistoryRow = {
