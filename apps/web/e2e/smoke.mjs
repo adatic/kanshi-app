@@ -289,6 +289,79 @@ try {
     if (shots) await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
     await page.close();
   }
+
+  // ---- 編集の記録と、必須要素の消失警告（M6）。新しい文脈で、パソコン幅だけで確かめる ----
+  {
+    const label = "log";
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    page.on("dialog", (d) => d.accept());
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto(`${ORIGIN}/`);
+    await page.waitForSelector("#grid-mode .gin");
+    const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
+    const rows = () => page.$$eval("#history li", (li) => li.map((x) => x.textContent));
+    const q03 = poem("q03").lines;
+
+    check((await page.locator("#history").textContent()).includes("まだ記録はありません"), `${label}: 最初は記録がない`);
+    // 1句を入れて次の句に移ると、その句の手入力が1件の記録になる（1マスごとではない）
+    await cell(0).click();
+    await page.keyboard.insertText(q03[0]);
+    let r = await rows();
+    check(r.length === 1 && r[0].includes("作者") && r[0].includes("起句の1-7字目") && r[0].includes("手入力"), `${label}: 句を入れて次の句へ移ると1件の記録（${r[0] ?? "なし"}）`);
+
+    // 途中まで入れた句は未確定。理由を書いて確定すると、理由つきの記録になる
+    await page.keyboard.insertText(q03[1].slice(0, 3));
+    check((await page.locator("#pending-note").textContent()).includes("承句"), `${label}: 途中の句は未確定として示す`);
+    check((await rows()).length === 1, `${label}: 未確定のうちは記録にしない`);
+    await page.fill("#reason-input", "月の句にする");
+    await page.locator("#commit").click();
+    r = await rows();
+    check(r.length === 2 && r[0].includes("理由：月の句にする"), `${label}: 確定すると理由つきで記録する`);
+    check((await page.inputValue("#reason-input")) === "", `${label}: 使った理由の入力欄は空に戻る`);
+
+    // 詩語候補を採用すると、辞書候補の記録になる
+    await cell(18).click();
+    await page.waitForSelector("#assist .cand .place");
+    const first = await page.locator("#assist .cand .cand-word").first().textContent();
+    await page.locator("#assist .cand .place").first().click();
+    r = await rows();
+    check(r[0].includes("辞書候補") && r[0].includes("詩語候補") && r[0].includes(first), `${label}: 候補の採用は辞書候補として記録する（${r[0]}）`);
+
+    // 必須要素：入っていた語を書き換えると、はっきり警告する。置き直すと警告が消え、必須要素からの記録になる
+    const word0 = q03[0].slice(0, 2);
+    await page.fill("#required-input", word0);
+    await page.locator("#required-add").click();
+    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 入っている必須要素には警告しない`);
+    await cell(0).click();
+    await page.keyboard.insertText(q03[3][0]);
+    await page.waitForSelector(".required-warning:not(:empty)");
+    const warn = await page.locator(".required-warning").textContent();
+    check(warn.includes(`必須要素「${word0}」が詩から消えています`), `${label}: 消えた必須要素を警告する（${warn}）`);
+    await page.locator(".required-item .place-req").first().click();
+    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 置き直すと警告が消える`);
+    r = await rows();
+    check(r[0].includes(`必須要素「${word0}」`) && r[0].includes("作者"), `${label}: 必須要素の配置は、どの必須要素からかを記録する（${r[0]}）`);
+    // 必須要素の配置の前に、未確定だった起句の書き換えも確定されている
+    check(r[1].includes("起句の1字目") && r[1].includes("手入力"), `${label}: 操作の前に未確定の手入力を確定する（${r[1]}）`);
+    // 未確定の手入力で入れた必須要素を、同じ句のまま書き換えて消しても警告する
+    const word3 = q03[3].slice(0, 2);
+    await page.fill("#required-input", word3);
+    await page.locator("#required-add").click();
+    await cell(21).click();
+    await page.keyboard.insertText(word3);
+    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 未確定の入力で入った必須要素には警告しない`);
+    await cell(22).click();
+    await page.keyboard.insertText(q03[2][0]);
+    check(
+      (await page.locator(".required-warning").textContent()).includes(`必須要素「${word3}」が詩から消えています`),
+      `${label}: 未確定のまま書き換えて消えた必須要素も警告する`,
+    );
+    if (shots) await page.screenshot({ path: `${shots}/log.png`, fullPage: true });
+    check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
+    await context.close();
+  }
 } finally {
   await browser.close();
   server.kill();
