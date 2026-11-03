@@ -1,0 +1,1086 @@
+diff --git a/TASKS.md b/TASKS.md
+index 5430619..3839616 100644
+--- a/TASKS.md
++++ b/TASKS.md
+@@ -4,6 +4,21 @@
+ 
+ ## 進行中
+ 
++### m6-log — 由来の記録と、必須要素の消失警告（M6）
++
++ブランチ: `task/m6-log`
++
++完了条件:
++- [ ] 詩の状態を、追記専用の編集記録（`EditEvent`：日時、誰が＝作者／辞書候補、句、開始位置、前、後、どこから、理由）と、必須要素の一覧・設定のスナップショットで持つ。マス目・必須要素・設定は、この記録から導き出す（CLAUDE.md §4.6）
++- [ ] 「確定」の単位（§4.6「1マス入力ではなく、意味のある単位」の解釈。報告で確認を求める）：
++  - 作者の手入力は、同じ句の中の変更を「未確定」としてため、別の句に移ったとき・「確定」を押したとき・ほかの操作（詩語候補・必須要素の配置・例の詩・すべて消す・貼り付けモードからの移し）の前に、句ごとに1件の記録にする
++  - 詩語候補の採用は actor「dictionary」、origin「詩語ID」。必須要素の配置は actor「author」、origin「必須要素ID」
++  - 理由は任意の入力欄に書いておくと、次の確定に添える（必須にしない）
++- [ ] 必須要素には ID を振る。必須要素の登録・削除と設定の変更のたびに、スナップショットを足す（§4.6）
++- [ ] 必須要素が詩から消えたら（一度入っていた語がなくなった、または28字が埋まったのに入っていない）、マス目の上にはっきり警告する（§4.5）
++- [ ] 編集の記録を画面に一覧で出す（いつ・誰が・どこを・前→後・どこから・理由）。未確定の変更と、確定ボタン・理由の入力欄を示す
++- [ ] 記録・確定・スナップショット・警告は純関数にして単体テストする。記録を最初から順にたどると、いまのマス目になること（各記録の「前」が、その時点のマス目と一致すること）を確かめる。Playwright で、手入力・候補の採用・必須要素の配置が記録に載ることと、消失警告が出ることを確かめる
++
+ ## 完了
+ 
+ ### m5-web-required — 必須要素と、置ける位置（M5）
+diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
+index 1185cf6..79dc293 100644
+--- a/apps/web/e2e/smoke.mjs
++++ b/apps/web/e2e/smoke.mjs
+@@ -289,6 +289,66 @@ try {
+     if (shots) await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
+     await page.close();
+   }
++
++  // ---- 編集の記録と、必須要素の消失警告（M6）。新しい文脈で、パソコン幅だけで確かめる ----
++  {
++    const label = "log";
++    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
++    const page = await context.newPage();
++    page.on("dialog", (d) => d.accept());
++    const errors = [];
++    page.on("pageerror", (e) => errors.push(String(e)));
++    await page.goto(`${ORIGIN}/`);
++    await page.waitForSelector("#grid-mode .gin");
++    const cell = (i) => page.locator(`.gin[data-index="${i}"]`);
++    const rows = () => page.$$eval("#history li", (li) => li.map((x) => x.textContent));
++    const q03 = poem("q03").lines;
++
++    check((await page.locator("#history").textContent()).includes("まだ記録はありません"), `${label}: 最初は記録がない`);
++    // 1句を入れて次の句に移ると、その句の手入力が1件の記録になる（1マスごとではない）
++    await cell(0).click();
++    await page.keyboard.insertText(q03[0]);
++    let r = await rows();
++    check(r.length === 1 && r[0].includes("作者") && r[0].includes("起句の1-7字目") && r[0].includes("手入力"), `${label}: 句を入れて次の句へ移ると1件の記録（${r[0] ?? "なし"}）`);
++
++    // 途中まで入れた句は未確定。理由を書いて確定すると、理由つきの記録になる
++    await page.keyboard.insertText(q03[1].slice(0, 3));
++    check((await page.locator("#pending-note").textContent()).includes("承句"), `${label}: 途中の句は未確定として示す`);
++    check((await rows()).length === 1, `${label}: 未確定のうちは記録にしない`);
++    await page.fill("#reason-input", "月の句にする");
++    await page.locator("#commit").click();
++    r = await rows();
++    check(r.length === 2 && r[0].includes("理由：月の句にする"), `${label}: 確定すると理由つきで記録する`);
++    check((await page.inputValue("#reason-input")) === "", `${label}: 使った理由の入力欄は空に戻る`);
++
++    // 詩語候補を採用すると、辞書候補の記録になる
++    await cell(18).click();
++    await page.waitForSelector("#assist .cand .place");
++    const first = await page.locator("#assist .cand .cand-word").first().textContent();
++    await page.locator("#assist .cand .place").first().click();
++    r = await rows();
++    check(r[0].includes("辞書候補") && r[0].includes("詩語候補") && r[0].includes(first), `${label}: 候補の採用は辞書候補として記録する（${r[0]}）`);
++
++    // 必須要素：入っていた語を書き換えると、はっきり警告する。置き直すと警告が消え、必須要素からの記録になる
++    const word0 = q03[0].slice(0, 2);
++    await page.fill("#required-input", word0);
++    await page.locator("#required-add").click();
++    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 入っている必須要素には警告しない`);
++    await cell(0).click();
++    await page.keyboard.insertText(q03[3][0]);
++    await page.waitForSelector(".required-warning:not(:empty)");
++    const warn = await page.locator(".required-warning").textContent();
++    check(warn.includes(`必須要素「${word0}」が詩から消えています`), `${label}: 消えた必須要素を警告する（${warn}）`);
++    await page.locator(".required-item .place-req").first().click();
++    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 置き直すと警告が消える`);
++    r = await rows();
++    check(r[0].includes(`必須要素「${word0}」`) && r[0].includes("作者"), `${label}: 必須要素の配置は、どの必須要素からかを記録する（${r[0]}）`);
++    // 必須要素の配置の前に、未確定だった起句の書き換えも確定されている
++    check(r[1].includes("起句の1字目") && r[1].includes("手入力"), `${label}: 操作の前に未確定の手入力を確定する（${r[1]}）`);
++    if (shots) await page.screenshot({ path: `${shots}/log.png`, fullPage: true });
++    check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
++    await context.close();
++  }
+ } finally {
+   await browser.close();
+   server.kill();
+diff --git a/apps/web/src/doc.ts b/apps/web/src/doc.ts
+new file mode 100644
+index 0000000..c532b6e
+--- /dev/null
++++ b/apps/web/src/doc.ts
+@@ -0,0 +1,245 @@
++// 詩の記録（CLAUDE.md §4.6）。純関数で、DOM にも保存先にも触れない。
++// - マス目は、追記専用の編集記録（EditEvent）を最初から順にたどって導き出す
++// - 必須要素の一覧と設定は、変わるたびに足すスナップショットの最後のものから導き出す
++// - 作者の手入力は「未確定」（working と、記録からたどったマス目の差）としてため、意味のある単位で確定して記録にする
++import type { FormId } from "@kanshi/engine";
++import { BLANK, CELLS, WIDTH, emptyGrid } from "./grid";
++import { presentPlaces } from "./required";
++import { lineName } from "./view";
++
++export const SCHEMA = 1;
++
++/** 誰が。ai は将来のための予約で、MVP では使わない（§4.6） */
++export type Actor = "author" | "dictionary" | "ai";
++
++export type EditEvent = {
++  /** ISO 8601 */
++  at: string;
++  actor: Actor;
++  line: number;
++  /** 開始位置（0始まり） */
++  slot: number;
++  before: string;
++  after: string;
++  /** どこから：必須要素ID（required:r1）、詩語ID（phrase:語）、sample・clear・paste。手入力は null */
++  origin: string | null;
++  /** 任意。必須にしない */
++  reason?: string;
++};
++
++export type Settings = {
++  form: FormId | null;
++  unknownAs: "平" | "仄" | null;
++  allowKokuji: boolean;
++  showPattern: boolean;
++  /** 詩語候補の絞り込みに使う押韻の韻目。自動なら null */
++  rhyme: string | null;
++};
++
++export const DEFAULT_SETTINGS: Settings = { form: null, unknownAs: null, allowKokuji: false, showPattern: true, rhyme: null };
++
++export type RequiredItem = { id: string; word: string };
++
++export type Snapshot = { at: string; required: RequiredItem[]; settings: Settings };
++
++export type PoemDoc = {
++  schema: typeof SCHEMA;
++  events: EditEvent[];
++  snapshots: Snapshot[];
++  /** いまのマス目（確定済みの記録に、未確定の手入力を重ねたもの） */
++  working: string[];
++  /** 次に振る必須要素の番号（ID は使い回さない） */
++  nextRequiredId: number;
++};
++
++export type LineEdit = { line: number; slot: number; before: string; after: string };
++
++export function newDoc(at: string, settings: Settings = DEFAULT_SETTINGS): PoemDoc {
++  return { schema: SCHEMA, events: [], snapshots: [{ at, required: [], settings }], working: emptyGrid(), nextRequiredId: 1 };
++}
++
++const where = (line: number, slot: number, length: number) =>
++  `${lineName(line)}の${length === 1 ? `${slot + 1}` : `${slot + 1}-${slot + length}`}字目`;
++
++/** 2つのマス目の、句ごとの違い（最初に違う位置から最後に違う位置まで） */
++export function diffLines(a: readonly string[], b: readonly string[]): LineEdit[] {
++  const out: LineEdit[] = [];
++  for (let line = 0; line * WIDTH < CELLS; line++) {
++    const base = line * WIDTH;
++    let first = -1;
++    let last = -1;
++    for (let p = 0; p < WIDTH; p++) {
++      if (a[base + p] !== b[base + p]) {
++        if (first < 0) first = p;
++        last = p;
++      }
++    }
++    if (first >= 0) {
++      out.push({
++        line,
++        slot: first,
++        before: a.slice(base + first, base + last + 1).join(""),
++        after: b.slice(base + first, base + last + 1).join(""),
++      });
++    }
++  }
++  return out;
++}
++
++/** 記録を最初から順にたどったマス目。記録の「前」がその時点のマス目と合わなければ、誤りを返す */
++export function replay(events: readonly EditEvent[]): { grid: string[] } | { error: string } {
++  const grid = emptyGrid();
++  for (const [k, e] of events.entries()) {
++    const before = [...e.before];
++    const after = [...e.after];
++    if (
++      !Number.isInteger(e.line) || e.line < 0 || e.line * WIDTH >= CELLS ||
++      !Number.isInteger(e.slot) || e.slot < 0 || before.length === 0 ||
++      before.length !== after.length || e.slot + before.length > WIDTH
++    ) {
++      return { error: `${k + 1}件目の記録の位置か字数が正しくありません。` };
++    }
++    const base = e.line * WIDTH + e.slot;
++    if (before.some((c, i) => grid[base + i] !== c)) {
++      return { error: `${k + 1}件目の記録（${where(e.line, e.slot, before.length)}）の「前」が、その時点のマス目と合いません。` };
++    }
++    after.forEach((c, i) => (grid[base + i] = c));
++  }
++  return { grid };
++}
++
++/** 確定済みの記録からたどったマス目（記録が正しいことは読み込むときに確かめてある） */
++export function committedGrid(doc: PoemDoc): string[] {
++  const r = replay(doc.events);
++  if ("error" in r) throw new Error(r.error);
++  return r.grid;
++}
++
++/** 未確定の手入力（句ごと） */
++export const pendingEdits = (doc: PoemDoc): LineEdit[] => diffLines(committedGrid(doc), doc.working);
++
++/** 手入力でマス目を変える（記録にはしない） */
++export const setWorking = (doc: PoemDoc, grid: readonly string[]): PoemDoc => ({ ...doc, working: [...grid] });
++
++const toEvents = (edits: LineEdit[], at: string, actor: Actor, origin: string | null, reason?: string): EditEvent[] => {
++  const r = reason?.trim();
++  return edits.map((e) => ({ at, actor, ...e, origin, ...(r ? { reason: r } : {}) }));
++};
++
++/**
++ * 未確定の手入力を、句ごとに作者の記録にする。except の句（いま書いている句）は残す。
++ * 未確定がなければ、同じ doc を返す。
++ */
++export function commitPending(doc: PoemDoc, at: string, opts: { except?: number; reason?: string } = {}): PoemDoc {
++  const edits = pendingEdits(doc).filter((e) => e.line !== opts.except);
++  if (edits.length === 0) return doc;
++  return { ...doc, events: [...doc.events, ...toEvents(edits, at, "author", null, opts.reason)] };
++}
++
++/**
++ * 操作（詩語候補・必須要素の配置・例の詩・すべて消す・貼り付けモードからの移し）でマス目を next にする。
++ * 先に未確定の手入力を確定してから、操作の変化を句ごとに記録する。理由は、この呼び出しで足す記録すべてに添える。
++ */
++export function record(
++  doc: PoemDoc,
++  at: string,
++  next: readonly string[],
++  op: { actor: Actor; origin: string | null; reason?: string },
++): PoemDoc {
++  const flushed = commitPending(doc, at, op.reason !== undefined ? { reason: op.reason } : {});
++  const edits = diffLines(flushed.working, next);
++  if (edits.length === 0) return flushed;
++  return {
++    ...flushed,
++    events: [...flushed.events, ...toEvents(edits, at, op.actor, op.origin, op.reason)],
++    working: [...next],
++  };
++}
++
++const lastSnapshot = (doc: PoemDoc) => doc.snapshots[doc.snapshots.length - 1]!;
++export const currentRequired = (doc: PoemDoc): RequiredItem[] => lastSnapshot(doc).required;
++export const currentSettings = (doc: PoemDoc): Settings => lastSnapshot(doc).settings;
++
++const snapshot = (doc: PoemDoc, at: string, required: RequiredItem[], settings: Settings): PoemDoc => ({
++  ...doc,
++  snapshots: [...doc.snapshots, { at, required, settings }],
++});
++
++/** 必須要素を登録する（語の検査は required.ts の validateRequired で先に行う） */
++export function addRequired(doc: PoemDoc, at: string, word: string): PoemDoc {
++  const item = { id: `r${doc.nextRequiredId}`, word };
++  return { ...snapshot(doc, at, [...currentRequired(doc), item], currentSettings(doc)), nextRequiredId: doc.nextRequiredId + 1 };
++}
++
++export function removeRequired(doc: PoemDoc, at: string, id: string): PoemDoc {
++  return snapshot(doc, at, currentRequired(doc).filter((r) => r.id !== id), currentSettings(doc));
++}
++
++/** 設定を変える。同じ設定なら同じ doc を返す */
++export function setSettings(doc: PoemDoc, at: string, settings: Settings): PoemDoc {
++  const cur = currentSettings(doc);
++  const same = (Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]).every((k) => cur[k] === settings[k]);
++  return same ? doc : snapshot(doc, at, currentRequired(doc), { ...settings });
++}
++
++export type RequiredWarning = { id: string; word: string; kind: "lost" | "missing" };
++
++/**
++ * 必須要素の消失警告（§4.5）。いまのマス目（未確定を含む）にない必須要素について：
++ * - lost：記録をたどった途中のどこかで一度は入っていた
++ * - missing：一度も入っていないが、28字がすべて埋まった
++ */
++export function requiredWarnings(doc: PoemDoc): RequiredWarning[] {
++  const missingNow = currentRequired(doc).filter((r) => presentPlaces(r.word, doc.working).length === 0);
++  if (missingNow.length === 0) return [];
++  const states: string[][] = [];
++  const grid = emptyGrid();
++  for (const e of doc.events) {
++    [...e.after].forEach((c, i) => (grid[e.line * WIDTH + e.slot + i] = c));
++    states.push([...grid]);
++  }
++  const full = doc.working.every((c) => c !== BLANK);
++  return missingNow.flatMap((r): RequiredWarning[] => {
++    if (states.some((g) => presentPlaces(r.word, g).length > 0)) return [{ ...r, kind: "lost" }];
++    return full ? [{ ...r, kind: "missing" }] : [];
++  });
++}
++
++export type HistoryRow = {
++  at: string;
++  who: string;
++  where: string;
++  before: string;
++  after: string;
++  origin: string;
++  reason: string | null;
++};
++
++const ACTOR_NAME: Record<Actor, string> = { author: "作者", dictionary: "辞書候補", ai: "AI" };
++const ORIGIN_NAME: Record<string, string> = { sample: "例の詩", clear: "すべて消す", paste: "貼り付けモードから" };
++
++function originLabel(doc: PoemDoc, origin: string | null): string {
++  if (origin === null) return "手入力";
++  if (origin.startsWith("required:")) {
++    const id = origin.slice("required:".length);
++    const item = doc.snapshots.flatMap((s) => s.required).find((r) => r.id === id);
++    return item ? `必須要素「${item.word}」` : "必須要素";
++  }
++  if (origin.startsWith("phrase:")) return "詩語候補";
++  return ORIGIN_NAME[origin] ?? origin;
++}
++
++/** 編集の記録の一覧（新しい順） */
++export function historyView(doc: PoemDoc): HistoryRow[] {
++  return doc.events
++    .map((e) => ({
++      at: e.at,
++      who: ACTOR_NAME[e.actor],
++      where: where(e.line, e.slot, [...e.before].length),
++      before: e.before,
++      after: e.after,
++      origin: originLabel(doc, e.origin),
++      reason: e.reason ?? null,
++    }))
++    .reverse();
++}
+diff --git a/apps/web/src/gridEditor.ts b/apps/web/src/gridEditor.ts
+index 9e58ce1..53e330d 100644
+--- a/apps/web/src/gridEditor.ts
++++ b/apps/web/src/gridEditor.ts
+@@ -11,8 +11,6 @@ export type GridEditor = {
+   /** 判定結果を表示に反映する */
+   refresh(view: PoemView, showPattern: boolean): void;
+   focus(index: number): void;
+-  /** 語をマス目に入れ（onChange を呼ぶ）、focusAt のマスを選ぶ */
+-  place(index: number, text: string, focusAt: number): void;
+ };
+ 
+ const MOVE_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
+@@ -48,7 +46,7 @@ export function gridEditor(opts: {
+     write(i, value);
+   };
+ 
+-  const write = (i: number, value: string, focusAt?: number) => {
++  const write = (i: number, value: string) => {
+     const r = writeAt(grid, i, value);
+     const messages: string[] = [];
+     if (r.rejected.length > 0) messages.push(`「${r.rejected.join("」「")}」は漢字ではないので、マスに入れていません。`);
+@@ -57,7 +55,7 @@ export function gridEditor(opts: {
+     grid = r.grid;
+     syncInputs();
+     opts.onChange([...grid]);
+-    focus(focusAt ?? r.next);
++    focus(r.next);
+   };
+ 
+   const lines = Array.from({ length: CELLS / WIDTH }, (_, l) => {
+@@ -171,6 +169,5 @@ export function gridEditor(opts: {
+       });
+     },
+     focus,
+-    place: (index, text, focusAt) => write(index, text, focusAt),
+   };
+ }
+diff --git a/apps/web/src/main.ts b/apps/web/src/main.ts
+index 720cd71..e5db5b9 100644
+--- a/apps/web/src/main.ts
++++ b/apps/web/src/main.ts
+@@ -3,11 +3,28 @@ import { analyze } from "@kanshi/engine";
+ import type { EngineData, FormId, Options } from "@kanshi/engine";
+ import { assistPanel } from "./assistView";
+ import { loadEngineData, loadRhymes, phraseStore, type Rhyme } from "./data";
+-import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid } from "./grid";
++import {
++  addRequired,
++  commitPending,
++  currentRequired,
++  currentSettings,
++  historyView,
++  newDoc,
++  pendingEdits,
++  record,
++  removeRequired,
++  requiredWarnings,
++  setSettings,
++  setWorking,
++  type Actor,
++  type PoemDoc,
++  type Settings,
++} from "./doc";
++import { BLANK, WIDTH, emptyGrid, gridToText, textToGrid, writeAt } from "./grid";
+ import { gridEditor } from "./gridEditor";
+ import { MAX_REQUIRED, requiredView, validateRequired, type RequiredView } from "./required";
+ import { cellPanel, h, resultParts, resultView } from "./render";
+-import { buildView, cellDetail } from "./view";
++import { buildView, cellDetail, lineName } from "./view";
+ 
+ /** 例の詩（王昌齡「春宮曲」。ゴールデンテストの q03 と同じ本文） */
+ const SAMPLE = ["昨夜風開露井桃", "未央前殿月輪高", "平陽歌舞新承寵", "簾外春寒賜錦袍"].join("\n");
+@@ -61,32 +78,57 @@ function settingsPanel(data: EngineData, rhymes: readonly Rhyme[], onChange: ()
+ 
+   return {
+     el,
+-    options(): Options {
+-      const o: Options = {};
+-      if (formSelect.value) o.form = formSelect.value as FormId;
+-      if (unknownSelect.value) o.unknownAs = unknownSelect.value as "平" | "仄";
+-      if (kokuji.checked) o.allowKokuji = true;
+-      return o;
++    get(): Settings {
++      return {
++        form: (formSelect.value || null) as FormId | null,
++        unknownAs: (unknownSelect.value || null) as "平" | "仄" | null,
++        allowKokuji: kokuji.checked,
++        showPattern: pattern.checked,
++        rhyme: rhymeSelect.value || null,
++      };
++    },
++    set(v: Settings) {
++      formSelect.value = v.form ?? "";
++      unknownSelect.value = v.unknownAs ?? "";
++      kokuji.checked = v.allowKokuji;
++      pattern.checked = v.showPattern;
++      rhymeSelect.value = v.rhyme ?? "";
+     },
+-    showPattern: () => pattern.checked,
+-    rhyme: () => rhymeSelect.value || null,
+   };
+ }
+ 
++/** 設定から、エンジンに渡す判定の条件 */
++function optionsOf(s: Settings): Options {
++  const o: Options = {};
++  if (s.form !== null) o.form = s.form;
++  if (s.unknownAs !== null) o.unknownAs = s.unknownAs;
++  if (s.allowKokuji) o.allowKokuji = true;
++  return o;
++}
++
++const now = () => new Date().toISOString();
++
++/** 記録の時刻を、画面に出す短い形にする */
++const timeLabel = (iso: string) => {
++  const d = new Date(iso);
++  const pad = (n: number) => String(n).padStart(2, "0");
++  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
++};
++
+ /** 必須要素1語の表示。編集と登録解除は呼び出し側に委ねる。 */
+ function requiredItem(
+   r: RequiredView,
+-  onPlace: (at: number, word: string) => void,
+-  onRemove: (word: string) => void,
++  onPlace: (at: number) => void,
++  onRemove: () => void,
+ ): HTMLElement {
+   const placeButton = (pl: { line: number; start: number; label: string }, extra = "") => {
+     const b = h("button", { type: "button", class: "small place-req", "aria-label": `「${r.word}」を${pl.label}に入れる` }, `${pl.label}${extra}`);
+     const at = pl.line * WIDTH + pl.start;
+-    b.addEventListener("click", () => onPlace(at, r.word));
++    b.addEventListener("click", () => onPlace(at));
+     return b;
+   };
+   const remove = h("button", { type: "button", class: "small remove", "aria-label": `「${r.word}」の登録を外す` }, "外す");
+-  remove.addEventListener("click", () => onRemove(r.word));
++  remove.addEventListener("click", () => onRemove());
+   return h(
+     "div",
+     { class: "required-item" },
+@@ -108,7 +150,8 @@ function requiredItem(
+ 
+ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   let mode: Mode = "grid";
+-  let grid = emptyGrid();
++  /** 詩の記録。マス目・必須要素・設定はここから導き出す（CLAUDE.md §4.6） */
++  let doc: PoemDoc = newDoc(now());
+   let selected: number | null = null;
+   /** 詩語候補：選んでいる語の位置と、出す件数（マスを選び直すと戻す） */
+   let slotName: string | null = null;
+@@ -120,13 +163,41 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   /** マス目に移ってから、マス目を編集したか（貼り付けモードへ戻るときに本文を上書きするかを決める） */
+   let gridEdited = false;
+ 
+-  const settings = settingsPanel(data, rhymes, () => update());
++  const settings = settingsPanel(data, rhymes, () => {
++    doc = setSettings(doc, now(), settings.get());
++    update();
++  });
++  settings.set(currentSettings(doc));
++
++  // ---- 確定と理由 ----
++  const reasonInput = h("input", { id: "reason-input", type: "text", autocomplete: "off", placeholder: "なぜそうしたか（任意）" }) as HTMLInputElement;
++  const commitButton = h("button", { type: "button", class: "small", id: "commit" }, "確定");
++  const pendingNote = h("p", { class: "pending-note", id: "pending-note" });
++  /** 記録が増えたら、使った理由の入力欄を空にする */
++  const apply = (next: PoemDoc) => {
++    if (next.events.length > doc.events.length) reasonInput.value = "";
++    doc = next;
++  };
++  const reason = () => reasonInput.value;
++  /** 操作でマス目を変え、記録する（先に未確定の手入力を確定する） */
++  const operate = (next: readonly string[], actor: Actor, origin: string, focusAt: number | null) => {
++    apply(record(doc, now(), next, { actor, origin, reason: reason() }));
++    gridEdited = true;
++    editor.setGrid(doc.working);
++    syncNote.textContent = "";
++    update();
++    if (focusAt !== null) editor.focus(focusAt);
++  };
++  commitButton.addEventListener("click", () => {
++    apply(commitPending(doc, now(), { reason: reason() }));
++    update();
++  });
+ 
+   // ---- マス目で作る ----
+   const editor = gridEditor({
+-    initial: grid,
++    initial: doc.working,
+     onChange(next) {
+-      grid = next;
++      doc = setWorking(doc, next);
+       gridEdited = true;
+       syncNote.textContent = "";
+       update();
+@@ -136,34 +207,32 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+         slotName = null;
+         limit = 20;
+       }
++      // 別の句に移ったら、それまでの句の手入力を確定する（§4.6：1マスではなく、句の書き換えを単位にする）
++      apply(commitPending(doc, now(), { except: Math.floor(i / WIDTH), reason: reason() }));
+       selected = i;
+       update();
+     },
+   });
+   const syncNote = h("p", { class: "sync-note", role: "status" });
++  const warning = h("div", { class: "required-warning", role: "alert" });
+   const panel = h("div", { id: "cell-panel" });
+   const assistBox = h("div", { id: "assist" });
+   const gridResult = h("div", { id: "grid-result", class: "result" });
+-  const hasPoem = () => grid.some((c) => c !== BLANK);
+-  const replaceGrid = (next: string[], question: string) => {
++  const history = h("div", { id: "history" });
++  const hasPoem = () => doc.working.some((c) => c !== BLANK);
++  const replaceGrid = (next: string[], origin: string, question: string) => {
+     if (hasPoem() && !window.confirm(question)) return;
+-    grid = next;
+-    gridEdited = true;
+-    editor.setGrid(grid);
+-    syncNote.textContent = "";
+-    update();
+-    editor.focus(0);
++    operate(next, "author", origin, 0);
+   };
+   const gridSample = h("button", { type: "button", class: "small", id: "grid-sample" }, "例の詩を入れる");
+   gridSample.addEventListener("click", () => {
+     const r = textToGrid(SAMPLE);
+-    if ("grid" in r) replaceGrid(r.grid, "マス目の詩を、例の詩で置き換えますか？");
++    if ("grid" in r) replaceGrid(r.grid, "sample", "マス目の詩を、例の詩で置き換えますか？");
+   });
+   const gridClear = h("button", { type: "button", class: "small", id: "grid-clear" }, "すべて消す");
+-  gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "マス目の字をすべて消しますか？"));
++  gridClear.addEventListener("click", () => replaceGrid(emptyGrid(), "clear", "マス目の字をすべて消しますか？"));
+ 
+   // ---- 必須要素（最大2語）と、置ける位置 ----
+-  let required: string[] = [];
+   const requiredInput = h("input", {
+     id: "required-input",
+     type: "text",
+@@ -175,19 +244,19 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+   const requiredAdd = h("button", { type: "button", class: "small", id: "required-add" }, "登録");
+   const requiredNote = h("p", { class: "required-note", role: "status" });
+   const requiredList = h("div", { class: "required-list" });
+-  const addRequired = () => {
+-    const error = validateRequired(requiredInput.value, required);
++  const addRequiredWord = () => {
++    const error = validateRequired(requiredInput.value, currentRequired(doc).map((r) => r.word));
+     requiredNote.textContent = error ?? "";
+     if (error !== null) return;
+-    required = [...required, requiredInput.value.trim()];
++    doc = addRequired(doc, now(), requiredInput.value.trim());
+     requiredInput.value = "";
+     update();
+   };
+-  requiredAdd.addEventListener("click", addRequired);
++  requiredAdd.addEventListener("click", addRequiredWord);
+   requiredInput.addEventListener("keydown", (e) => {
+     if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
+       e.preventDefault();
+-      addRequired();
++      addRequiredWord();
+     }
+   });
+   const requiredCard = h(
+@@ -207,13 +276,30 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+       "div",
+       { class: "poem-area" },
+       h("h2", {}, "作詩"),
++      warning,
+       h("p", { class: "help" }, "1マスに1字。漢字はふだんどおり変換して入れてください。2字以上を確定すると続くマスに入ります。矢印キーで移動できます。"),
+       editor.el,
+       syncNote,
++      h(
++        "div",
++        { class: "commit-row" },
++        pendingNote,
++        h("label", { for: "reason-input", class: "visually-hidden" }, "理由（任意）"),
++        reasonInput,
++        commitButton,
++      ),
++      h("p", { class: "help" }, "同じ句の中の手入力は、別の句に移るか「確定」を押すと、1件の記録になります。理由は書かなくてもかまいません。"),
+       h("div", { class: "buttons" }, gridSample, gridClear),
+     ),
+     h("aside", { class: "cell-panel", "aria-labelledby": "cell-panel-title" }, h("h2", { id: "cell-panel-title" }, "選択中のマス"), panel),
+-    h("div", { class: "grid-results" }, h("h2", {}, "検査結果"), gridResult),
++    h(
++      "div",
++      { class: "grid-results" },
++      h("h2", {}, "検査結果"),
++      gridResult,
++      h("h2", { class: "history-title" }, "編集の記録"),
++      history,
++    ),
+   );
+ 
+   // ---- 貼り付けて判定する ----
+@@ -268,15 +354,16 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     if (next === "grid") {
+       const r = textToGrid(input.value);
+       if ("grid" in r) {
+-        grid = r.grid;
+-        editor.setGrid(grid);
++        apply(record(doc, now(), r.grid, { actor: "author", origin: "paste", reason: reason() }));
++        editor.setGrid(doc.working);
+         syncNote.textContent = "";
+       } else {
+         syncNote.textContent = `貼り付けた本文は、マス目に移していません。${r.reasons.join("")}マス目は前のままです。`;
+       }
+       gridEdited = false;
+-    } else if (gridEdited || "grid" in textToGrid(input.value)) {
+-      input.value = gridToText(grid);
++    } else {
++      apply(commitPending(doc, now(), { reason: reason() }));
++      if (gridEdited || "grid" in textToGrid(input.value)) input.value = gridToText(doc.working);
+     }
+     mode = next;
+     refreshTabs();
+@@ -296,22 +383,66 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+     });
+   }
+ 
++  /** 必須要素の消失警告。文が変わったときだけ書き換える（読み上げを繰り返さない） */
++  const renderWarning = () => {
++    const text = requiredWarnings(doc)
++      .map((w) => (w.kind === "lost" ? `必須要素「${w.word}」が詩から消えています。` : `必須要素「${w.word}」が詩に入っていません。`))
++      .join("");
++    if (warning.textContent !== text) warning.textContent = text;
++  };
++
++  const renderHistory = () => {
++    const pending = pendingEdits(doc);
++    pendingNote.textContent =
++      pending.length === 0
++        ? "未確定の変更はありません。"
++        : `未確定：${pending.map((e) => `${lineName(e.line)}「${e.before}」→「${e.after}」`).join("、")}`;
++    commitButton.toggleAttribute("disabled", pending.length === 0);
++    const rows = historyView(doc);
++    history.replaceChildren(
++      rows.length === 0
++        ? h("p", { class: "none" }, "まだ記録はありません。")
++        : h(
++            "ol",
++            { class: "history", reversed: "" },
++            ...rows.map((r) =>
++              h(
++                "li",
++                {},
++                h("span", { class: "h-time" }, timeLabel(r.at)),
++                h("span", { class: `h-who ${r.who === "作者" ? "" : "dict"}` }, r.who),
++                h("span", { class: "h-where" }, r.where),
++                h("span", { class: "h-change", lang: "zh-Hant" }, `${r.before} → ${r.after}`),
++                h("span", { class: "h-origin" }, r.origin),
++                r.reason !== null ? h("span", { class: "h-reason" }, `理由：${r.reason}`) : null,
++              ),
++            ),
++          ),
++    );
++  };
++
+   function update() {
+-    const options = settings.options();
+-    const showPattern = settings.showPattern();
++    const current = currentSettings(doc);
++    const options = optionsOf(current);
++    const showPattern = current.showPattern;
+     if (mode === "grid") {
++      const grid = doc.working;
+       const a = analyze(grid, data, options);
+       const v = buildView(a, data);
+       editor.refresh(v, showPattern);
++      renderWarning();
++      renderHistory();
+       requiredList.replaceChildren(
+-        ...required.map((w) => requiredItem(
+-          requiredView(w, grid, data, options),
+-          (at, word) => editor.place(at, word, at),
+-          (word) => {
+-            required = required.filter((w) => w !== word);
+-            update();
+-          },
+-        )),
++        ...currentRequired(doc).map((r) =>
++          requiredItem(
++            requiredView(r.word, grid, data, options),
++            (at) => operate(writeAt(doc.working, at, r.word).grid, "author", `required:${r.id}`, at),
++            () => {
++              doc = removeRequired(doc, now(), r.id);
++              update();
++            },
++          ),
++        ),
+       );
+       gridResult.replaceChildren(...resultParts(v, showPattern));
+       panel.replaceChildren(cellPanel(selected === null ? null : cellDetail(a, v, data, selected, options)), assistBox);
+@@ -329,7 +460,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+         index: at,
+         store,
+         rhymes: rhymeIds,
+-        rhymeSetting: settings.rhyme(),
++        rhymeSetting: current.rhyme,
+         slotName,
+         limit,
+         onSlot(name) {
+@@ -342,7 +473,7 @@ function app(data: EngineData, rhymes: readonly Rhyme[]): HTMLElement {
+           update();
+         },
+         onPlace(index, word) {
+-          editor.place(index, word, at);
++          operate(writeAt(doc.working, index, word).grid, "dictionary", `phrase:${word}`, at);
+         },
+       }).then((el) => {
+         if (turn === assistTurn) assistBox.replaceChildren(el);
+diff --git a/apps/web/src/style.css b/apps/web/src/style.css
+index d072028..87fe80b 100644
+--- a/apps/web/src/style.css
++++ b/apps/web/src/style.css
+@@ -875,3 +875,100 @@ button.more {
+ .required-item .counts {
+   font-size: 0.78rem;
+ }
++
++/* 確定と理由、必須要素の消失警告、編集の記録（M6） */
++.visually-hidden {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  overflow: hidden;
++  clip: rect(0 0 0 0);
++  white-space: nowrap;
++}
++.commit-row {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++  align-items: center;
++}
++.pending-note {
++  flex-basis: 100%;
++  margin: 0;
++  font-size: 0.85rem;
++  color: var(--muted);
++}
++.commit-row input {
++  flex: 1;
++  min-width: 0;
++  width: 0;
++  font: inherit;
++  font-size: 0.9rem;
++  padding: 3px 8px;
++  border: 1px solid var(--line);
++  border-radius: 6px;
++  background: var(--paper);
++  color: var(--ink);
++}
++button.small[disabled] {
++  opacity: 0.5;
++  cursor: default;
++}
++.required-warning {
++  border: 2px solid var(--shu);
++  background: var(--shu-soft);
++  color: var(--shu);
++  border-radius: 8px;
++  padding: 8px 12px;
++  font-weight: 700;
++}
++.required-warning::before {
++  content: "✕ ";
++}
++.required-warning:empty {
++  display: none;
++}
++.history-title {
++  margin-top: 20px;
++}
++.history {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  display: grid;
++  gap: 4px;
++  max-height: 360px;
++  overflow-y: auto;
++  background: var(--sheet);
++  border: 1px solid var(--line);
++  border-radius: 10px;
++}
++.history li {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 4px 10px;
++  align-items: baseline;
++  padding: 6px 12px;
++  border-bottom: 1px dashed var(--line);
++  font-size: 0.85rem;
++}
++.history li:last-child {
++  border-bottom: 0;
++}
++.h-time,
++.h-origin {
++  color: var(--muted);
++  font-size: 0.78rem;
++}
++.h-who {
++  font-weight: 600;
++}
++.h-who.dict {
++  color: var(--ai);
++}
++.h-change {
++  font-family: var(--f-han);
++}
++.h-reason {
++  flex-basis: 100%;
++  color: var(--ink);
++}
+diff --git a/apps/web/test/doc.test.ts b/apps/web/test/doc.test.ts
+new file mode 100644
+index 0000000..f005933
+--- /dev/null
++++ b/apps/web/test/doc.test.ts
+@@ -0,0 +1,212 @@
++// 詩の記録（apps/web/src/doc.ts）。字は平仄に関わらない架空の扱い（CLAUDE.md §0）。
++import { describe, expect, it } from "vitest";
++import {
++  DEFAULT_SETTINGS,
++  addRequired,
++  commitPending,
++  committedGrid,
++  currentRequired,
++  currentSettings,
++  diffLines,
++  historyView,
++  newDoc,
++  pendingEdits,
++  record,
++  removeRequired,
++  replay,
++  requiredWarnings,
++  setSettings,
++  setWorking,
++} from "../src/doc";
++import { BLANK, emptyGrid, writeAt } from "../src/grid";
++import { P } from "../../../packages/engine/test/fixture";
++
++const T = (n: number) => `2026-11-03T10:00:${String(n).padStart(2, "0")}.000Z`;
++const write = (grid: readonly string[], index: number, text: string) => writeAt(grid, index, text).grid;
++const word = (...cs: string[]) => cs.join("");
++
++describe("newDoc", () => {
++  it("空のマス目、記録なし、既定の設定と空の必須要素のスナップショットが1件", () => {
++    const d = newDoc(T(0));
++    expect(committedGrid(d)).toEqual(emptyGrid());
++    expect(d.working).toEqual(emptyGrid());
++    expect(d.events).toEqual([]);
++    expect(d.snapshots).toEqual([{ at: T(0), required: [], settings: DEFAULT_SETTINGS }]);
++  });
++});
++
++describe("diffLines", () => {
++  it("句ごとに、最初に違う位置から最後に違う位置までを前・後として返す", () => {
++    let g = emptyGrid();
++    g = write(g, 1, P[0]!);
++    g = write(g, 4, P[1]!);
++    g = write(g, 14, P[2]! + P[3]!);
++    expect(diffLines(emptyGrid(), g)).toEqual([
++      { line: 0, slot: 1, before: BLANK.repeat(4), after: word(P[0]!, BLANK, BLANK, P[1]!) },
++      { line: 2, slot: 0, before: BLANK.repeat(2), after: word(P[2]!, P[3]!) },
++    ]);
++  });
++});
++
++describe("未確定の変更と確定", () => {
++  it("手入力は未確定としてため、記録にはしない", () => {
++    const d = setWorking(newDoc(T(0)), write(emptyGrid(), 14, word(P[0]!, P[1]!, P[2]!)));
++    expect(d.events).toEqual([]);
++    expect(pendingEdits(d)).toEqual([{ line: 2, slot: 0, before: BLANK.repeat(3), after: word(P[0]!, P[1]!, P[2]!) }]);
++  });
++
++  it("確定すると句ごとに作者の記録が1件ずつ増え、未確定はなくなる", () => {
++    const g = write(write(emptyGrid(), 0, P[0]!), 14, P[1]!);
++    const d = commitPending(setWorking(newDoc(T(0)), g), T(1));
++    expect(d.events).toEqual([
++      { at: T(1), actor: "author", line: 0, slot: 0, before: BLANK, after: P[0], origin: null },
++      { at: T(1), actor: "author", line: 2, slot: 0, before: BLANK, after: P[1], origin: null },
++    ]);
++    expect(pendingEdits(d)).toEqual([]);
++    expect(committedGrid(d)).toEqual(g);
++  });
++
++  it("except の句（いま書いている句）は確定せずに残す", () => {
++    const g = write(write(emptyGrid(), 0, P[0]!), 14, P[1]!);
++    const d = commitPending(setWorking(newDoc(T(0)), g), T(1), { except: 2 });
++    expect(d.events.map((e) => e.line)).toEqual([0]);
++    expect(pendingEdits(d).map((e) => e.line)).toEqual([2]);
++  });
++
++  it("理由は確定した記録に添える。空の理由は付けない", () => {
++    const g = write(emptyGrid(), 0, P[0]!);
++    expect(commitPending(setWorking(newDoc(T(0)), g), T(1), { reason: "  月を先に置く " }).events[0]!.reason).toBe("月を先に置く");
++    expect("reason" in commitPending(setWorking(newDoc(T(0)), g), T(1), { reason: "  " }).events[0]!).toBe(false);
++  });
++
++  it("未確定がなければ何も足さない", () => {
++    const d = newDoc(T(0));
++    expect(commitPending(d, T(1))).toBe(d);
++  });
++});
++
++describe("record（詩語候補・必須要素・例の詩などの操作）", () => {
++  it("先に未確定の手入力を確定し、そのあと操作を記録する", () => {
++    let d = setWorking(newDoc(T(0)), write(emptyGrid(), 7, P[0]!)); // 承句に手入力（未確定）
++    d = record(d, T(1), write(d.working, 18, word(P[1]!, P[2]!)), { actor: "dictionary", origin: `phrase:${P[1]}${P[2]}` });
++    expect(d.events.map((e) => [e.actor, e.line, e.slot, e.after, e.origin])).toEqual([
++      ["author", 1, 0, P[0], null],
++      ["dictionary", 2, 4, word(P[1]!, P[2]!), `phrase:${P[1]}${P[2]}`],
++    ]);
++    expect(pendingEdits(d)).toEqual([]);
++  });
++
++  it("複数の句にわたる操作は、句ごとに記録する", () => {
++    let d = commitPending(setWorking(newDoc(T(0)), write(write(emptyGrid(), 0, P[0]!), 21, P[1]!)), T(1));
++    d = record(d, T(2), emptyGrid(), { actor: "author", origin: "clear" });
++    expect(d.events.slice(2).map((e) => [e.line, e.before, e.after, e.origin])).toEqual([
++      [0, P[0], BLANK, "clear"],
++      [3, P[1], BLANK, "clear"],
++    ]);
++  });
++
++  it("理由は、その操作で足した記録すべてに添える", () => {
++    let d = setWorking(newDoc(T(0)), write(emptyGrid(), 7, P[0]!));
++    d = record(d, T(1), write(d.working, 18, P[1]!), { actor: "dictionary", origin: "phrase:x", reason: "用例を見て" });
++    expect(d.events.map((e) => e.reason)).toEqual(["用例を見て", "用例を見て"]);
++  });
++
++  it("変化のない操作は何も足さない", () => {
++    const d = newDoc(T(0));
++    expect(record(d, T(1), emptyGrid(), { actor: "author", origin: "clear" })).toBe(d);
++  });
++});
++
++describe("replay", () => {
++  it("記録を最初から順にたどると、確定済みのマス目になる", () => {
++    let d = newDoc(T(0));
++    d = commitPending(setWorking(d, write(d.working, 0, word(P[0]!, P[1]!))), T(1));
++    d = record(d, T(2), write(d.working, 1, P[2]!), { actor: "dictionary", origin: "phrase:y" });
++    d = commitPending(setWorking(d, write(d.working, 27, P[3]!)), T(3));
++    expect(replay(d.events)).toEqual({ grid: d.working });
++  });
++
++  it("記録の「前」がその時点のマス目と合わなければ、どこで合わないかを返す", () => {
++    const events = [
++      { at: T(1), actor: "author" as const, line: 0, slot: 0, before: BLANK, after: P[0]!, origin: null },
++      { at: T(2), actor: "author" as const, line: 0, slot: 0, before: P[5]!, after: P[1]!, origin: null },
++    ];
++    expect(replay(events)).toEqual({ error: "2件目の記録（起句の1字目）の「前」が、その時点のマス目と合いません。" });
++  });
++
++  it("位置や字数が範囲の外の記録は誤り", () => {
++    const bad = [{ at: T(1), actor: "author" as const, line: 0, slot: 6, before: BLANK.repeat(2), after: P[0]! + P[1]!, origin: null }];
++    expect(replay(bad)).toEqual({ error: "1件目の記録の位置か字数が正しくありません。" });
++  });
++});
++
++describe("必須要素と設定のスナップショット", () => {
++  it("必須要素には r1, r2… と ID を振り、登録・削除のたびにスナップショットを足す。ID は使い回さない", () => {
++    let d = addRequired(newDoc(T(0)), T(1), "甲乙");
++    d = addRequired(d, T(2), "丙丁");
++    expect(currentRequired(d)).toEqual([
++      { id: "r1", word: "甲乙" },
++      { id: "r2", word: "丙丁" },
++    ]);
++    d = removeRequired(d, T(3), "r1");
++    d = addRequired(d, T(4), "戊己");
++    expect(currentRequired(d)).toEqual([
++      { id: "r2", word: "丙丁" },
++      { id: "r3", word: "戊己" },
++    ]);
++    expect(d.snapshots).toHaveLength(5);
++  });
++
++  it("設定を変えるとスナップショットを足し、必須要素は引き継ぐ。同じ設定なら足さない", () => {
++    let d = addRequired(newDoc(T(0)), T(1), "甲乙");
++    d = setSettings(d, T(2), { ...DEFAULT_SETTINGS, rhyme: "上平一東" });
++    expect(currentSettings(d).rhyme).toBe("上平一東");
++    expect(currentRequired(d)).toEqual([{ id: "r1", word: "甲乙" }]);
++    expect(setSettings(d, T(3), { ...DEFAULT_SETTINGS, rhyme: "上平一東" })).toBe(d);
++  });
++});
++
++describe("requiredWarnings（必須要素の消失警告）", () => {
++  const w = word(P[0]!, P[1]!);
++
++  it("一度入っていた語がなくなったら lost", () => {
++    let d = addRequired(newDoc(T(0)), T(1), w);
++    d = record(d, T(2), write(d.working, 0, w), { actor: "author", origin: "required:r1" });
++    expect(requiredWarnings(d)).toEqual([]);
++    d = setWorking(d, write(d.working, 1, P[9]!)); // 未確定の書き換えでも、いまのマス目から消えれば警告
++    expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
++  });
++
++  it("28字が埋まったのに一度も入っていなければ missing。埋まる前は警告しない", () => {
++    const d = addRequired(newDoc(T(0)), T(1), w);
++    const full = Array.from({ length: 28 }, (_, i) => P[2 + (i % 20)]!);
++    expect(requiredWarnings(setWorking(d, full.map((c, i) => (i === 27 ? BLANK : c))))).toEqual([]);
++    expect(requiredWarnings(setWorking(d, full))).toEqual([{ id: "r1", word: w, kind: "missing" }]);
++  });
++
++  it("未確定の入力で入っていれば警告しない", () => {
++    const d = setWorking(addRequired(newDoc(T(0)), T(1), w), write(emptyGrid(), 9, w));
++    expect(requiredWarnings(d)).toEqual([]);
++  });
++});
++
++describe("historyView", () => {
++  it("新しい順に、誰が・どこを・前→後・どこから・理由を示す", () => {
++    let d = addRequired(newDoc(T(0)), T(1), word(P[0]!, P[1]!));
++    d = record(d, T(2), write(d.working, 0, word(P[0]!, P[1]!)), { actor: "author", origin: "required:r1" });
++    d = record(d, T(3), write(d.working, 18, word(P[2]!, P[3]!)), { actor: "dictionary", origin: `phrase:${P[2]}${P[3]}`, reason: "用例" });
++    d = commitPending(setWorking(d, write(d.working, 27, P[4]!)), T(4));
++    expect(historyView(d)).toEqual([
++      { at: T(4), who: "作者", where: "結句の7字目", before: BLANK, after: P[4], origin: "手入力", reason: null },
++      { at: T(3), who: "辞書候補", where: "転句の5-6字目", before: BLANK.repeat(2), after: word(P[2]!, P[3]!), origin: "詩語候補", reason: "用例" },
++      { at: T(2), who: "作者", where: "起句の1-2字目", before: BLANK.repeat(2), after: word(P[0]!, P[1]!), origin: `必須要素「${P[0]}${P[1]}」`, reason: null },
++    ]);
++  });
++
++  it("例の詩・すべて消す・貼り付けモードからの移しも、どこからかを示す", () => {
++    let d = record(newDoc(T(0)), T(1), write(emptyGrid(), 0, P[0]!), { actor: "author", origin: "sample" });
++    d = record(d, T(2), write(d.working, 7, P[1]!), { actor: "author", origin: "paste" });
++    d = record(d, T(3), emptyGrid(), { actor: "author", origin: "clear" });
++    expect(historyView(d).map((r) => r.origin)).toEqual(["すべて消す", "すべて消す", "貼り付けモードから", "例の詩"]);
++  });
++});
