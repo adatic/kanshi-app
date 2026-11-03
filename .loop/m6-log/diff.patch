@@ -25,10 +25,10 @@ index 5430619..3839616 100644
  
  ### m5-web-required — 必須要素と、置ける位置（M5）
 diff --git a/apps/web/e2e/smoke.mjs b/apps/web/e2e/smoke.mjs
-index 1185cf6..79dc293 100644
+index 1185cf6..45d26b3 100644
 --- a/apps/web/e2e/smoke.mjs
 +++ b/apps/web/e2e/smoke.mjs
-@@ -289,6 +289,66 @@ try {
+@@ -289,6 +289,79 @@ try {
      if (shots) await page.screenshot({ path: `${shots}/${label}-selected.png`, fullPage: true });
      await page.close();
    }
@@ -88,6 +88,19 @@ index 1185cf6..79dc293 100644
 +    check(r[0].includes(`必須要素「${word0}」`) && r[0].includes("作者"), `${label}: 必須要素の配置は、どの必須要素からかを記録する（${r[0]}）`);
 +    // 必須要素の配置の前に、未確定だった起句の書き換えも確定されている
 +    check(r[1].includes("起句の1字目") && r[1].includes("手入力"), `${label}: 操作の前に未確定の手入力を確定する（${r[1]}）`);
++    // 未確定の手入力で入れた必須要素を、同じ句のまま書き換えて消しても警告する
++    const word3 = q03[3].slice(0, 2);
++    await page.fill("#required-input", word3);
++    await page.locator("#required-add").click();
++    await cell(21).click();
++    await page.keyboard.insertText(word3);
++    check((await page.locator(".required-warning").isVisible()) === false, `${label}: 未確定の入力で入った必須要素には警告しない`);
++    await cell(22).click();
++    await page.keyboard.insertText(q03[2][0]);
++    check(
++      (await page.locator(".required-warning").textContent()).includes(`必須要素「${word3}」が詩から消えています`),
++      `${label}: 未確定のまま書き換えて消えた必須要素も警告する`,
++    );
 +    if (shots) await page.screenshot({ path: `${shots}/log.png`, fullPage: true });
 +    check(errors.length === 0, `${label}: スクリプトのエラーがない${errors.length ? `（${errors.join(" / ")}）` : ""}`);
 +    await context.close();
@@ -97,10 +110,10 @@ index 1185cf6..79dc293 100644
    server.kill();
 diff --git a/apps/web/src/doc.ts b/apps/web/src/doc.ts
 new file mode 100644
-index 0000000..c532b6e
+index 0000000..5ba821b
 --- /dev/null
 +++ b/apps/web/src/doc.ts
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,252 @@
 +// 詩の記録（CLAUDE.md §4.6）。純関数で、DOM にも保存先にも触れない。
 +// - マス目は、追記専用の編集記録（EditEvent）を最初から順にたどって導き出す
 +// - 必須要素の一覧と設定は、変わるたびに足すスナップショットの最後のものから導き出す
@@ -153,12 +166,17 @@ index 0000000..c532b6e
 +  working: string[];
 +  /** 次に振る必須要素の番号（ID は使い回さない） */
 +  nextRequiredId: number;
++  /**
++   * 一度でも詩に入ったことのある必須要素の ID（未確定の手入力で入った場合も含む）。消失警告に使う。
++   * 未確定の手入力は記録に残らないので、記録からは導けない。そのため doc に持つ
++   */
++  requiredSeen: string[];
 +};
 +
 +export type LineEdit = { line: number; slot: number; before: string; after: string };
 +
 +export function newDoc(at: string, settings: Settings = DEFAULT_SETTINGS): PoemDoc {
-+  return { schema: SCHEMA, events: [], snapshots: [{ at, required: [], settings }], working: emptyGrid(), nextRequiredId: 1 };
++  return { schema: SCHEMA, events: [], snapshots: [{ at, required: [], settings }], working: emptyGrid(), nextRequiredId: 1, requiredSeen: [] };
 +}
 +
 +const where = (line: number, slot: number, length: number) =>
@@ -221,8 +239,16 @@ index 0000000..c532b6e
 +/** 未確定の手入力（句ごと） */
 +export const pendingEdits = (doc: PoemDoc): LineEdit[] => diffLines(committedGrid(doc), doc.working);
 +
++/** いまのマス目に入っている必須要素を、requiredSeen に加える */
++function markSeen(doc: PoemDoc): PoemDoc {
++  const found = currentRequired(doc)
++    .filter((r) => !doc.requiredSeen.includes(r.id) && presentPlaces(r.word, doc.working).length > 0)
++    .map((r) => r.id);
++  return found.length === 0 ? doc : { ...doc, requiredSeen: [...doc.requiredSeen, ...found] };
++}
++
 +/** 手入力でマス目を変える（記録にはしない） */
-+export const setWorking = (doc: PoemDoc, grid: readonly string[]): PoemDoc => ({ ...doc, working: [...grid] });
++export const setWorking = (doc: PoemDoc, grid: readonly string[]): PoemDoc => markSeen({ ...doc, working: [...grid] });
 +
 +const toEvents = (edits: LineEdit[], at: string, actor: Actor, origin: string | null, reason?: string): EditEvent[] => {
 +  const r = reason?.trim();
@@ -252,11 +278,11 @@ index 0000000..c532b6e
 +  const flushed = commitPending(doc, at, op.reason !== undefined ? { reason: op.reason } : {});
 +  const edits = diffLines(flushed.working, next);
 +  if (edits.length === 0) return flushed;
-+  return {
++  return markSeen({
 +    ...flushed,
 +    events: [...flushed.events, ...toEvents(edits, at, op.actor, op.origin, op.reason)],
 +    working: [...next],
-+  };
++  });
 +}
 +
 +const lastSnapshot = (doc: PoemDoc) => doc.snapshots[doc.snapshots.length - 1]!;
@@ -271,7 +297,7 @@ index 0000000..c532b6e
 +/** 必須要素を登録する（語の検査は required.ts の validateRequired で先に行う） */
 +export function addRequired(doc: PoemDoc, at: string, word: string): PoemDoc {
 +  const item = { id: `r${doc.nextRequiredId}`, word };
-+  return { ...snapshot(doc, at, [...currentRequired(doc), item], currentSettings(doc)), nextRequiredId: doc.nextRequiredId + 1 };
++  return markSeen({ ...snapshot(doc, at, [...currentRequired(doc), item], currentSettings(doc)), nextRequiredId: doc.nextRequiredId + 1 });
 +}
 +
 +export function removeRequired(doc: PoemDoc, at: string, id: string): PoemDoc {
@@ -289,23 +315,17 @@ index 0000000..c532b6e
 +
 +/**
 + * 必須要素の消失警告（§4.5）。いまのマス目（未確定を含む）にない必須要素について：
-+ * - lost：記録をたどった途中のどこかで一度は入っていた
++ * - lost：一度は詩に入っていた（未確定の手入力で入っていた場合も含む）
 + * - missing：一度も入っていないが、28字がすべて埋まった
 + */
 +export function requiredWarnings(doc: PoemDoc): RequiredWarning[] {
-+  const missingNow = currentRequired(doc).filter((r) => presentPlaces(r.word, doc.working).length === 0);
-+  if (missingNow.length === 0) return [];
-+  const states: string[][] = [];
-+  const grid = emptyGrid();
-+  for (const e of doc.events) {
-+    [...e.after].forEach((c, i) => (grid[e.line * WIDTH + e.slot + i] = c));
-+    states.push([...grid]);
-+  }
 +  const full = doc.working.every((c) => c !== BLANK);
-+  return missingNow.flatMap((r): RequiredWarning[] => {
-+    if (states.some((g) => presentPlaces(r.word, g).length > 0)) return [{ ...r, kind: "lost" }];
-+    return full ? [{ ...r, kind: "missing" }] : [];
-+  });
++  return currentRequired(doc)
++    .filter((r) => presentPlaces(r.word, doc.working).length === 0)
++    .flatMap((r): RequiredWarning[] => {
++      if (doc.requiredSeen.includes(r.id)) return [{ ...r, kind: "lost" }];
++      return full ? [{ ...r, kind: "missing" }] : [];
++    });
 +}
 +
 +export type HistoryRow = {
@@ -868,10 +888,10 @@ index d072028..87fe80b 100644
 +}
 diff --git a/apps/web/test/doc.test.ts b/apps/web/test/doc.test.ts
 new file mode 100644
-index 0000000..f005933
+index 0000000..07a13c3
 --- /dev/null
 +++ b/apps/web/test/doc.test.ts
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,229 @@
 +// 詩の記録（apps/web/src/doc.ts）。字は平仄に関わらない架空の扱い（CLAUDE.md §0）。
 +import { describe, expect, it } from "vitest";
 +import {
@@ -906,6 +926,7 @@ index 0000000..f005933
 +    expect(d.working).toEqual(emptyGrid());
 +    expect(d.events).toEqual([]);
 +    expect(d.snapshots).toEqual([{ at: T(0), required: [], settings: DEFAULT_SETTINGS }]);
++    expect(d.requiredSeen).toEqual([]);
 +  });
 +});
 +
@@ -1048,6 +1069,22 @@ index 0000000..f005933
 +    d = record(d, T(2), write(d.working, 0, w), { actor: "author", origin: "required:r1" });
 +    expect(requiredWarnings(d)).toEqual([]);
 +    d = setWorking(d, write(d.working, 1, P[9]!)); // 未確定の書き換えでも、いまのマス目から消えれば警告
++    expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
++  });
++
++  it("未確定の手入力で入れてから、確定せずに書き換えて消しても lost", () => {
++    let d = addRequired(newDoc(T(0)), T(1), w);
++    d = setWorking(d, write(d.working, 7, w)); // 承句に入れた（未確定）
++    expect(requiredWarnings(d)).toEqual([]);
++    d = setWorking(d, write(d.working, 8, P[9]!)); // 同じ句のまま1字を書き換えた
++    expect(d.events).toEqual([]);
++    expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
++  });
++
++  it("登録したときにすでに入っていた語も、あとで消えれば lost", () => {
++    let d = setWorking(newDoc(T(0)), write(emptyGrid(), 0, w));
++    d = addRequired(d, T(1), w);
++    d = setWorking(d, emptyGrid());
 +    expect(requiredWarnings(d)).toEqual([{ id: "r1", word: w, kind: "lost" }]);
 +  });
 +
